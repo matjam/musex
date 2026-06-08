@@ -1,4 +1,4 @@
-import type { Server, StreamRef, Track } from "@musex/core";
+import type { StreamRef, Track } from "@musex/core";
 import { net, protocol } from "electron";
 import { chooseStreamKind } from "../../logic/stream-kind.js";
 import { buildProxyUrl, parseProxyUrl } from "../../logic/stream-url.js";
@@ -13,8 +13,10 @@ export class StreamProxy {
   /** serverId -> live endpoint, populated when a server is connected/selected. */
   private readonly endpoints = new Map<string, ServerEndpoint>();
 
-  registerServer(server: Server, endpoint: ServerEndpoint): void {
-    this.endpoints.set(server.id, endpoint);
+  /** Register the connection endpoint for a server by its machine identifier.
+   *  Called lazily on first stream resolution for that server. */
+  registerServer(serverId: string, endpoint: ServerEndpoint): void {
+    this.endpoints.set(serverId, endpoint);
   }
 
   /** Called once in app.whenReady. */

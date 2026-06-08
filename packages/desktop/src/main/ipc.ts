@@ -1,24 +1,9 @@
 import type { Track } from "@musex/core";
 import { discoverMusicLibraries } from "@musex/core";
 import { ipcMain } from "electron";
-import type { DiscoverResult } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
 import type { Runtime } from "./runtime.js";
-
-async function discoverAndRegister(rt: Runtime): Promise<DiscoverResult> {
-  const token = rt.requireToken();
-  const result = await discoverMusicLibraries(rt.gateway, token);
-  rt.libraries = result.libraries;
-  // Register stream endpoints for each reachable server.
-  for (const server of await rt.gateway.listServers(token)) {
-    const reachable = server.connections.find((c) => c.uri);
-    if (reachable) {
-      rt.proxy.registerServer(server, { baseUrl: reachable.uri, token });
-    }
-  }
-  return result;
-}
 
 export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.signInStart, () => rt.signInStart());
@@ -26,23 +11,30 @@ export function registerIpc(rt: Runtime): void {
 
   ipcMain.handle(IPC.restoreSession, async () => {
     if (!rt.token) return { library: null };
+    const lib = persistence.getLibrary();
+    if (lib) {
+      rt.libraries = [lib];
+      return { library: lib }; // instant — no network
+    }
+    // Signed in but no library chosen yet: discover once.
     try {
-      const result = await discoverAndRegister(rt);
-      const sel = persistence.getSelection();
-      const lib =
-        result.libraries.find((l) => l.id === sel.libraryId) ?? result.libraries[0] ?? null;
-      return { library: lib };
+      const result = await discoverMusicLibraries(rt.gateway, rt.token);
+      rt.libraries = result.libraries;
+      return { library: result.libraries[0] ?? null };
     } catch {
-      // Expired/invalid token or unreachable server — fall back to sign-in.
       return { library: null };
     }
   });
 
-  ipcMain.handle(IPC.discoverLibraries, () => discoverAndRegister(rt));
+  ipcMain.handle(IPC.discoverLibraries, async () => {
+    const result = await discoverMusicLibraries(rt.gateway, rt.requireToken());
+    rt.libraries = result.libraries;
+    return result;
+  });
 
   ipcMain.handle(IPC.selectLibrary, (_e, libraryId: string) => {
     const lib = rt.findLibrary(libraryId);
-    persistence.setSelection(lib.serverId, lib.id);
+    persistence.setLibrary(lib);
   });
 
   ipcMain.handle(IPC.listArtists, (_e, libraryId: string) =>
@@ -55,7 +47,10 @@ export function registerIpc(rt: Runtime): void {
     rt.gateway.listTracks(rt.findLibrary(libraryId), albumId, rt.requireToken()),
   );
 
-  ipcMain.handle(IPC.resolveStream, (_e, track: Track) => rt.proxy.resolve(track));
+  ipcMain.handle(IPC.resolveStream, async (_e, track: Track) => {
+    await rt.ensureProxyEndpoint(track.serverId);
+    return rt.proxy.resolve(track);
+  });
 
   ipcMain.handle(IPC.getVolume, () => persistence.getVolume());
   ipcMain.handle(IPC.setVolume, (_e, v: number) => {

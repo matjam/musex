@@ -146,6 +146,13 @@ export class PlexapiGateway implements PlexGateway {
     }
   }
 
+  /** Return the working connection URL and token for a server, using the cached
+   *  connection (cheap after the first browse call for that server). */
+  async endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }> {
+    const server = await this.connect(serverId, token);
+    return { baseUrl: server.baseurl, token };
+  }
+
   // --- internal helpers ---
 
   private account(token: string): MyPlexAccount {

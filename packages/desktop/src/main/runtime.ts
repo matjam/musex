@@ -12,6 +12,7 @@ export class Runtime {
   libraries: Library[] = [];
 
   private pendingPin: Pin | null = null;
+  private readonly registeredServers = new Set<string>();
 
   init(): void {
     // Client identity uses @ctrl/plex's public X_PLEX_IDENTIFIER (no BASE_HEADERS mutation).
@@ -44,6 +45,15 @@ export class Runtime {
   requireToken(): string {
     if (!this.token) throw new Error("not signed in");
     return this.token;
+  }
+
+  /** Register the stream proxy endpoint for a server on first use.
+   *  Uses the cached gateway connection — no extra network round-trip after first browse. */
+  async ensureProxyEndpoint(serverId: string): Promise<void> {
+    if (this.registeredServers.has(serverId)) return;
+    const ep = await this.gateway.endpoint(serverId, this.requireToken());
+    this.proxy.registerServer(serverId, ep);
+    this.registeredServers.add(serverId);
   }
 
   findLibrary(libraryId: string): Library {

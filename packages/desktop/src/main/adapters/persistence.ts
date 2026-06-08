@@ -1,18 +1,17 @@
 import { randomUUID } from "node:crypto";
+import type { Library } from "@musex/core";
 import Store from "electron-store";
 
 export interface PersistedState {
   clientId: string;
-  selectedLibraryId: string | null;
-  selectedServerId: string | null;
+  library: Library | null;
   volume: number;
 }
 
 const store = new Store<PersistedState>({
   defaults: {
     clientId: "",
-    selectedLibraryId: null,
-    selectedServerId: null,
+    library: null,
     volume: 1,
   },
 });
@@ -28,12 +27,11 @@ export function getClientId(): string {
 }
 
 export const persistence = {
-  getSelection(): { serverId: string | null; libraryId: string | null } {
-    return { serverId: store.get("selectedServerId"), libraryId: store.get("selectedLibraryId") };
+  getLibrary(): Library | null {
+    return store.get("library") ?? null;
   },
-  setSelection(serverId: string, libraryId: string): void {
-    store.set("selectedServerId", serverId);
-    store.set("selectedLibraryId", libraryId);
+  setLibrary(lib: Library): void {
+    store.set("library", lib);
   },
   getVolume(): number {
     return store.get("volume");
