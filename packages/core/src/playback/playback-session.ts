@@ -36,6 +36,9 @@ export class PlaybackSession {
     this.engine.onEnded(() => {
       void this.handleEnded();
     });
+    this.engine.onAdvanced(() => {
+      void this.handleAdvanced();
+    });
     this.engine.onError((err) => this.patch({ status: "error", error: err.message }));
   }
 
@@ -118,6 +121,22 @@ export class PlaybackSession {
     const ref = await this.resolver.resolve(nextTrack);
     await this.engine.preload(ref);
     this.preloadedIndex = nextIndex;
+  }
+
+  private async handleAdvanced(): Promise<void> {
+    const queue = this.state.queue;
+    if (!queue) return;
+    const nextIndex = queue.index + 1;
+    const nextTrack = queue.tracks[nextIndex];
+    if (!nextTrack) return; // engine signalled advance but we have no next; onEnded will finalize
+    this.preloadedIndex = null;
+    this.patch({
+      queue: { ...queue, index: nextIndex },
+      status: "playing",
+      positionSec: 0,
+      durationSec: nextTrack.durationMs / 1000,
+    });
+    await this.preloadNext();
   }
 
   private async handleEnded(): Promise<void> {

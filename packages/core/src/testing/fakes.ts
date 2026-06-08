@@ -81,6 +81,7 @@ export class FakePlaybackEngine implements PlaybackEngine {
   readonly seekCalls: number[] = [];
   readonly volumeCalls: number[] = [];
   private positionCb: ((s: number) => void) | null = null;
+  private advancedCb: (() => void) | null = null;
   private endedCb: (() => void) | null = null;
   private errorCb: ((e: Error) => void) | null = null;
 
@@ -105,6 +106,9 @@ export class FakePlaybackEngine implements PlaybackEngine {
   onPosition(cb: (s: number) => void): void {
     this.positionCb = cb;
   }
+  onAdvanced(cb: () => void): void {
+    this.advancedCb = cb;
+  }
   onEnded(cb: () => void): void {
     this.endedCb = cb;
   }
@@ -115,6 +119,9 @@ export class FakePlaybackEngine implements PlaybackEngine {
   // --- test helpers to simulate engine events ---
   emitPosition(seconds: number): void {
     this.positionCb?.(seconds);
+  }
+  emitAdvanced(): void {
+    this.advancedCb?.();
   }
   emitEnded(): void {
     this.endedCb?.();

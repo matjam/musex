@@ -103,6 +103,23 @@ describe("PlaybackSession", () => {
     expect(session.getState().status).toBe("ended");
   });
 
+  it("on gapless auto-advance, bumps the index without reloading and preloads the following track", async () => {
+    const { engine, session } = setup();
+    const tracks = [makeTrack("1"), makeTrack("2"), makeTrack("3")];
+    await session.loadQueue({ tracks, index: 0 });
+    // after load: engine.loaded == ["1"], engine.preloaded == ["2"]
+    engine.emitAdvanced();
+
+    await vi.waitFor(() => {
+      expect(session.getState().queue?.index).toBe(1);
+      expect(engine.preloaded.map((r) => r.url)).toEqual(["fake://stream/2", "fake://stream/3"]);
+    });
+    // crucially, the engine was NOT told to load track 2 again — it auto-advanced
+    expect(engine.loaded.map((r) => r.url)).toEqual(["fake://stream/1"]);
+    expect(session.getState().status).toBe("playing");
+    expect(session.getState().durationSec).toBe(180);
+  });
+
   it("ignores a superseded load when a newer playIndex starts", async () => {
     let releaseTrack1!: () => void;
     const track1Gate = new Promise<void>((resolve) => {
