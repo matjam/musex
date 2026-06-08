@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+out/
+build/
+*.tsbuildinfo
+
+# Electron packaging
+release/
+
+# Visual companion / brainstorming scratch
+.superpowers/
+
+# Local env / secrets
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
