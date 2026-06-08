@@ -1,0 +1,74 @@
+import { PlaybackSession, type PlaybackState, buildQueue, type Track } from "@musex/core";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { IpcStreamResolver } from "../audio/ipc-stream-resolver";
+import { WebPlaybackEngine } from "../audio/playback-engine";
+
+interface PlayerApi {
+  state: PlaybackState;
+  playAlbum(tracks: Track[], startIndex: number): void;
+  togglePlay(): void;
+  next(): void;
+  previous(): void;
+  seek(sec: number): void;
+  setVolume(v: number): void;
+}
+
+const Ctx = createContext<PlayerApi | null>(null);
+
+export function PlayerProvider({ children }: { children: ReactNode }) {
+  const session = useMemo(
+    () => new PlaybackSession(new WebPlaybackEngine(), new IpcStreamResolver()),
+    [],
+  );
+  const stateRef = useRef(session.getState());
+
+  const subscribe = useCallback(
+    (cb: () => void) =>
+      session.subscribe((s) => {
+        stateRef.current = s;
+        cb();
+      }),
+    [session],
+  );
+
+  const getSnapshot = useCallback(() => stateRef.current, []);
+
+  const state = useSyncExternalStore(subscribe, getSnapshot);
+
+  // Initialise volume from main-process store on mount
+  useEffect(() => {
+    window.musex.getVolume().then((v) => {
+      session.setVolume(v);
+    });
+  }, [session]);
+
+  const api: PlayerApi = {
+    state,
+    playAlbum: (tracks, startIndex) => void session.loadQueue(buildQueue(tracks, startIndex)),
+    togglePlay: () => (state.status === "playing" ? session.pause() : session.play()),
+    next: () => void session.next(),
+    previous: () => void session.previous(),
+    seek: (sec) => session.seek(sec),
+    setVolume: (v) => {
+      session.setVolume(v);
+      void window.musex.setVolume(v);
+    },
+  };
+
+  return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
+}
+
+export function usePlayer(): PlayerApi {
+  const v = useContext(Ctx);
+  if (!v) throw new Error("usePlayer must be used within PlayerProvider");
+  return v;
+}
