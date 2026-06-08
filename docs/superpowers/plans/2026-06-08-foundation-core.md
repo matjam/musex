@@ -79,18 +79,21 @@ musex/
     "typescript": "^6.0.3",
     "vite": "^7.0.0",
     "vitest": "^4.1.8"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
   }
 }
 ```
+
+> Note: pnpm 11 **removed** `onlyBuiltDependencies` from `package.json`; build-script approval now lives in `pnpm-workspace.yaml` under `allowBuilds` (Step 2).
 
 - [ ] **Step 2: `pnpm-workspace.yaml`**
 
 ```yaml
 packages:
   - "packages/*"
+
+# pnpm 11 gates dependency build scripts; allowlist esbuild (used by Vite/Vitest).
+allowBuilds:
+  esbuild: true
 ```
 
 - [ ] **Step 3: `tsconfig.base.json`**
@@ -163,6 +166,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
+    passWithNoTests: true,
   },
 });
 ```
