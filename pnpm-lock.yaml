@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@regosen/gapless-5@1.6.2': 65d3a86eef464a89acb3c05fe20a664afbfdaa10f3d9707b4843575a24d7eecf
+
 importers:
 
   .:
@@ -36,7 +39,7 @@ importers:
         version: link:../core
       '@regosen/gapless-5':
         specifier: ^1.6.2
-        version: 1.6.2
+        version: 1.6.2(patch_hash=65d3a86eef464a89acb3c05fe20a664afbfdaa10f3d9707b4843575a24d7eecf)
       electron-store:
         specifier: ^11.0.2
         version: 11.0.2
@@ -2620,7 +2623,7 @@ snapshots:
       tslib: 2.8.1
       webcrypto-core: 1.9.2
 
-  '@regosen/gapless-5@1.6.2': {}
+  '@regosen/gapless-5@1.6.2(patch_hash=65d3a86eef464a89acb3c05fe20a664afbfdaa10f3d9707b4843575a24d7eecf)': {}
 
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 

@@ -1,0 +1,17 @@
+diff --git a/gapless5.js b/gapless5.js
+index 2596b2d3690075074ed9bfef40cc707dc799210e..13f4f9df7a6b0b72dc36ea595db11ab087179afd 100644
+--- a/gapless5.js
++++ b/gapless5.js
+@@ -196,7 +196,11 @@ function Gapless5Source(parentPlayer, parentLog, inAudioPath) {
+   };
+ 
+   const onLoadedHTML5Metadata = () => {
+-    endpos = audio.duration * 1000;
++    // Guard: the source's audio element can be nulled (e.g. removeAllTracks)
++    // before its async 'loadedmetadata' fires, which otherwise throws here.
++    if (audio) {
++      endpos = audio.duration * 1000;
++    }
+   };
+ 
+   const onLoadedHTML5Audio = () => {
