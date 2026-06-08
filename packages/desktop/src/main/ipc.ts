@@ -1,27 +1,44 @@
 import type { Track } from "@musex/core";
 import { discoverMusicLibraries } from "@musex/core";
 import { ipcMain } from "electron";
+import type { DiscoverResult } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
 import type { Runtime } from "./runtime.js";
+
+async function discoverAndRegister(rt: Runtime): Promise<DiscoverResult> {
+  const token = rt.requireToken();
+  const result = await discoverMusicLibraries(rt.gateway, token);
+  rt.libraries = result.libraries;
+  // Register stream endpoints for each reachable server.
+  for (const server of await rt.gateway.listServers(token)) {
+    const reachable = server.connections.find((c) => c.uri);
+    if (reachable) {
+      rt.proxy.registerServer(server, { baseUrl: reachable.uri, token });
+    }
+  }
+  return result;
+}
 
 export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.signInStart, () => rt.signInStart());
   ipcMain.handle(IPC.signInPoll, () => rt.signInPoll());
 
-  ipcMain.handle(IPC.discoverLibraries, async () => {
-    const token = rt.requireToken();
-    const result = await discoverMusicLibraries(rt.gateway, token);
-    rt.libraries = result.libraries;
-    // Register stream endpoints for each reachable server.
-    for (const server of await rt.gateway.listServers(token)) {
-      const reachable = server.connections.find((c) => c.uri);
-      if (reachable) {
-        rt.proxy.registerServer(server, { baseUrl: reachable.uri, token });
-      }
+  ipcMain.handle(IPC.restoreSession, async () => {
+    if (!rt.token) return { library: null };
+    try {
+      const result = await discoverAndRegister(rt);
+      const sel = persistence.getSelection();
+      const lib =
+        result.libraries.find((l) => l.id === sel.libraryId) ?? result.libraries[0] ?? null;
+      return { library: lib };
+    } catch {
+      // Expired/invalid token or unreachable server — fall back to sign-in.
+      return { library: null };
     }
-    return result;
   });
+
+  ipcMain.handle(IPC.discoverLibraries, () => discoverAndRegister(rt));
 
   ipcMain.handle(IPC.selectLibrary, (_e, libraryId: string) => {
     const lib = rt.findLibrary(libraryId);

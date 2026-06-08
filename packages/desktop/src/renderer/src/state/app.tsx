@@ -1,7 +1,7 @@
 import type { Album, Artist, Library } from "@musex/core";
-import { createContext, type ReactNode, useContext, useReducer } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useReducer } from "react";
 
-type AuthState = "signed-out" | "signing-in" | "signed-in";
+type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";
 export type View =
   | { name: "albums" }
   | { name: "artists" }
@@ -17,6 +17,7 @@ interface AppState {
 type Action =
   | { type: "signing-in"; code: string }
   | { type: "signed-in"; library: Library }
+  | { type: "restore-done"; library: Library | null }
   | { type: "navigate"; view: View };
 
 function reducer(s: AppState, a: Action): AppState {
@@ -31,6 +32,16 @@ function reducer(s: AppState, a: Action): AppState {
         signInCode: null,
         view: { name: "albums" },
       };
+    case "restore-done":
+      return a.library
+        ? {
+            ...s,
+            auth: "signed-in",
+            library: a.library,
+            signInCode: null,
+            view: { name: "albums" },
+          }
+        : { ...s, auth: "signed-out" };
     case "navigate":
       return { ...s, view: a.view };
   }
@@ -43,11 +54,27 @@ const Ctx = createContext<AppApi | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, {
-    auth: "signed-out",
+    auth: "restoring",
     signInCode: null,
     library: null,
     view: { name: "albums" },
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .restoreSession()
+      .then(({ library }) => {
+        if (!cancelled) dispatch({ type: "restore-done", library });
+      })
+      .catch(() => {
+        if (!cancelled) dispatch({ type: "restore-done", library: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return <Ctx.Provider value={{ ...state, dispatch }}>{children}</Ctx.Provider>;
 }
 

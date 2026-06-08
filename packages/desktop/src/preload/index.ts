@@ -5,6 +5,7 @@ import { IPC } from "../shared/ipc-contract.js";
 const api: MusexApi = {
   signInStart: () => ipcRenderer.invoke(IPC.signInStart),
   signInPoll: () => ipcRenderer.invoke(IPC.signInPoll),
+  restoreSession: () => ipcRenderer.invoke(IPC.restoreSession),
   discoverLibraries: () => ipcRenderer.invoke(IPC.discoverLibraries),
   selectLibrary: (libraryId) => ipcRenderer.invoke(IPC.selectLibrary, libraryId),
   listArtists: (libraryId) => ipcRenderer.invoke(IPC.listArtists, libraryId),
