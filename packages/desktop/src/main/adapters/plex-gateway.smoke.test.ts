@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { initPlexIdentity, PlexapiGateway } from "./plex-gateway.js";
+import { PlexapiGateway } from "./plex-gateway.js";
 
 const TOKEN = process.env.MUSEX_PLEX_E2E;
 const run = TOKEN ? describe : describe.skip;
 
 run("PlexapiGateway (real Plex, env-gated)", () => {
   it("discovers servers and lists music libraries + a first artist/album/tracks", async () => {
-    initPlexIdentity();
     const gw = new PlexapiGateway();
     const servers = await gw.listServers(TOKEN!);
     expect(servers.length).toBeGreaterThan(0);

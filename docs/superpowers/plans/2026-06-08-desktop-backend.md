@@ -1102,7 +1102,7 @@ Run: `pnpm --filter @musex/desktop test` (expect pass once the file exists; this
 - [ ] **Step 3: `packages/desktop/src/main/runtime.ts`** — holds the app's live state (token, gateway, selected library, stream proxy) and the in-flight sign-in:
 ```ts
 import type { Library, Pin } from "@musex/core";
-import { PlexapiGateway, initPlexIdentity } from "./adapters/plex-gateway.js";
+import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 
@@ -1116,7 +1116,7 @@ export class Runtime {
   private pendingPin: Pin | null = null;
 
   init(): void {
-    initPlexIdentity();
+    // Client identity uses @ctrl/plex's public X_PLEX_IDENTIFIER (no BASE_HEADERS mutation).
     this.proxy.install();
   }
 

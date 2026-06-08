@@ -5,23 +5,14 @@ import type {
   PlexServer,
   Track as PlexTrack,
 } from "@ctrl/plex";
-import { MyPlexAccount } from "@ctrl/plex";
+import { MyPlexAccount, X_PLEX_IDENTIFIER } from "@ctrl/plex";
+// fetchItem is not re-exported from @ctrl/plex's root; deep-importing the internal
+// path resolves at runtime because the package ships no "exports" map (only
+// main/typings + files:["dist/src"]). Re-verify this path when upgrading @ctrl/plex.
 import { fetchItem } from "@ctrl/plex/dist/src/baseFunctionality.js";
-import { BASE_HEADERS } from "@ctrl/plex/dist/src/config.js";
 import type { Album, Artist, Library, Pin, PlexGateway, Server, Track } from "@musex/core";
 import { PlexAuthError } from "@musex/core";
 import { toAlbum, toArtist, toTrack } from "../../logic/plex-mapping.js";
-import { getClientId } from "./persistence.js";
-
-const PRODUCT = "musex";
-
-/** Override the global @ctrl/plex client identity once at startup so all
- *  requests carry the stable per-install client ID and the correct product name.
- *  BASE_HEADERS is typed readonly but is a plain mutable JS object at runtime. */
-export function initPlexIdentity(): void {
-  (BASE_HEADERS as Record<string, string>)["X-Plex-Client-Identifier"] = getClientId();
-  (BASE_HEADERS as Record<string, string>)["X-Plex-Product"] = PRODUCT;
-}
 
 /** Translate @ctrl/plex ofetch HTTP errors into PlexAuthError where appropriate.
  *  ofetch throws an object with a `response.status` number for HTTP errors. */
@@ -54,8 +45,9 @@ export class PlexapiGateway implements PlexGateway {
     const res = await fetch(`https://plex.tv/api/v2/pins/${id}`, {
       headers: {
         accept: "application/json",
-        "X-Plex-Client-Identifier": getClientId(),
-        "X-Plex-Product": PRODUCT,
+        // Must match the identifier getWebLogin used (both default to X_PLEX_IDENTIFIER)
+        // so Plex associates this poll with the pin we created.
+        "X-Plex-Client-Identifier": X_PLEX_IDENTIFIER,
       },
     });
     if (res.status === 401 || res.status === 403) throw new PlexAuthError();
