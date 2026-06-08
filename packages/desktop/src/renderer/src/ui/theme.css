@@ -1,0 +1,368 @@
+/* =========================================================
+   musex design tokens + shared classes
+   Ported from approved mockups (signin.html, shell-layout.html,
+   album-detail.html in .superpowers/brainstorm/75253-*/content/)
+   ========================================================= */
+
+:root {
+  --bg: #0d0e12;
+  --panel: #16181f;
+  --panel-2: #21242d;
+  --sidebar: #0a0b0e;
+  --text: #e7e9ee;
+  --muted: rgba(231, 233, 238, 0.5);
+  --line: rgba(255, 255, 255, 0.07);
+  --green: #54d2a0;
+  --purple: #7c5cff;
+  --red: #ff5f57;
+  --yellow: #febc2e;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Brand / wordmark ---- */
+
+.brand {
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.brand span {
+  background: linear-gradient(90deg, var(--green), var(--purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- Window chrome (titlebar) ---- */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  /* macOS draggable region */
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-lights {
+  display: flex;
+  gap: 7px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-lights i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: block;
+}
+
+/* ---- App layout ---- */
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ---- Sidebar ---- */
+
+.sidebar {
+  width: 215px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--line);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar-logo {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  padding: 2px 8px 16px;
+}
+
+.sidebar-logo span {
+  color: var(--green);
+}
+
+.nav-section {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.4;
+  padding: 14px 10px 6px;
+}
+
+.nav-item {
+  padding: 8px 10px;
+  border-radius: 7px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: default;
+  transition: background 0.1s;
+  /* reset button defaults */
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-item.active {
+  background: var(--panel-2);
+  font-weight: 600;
+}
+
+.nav-item.dim {
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.nav-ic {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.lib-switch {
+  margin-top: auto;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.lib-switch-label {
+  opacity: 0.5;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+
+/* ---- Content area ---- */
+
+.content-area {
+  flex: 1;
+  overflow: auto;
+}
+
+/* ---- Sign-in screen ---- */
+
+.signin-screen {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 36px 28px;
+  background: var(--bg);
+}
+
+.signin-logo {
+  font-weight: 800;
+  font-size: 34px;
+  letter-spacing: 0.01em;
+  margin-bottom: 6px;
+}
+
+.signin-logo span {
+  background: linear-gradient(90deg, var(--green), var(--purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.signin-logo.small {
+  font-size: 26px;
+}
+
+.signin-tagline {
+  opacity: 0.55;
+  font-size: 13.5px;
+  max-width: 300px;
+  line-height: 1.5;
+  margin-bottom: 30px;
+}
+
+.signin-tagline.compact {
+  margin-bottom: 14px;
+}
+
+.signin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--text);
+  color: var(--panel);
+  font-weight: 650;
+  font-size: 14px;
+  border: none;
+  border-radius: 24px;
+  padding: 12px 26px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.signin-btn:hover {
+  opacity: 0.9;
+}
+
+.signin-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.plex-mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #e5a00d, #cc7b19);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.signin-foot {
+  margin-top: auto;
+  opacity: 0.32;
+  font-size: 11px;
+  padding-top: 24px;
+}
+
+/* Waiting state */
+
+.signin-code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 30px;
+  letter-spacing: 0.32em;
+  font-weight: 700;
+  background: var(--panel-2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px 22px 14px 30px;
+  margin: 8px 0 18px;
+  color: var(--text);
+}
+
+.signin-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.signin-dots span {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.signin-dots span:nth-child(1) {
+  opacity: 0.4;
+}
+
+.signin-dots span:nth-child(2) {
+  opacity: 0.7;
+}
+
+.signin-dots span:nth-child(3) {
+  opacity: 1;
+}
+
+.signin-hint {
+  opacity: 0.55;
+  font-size: 12.5px;
+  max-width: 280px;
+  line-height: 1.5;
+  margin-top: 14px;
+}
+
+.signin-hint a {
+  color: var(--green);
+  text-decoration: none;
+}
+
+.signin-hint a:hover {
+  text-decoration: underline;
+}
+
+.signin-cancel {
+  margin-top: 20px;
+  font-size: 12px;
+  opacity: 0.5;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: inherit;
+}
+
+.signin-cancel:hover {
+  opacity: 0.8;
+}
+
+.signin-error {
+  color: var(--red);
+  font-size: 13px;
+  margin-top: 14px;
+  max-width: 280px;
+}
+
+/* ---- Content placeholder ---- */
+
+.content-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  opacity: 0.35;
+  font-size: 15px;
+}
