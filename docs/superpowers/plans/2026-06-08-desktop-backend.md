@@ -11,7 +11,7 @@
 **Conventions (`CLAUDE.md`):** commit directly to `main`; `git add -A`; push after every commit; `pnpm check` green before push; TDD for pure logic; no silently swallowed errors; prefer latest stable; use the current documented API for the installed major version.
 
 **Key design decisions (from docs research):**
-- **Window security:** `contextIsolation: true`, `nodeIntegration: false`, **`sandbox: false`**. Rationale: the app only ever loads local bundled renderer content, and `sandbox: false` lets the preload be ESM (same as the ESM main), avoiding the CJS-preload-in-an-ESM-project friction. `contextIsolation` (the protection that matters) stays on. Hardening to `sandbox: true` + a CJS preload is a documented later enhancement.
+- **Window security:** `contextIsolation: true`, `nodeIntegration: false`, **`sandbox: true`** (Electron's recommended secure posture — chosen to be correct from the start, with no future hardening pass needed). A sandboxed preload must be CommonJS, so electron-vite emits the preload as `index.cjs` while main stays ESM; the preload *source* still uses normal `import` syntax (electron-vite compiles it to CJS and inlines the local `ipc-contract`, requiring only `electron` at runtime).
 - **Audio proxy:** custom privileged scheme `musex-stream://{serverId}{plexPath}` handled by `protocol.handle` + `net.fetch` (injects token, forwards `Range`). Path is preserved (not opaque-encoded) so HLS relative segment URLs resolve through the proxy.
 - **Gapless:** `PlaybackEngine` gains `onAdvanced` (Task B0).
 
@@ -240,14 +240,15 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: ["@musex/core"] })],
-    build: { rollupOptions: { output: { format: "es" } } },
+    // Sandboxed preloads must be CommonJS; emit .cjs so it is unambiguous under "type":"module".
+    build: { rollupOptions: { output: { format: "cjs", entryFileNames: "[name].cjs" } } },
   },
   renderer: {
     plugins: [react()],
   },
 });
 ```
-> `@musex/core` ships `.ts` source, so it must be bundled (excluded from externalization) in both main and preload. Preload is ESM here because the window uses `sandbox: false` (see Step 6).
+> `@musex/core` ships `.ts` source, so it must be bundled (excluded from externalization) in both main and preload. Preload is emitted as **CJS** (`index.cjs`) because the window is sandboxed (Step 6); its source still uses `import` syntax (electron-vite compiles it to CJS).
 
 - [ ] **Step 5: tsconfigs.**
 `packages/desktop/tsconfig.node.json` (main + preload + logic + shared — Node, no DOM):
@@ -304,10 +305,10 @@ function createWindow(): void {
     titleBarStyle: "hiddenInset",
     backgroundColor: "#0d0e12",
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -1312,6 +1313,6 @@ git push origin main
 
 1. **`@ctrl/plex` exact import paths + method names** (`MyPlexAccount.getWebLogin`, `resource.connect()`, `library.sectionByID`, `searchArtists`, `albums()`, `tracks()`, `fetchItem`, `BASE_HEADERS`): verified from v6 source in research, but confirm against the installed `.d.ts` and fix imports/names to match — the smoke test (B4 Step 3) is the gate.
 2. **safeStorage async methods** availability in the installed `electron` typings (B3 Step 1 fallback noted).
-3. **electron-vite ESM preload**: with `sandbox: false` the ESM preload should load; if the bridge isn't present on `window.musex` at runtime, verify the preload output path (`../preload/index.mjs`) matches electron-vite's actual emitted filename, and adjust.
+3. **Sandboxed CJS preload**: electron-vite emits the preload as `index.cjs` (format `cjs`); confirm the window's `preload` path matches the actual emitted filename and that `window.musex` is present at runtime. If the sandboxed preload fails to load, verify the output is genuinely CommonJS (not an ESM `.js` under `type:module`) and that only `electron` is required at runtime (everything else bundled).
 4. **electron-builder + pnpm**: `node-linker=hoisted` + `allowBuilds: electron` must take effect; if `pnpm install` reports electron's build was ignored, run `pnpm rebuild electron` (or `pnpm approve-builds`) and confirm before packaging.
 5. **Transcoded HLS through the custom protocol**: relative segment resolution is preserved by the path-preserving URL scheme, but confirm end-to-end in Plan C; direct-play is the slice-1 priority.
