@@ -1,6 +1,6 @@
+import type { PlaybackEngine, StreamRef } from "@musex/core";
 import { Gapless5 } from "@regosen/gapless-5";
 import Hls from "hls.js";
-import type { PlaybackEngine, StreamRef } from "@musex/core";
 
 type Cb0 = () => void;
 
@@ -80,7 +80,12 @@ export class WebPlaybackEngine implements PlaybackEngine {
 
   private ensureGapless(): Gapless5 {
     if (this.gapless) return this.gapless;
-    const g = new Gapless5({ useWebAudio: true, useHTML5Audio: true, loadLimit: 3, volume: this.volume });
+    const g = new Gapless5({
+      useWebAudio: true,
+      useHTML5Audio: true,
+      loadLimit: 3,
+      volume: this.volume,
+    });
     // ontimeupdate receives (current_track_time_ms, current_track_index) — we only need the first
     g.ontimeupdate = (ms: number, _index: number) => this.positionCb(ms / 1000);
     // onnext fires on gapless auto-advance into the preloaded track -> tell the session

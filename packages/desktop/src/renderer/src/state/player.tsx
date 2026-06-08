@@ -1,13 +1,13 @@
-import { PlaybackSession, type PlaybackState, buildQueue, type Track } from "@musex/core";
+import { buildQueue, PlaybackSession, type PlaybackState, type Track } from "@musex/core";
 import {
   createContext,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
-  type ReactNode,
 } from "react";
 import { IpcStreamResolver } from "../audio/ipc-stream-resolver";
 import { WebPlaybackEngine } from "../audio/playback-engine";

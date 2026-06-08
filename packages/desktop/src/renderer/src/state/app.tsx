@@ -1,5 +1,5 @@
 import type { Album, Artist, Library } from "@musex/core";
-import { createContext, useContext, useReducer, type ReactNode } from "react";
+import { createContext, type ReactNode, useContext, useReducer } from "react";
 
 type AuthState = "signed-out" | "signing-in" | "signed-in";
 export type View =
@@ -24,7 +24,13 @@ function reducer(s: AppState, a: Action): AppState {
     case "signing-in":
       return { ...s, auth: "signing-in", signInCode: a.code };
     case "signed-in":
-      return { ...s, auth: "signed-in", library: a.library, signInCode: null, view: { name: "albums" } };
+      return {
+        ...s,
+        auth: "signed-in",
+        library: a.library,
+        signInCode: null,
+        view: { name: "albums" },
+      };
     case "navigate":
       return { ...s, view: a.view };
   }
