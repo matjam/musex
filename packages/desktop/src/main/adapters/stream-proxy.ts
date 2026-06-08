@@ -183,31 +183,43 @@ export class StreamProxy {
           written += chunk.length;
         });
         upstreamRes.pipe(res);
-        upstreamRes.pipe(writer.stream);
+        // { end: false } so the writer (commit) owns the single end() and can
+        // flush before publishing; we never end the cache file from the pipe.
+        upstreamRes.pipe(writer.stream, { end: false });
         upstreamRes.on("end", () => {
-          // Commit only a verifiably-complete body; otherwise discard the temp.
-          if (Number.isFinite(expected) && expected > 0 && written !== expected) {
-            void writer.abort();
+          // Commit only when the upstream message was fully received
+          // (upstreamRes.complete covers the no-Content-Length/chunked case) AND,
+          // when a length is known, the byte count matches. Otherwise discard.
+          const lengthOk = !Number.isFinite(expected) || expected <= 0 || written === expected;
+          if (upstreamRes.complete && lengthOk) {
+            writer.commit().catch((err) => console.error("[musex cache] commit error:", err));
           } else {
-            void writer.commit();
+            writer.abort().catch((err) => console.error("[musex cache] abort error:", err));
           }
         });
-        upstreamRes.on("error", () => void writer.abort());
+        upstreamRes.on("error", () =>
+          writer.abort().catch((err) => console.error("[musex cache] abort error:", err)),
+        );
       } else {
-        if (writer) void writer.abort(); // unexpected status (e.g. 206) -> don't cache
+        // Unexpected status (e.g. 206) -> don't cache.
+        if (writer) writer.abort().catch((err) => console.error("[musex cache] abort error:", err));
         upstreamRes.pipe(res);
       }
     });
     upstreamReq.on("error", (err) => {
       console.error(`[musex stream proxy] ${plexPath} failed:`, err);
-      if (writer) void writer.abort();
+      if (writer) writer.abort().catch((e) => console.error("[musex cache] abort error:", e));
       if (!res.headersSent) res.writeHead(502);
       res.end();
     });
-    // If the renderer aborts (track change/seek), stop upstream and discard the partial.
+    // Renderer 'close' fires on normal completion too, so only treat it as an
+    // abort when the response did NOT finish (genuine early disconnect / seek /
+    // track change). On normal completion the upstream 'end' handler owns the
+    // commit/abort decision.
     req.on("close", () => {
+      if (res.writableFinished) return;
       upstreamReq.destroy();
-      if (writer) void writer.abort();
+      if (writer) writer.abort().catch((e) => console.error("[musex cache] abort error:", e));
     });
     upstreamReq.end();
   }
@@ -229,6 +241,14 @@ export class StreamProxy {
     }
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Content-Type", contentTypeForPath(plexPath));
+
+    // A 0-byte entry should never exist post-commit, but guard against it:
+    // createReadStream(..., { end: -1 }) would throw after headers were sent.
+    if (size === 0) {
+      res.writeHead(200, { "Content-Length": "0" });
+      res.end();
+      return;
+    }
 
     const range = parseByteRange(req.headers.range, size);
     const pipeFile = (start: number, end: number, status: number) => {

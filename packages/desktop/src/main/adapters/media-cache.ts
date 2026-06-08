@@ -60,6 +60,7 @@ export class MediaCache {
     const dest = this.full(key);
     const stream = createWriteStream(tmp);
     let settled = false;
+    let failed = false;
 
     const removeTmp = async () => {
       try {
@@ -69,12 +70,33 @@ export class MediaCache {
       }
     };
 
+    // A write error (disk full, EACCES, …) must never bubble up as an unhandled
+    // 'error' event — that is fatal in Electron's main process. Mark the writer
+    // failed; commit/abort discard the temp. The client response is a separate
+    // pipe, so playback continues (just uncached).
+    stream.on("error", (err) => {
+      failed = true;
+      console.error("[musex cache] write failed:", err);
+    });
+
     return {
       stream,
       commit: async () => {
         if (settled) return;
         settled = true;
-        await new Promise<void>((resolve) => stream.end(resolve));
+        if (!failed) {
+          // We piped with { end: false }, so commit owns the single end() and
+          // waits for the flush ('finish') before renaming — guaranteeing the
+          // published file is complete. Resolve on error too, so we never hang.
+          await new Promise<void>((resolve) => {
+            stream.once("error", () => resolve());
+            stream.end(() => resolve());
+          });
+        }
+        if (failed) {
+          await removeTmp();
+          return;
+        }
         try {
           await rename(tmp, dest); // atomic publish (overwrites a prior copy)
         } catch (err) {
