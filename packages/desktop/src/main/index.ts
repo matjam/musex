@@ -1,27 +1,10 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, protocol } from "electron";
+import { app, BrowserWindow } from "electron";
 import { registerIpc } from "./ipc.js";
 import { Runtime } from "./runtime.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-
-// Must run synchronously, before app is ready.
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: "musex-stream",
-    // corsEnabled: gapless-5/hls.js load audio via XHR/fetch; without it Chromium
-    // rejects cross-origin requests to a custom scheme ("only supported for
-    // chrome/http/https…"). supportFetchAPI + corsEnabled make XHR/fetch work.
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-      stream: true,
-    },
-  },
-]);
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -49,7 +32,7 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   const runtime = new Runtime();
-  runtime.init();
+  await runtime.init();
   await runtime.restore();
   registerIpc(runtime);
   createWindow();

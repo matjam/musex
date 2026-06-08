@@ -47,7 +47,7 @@ export function NowPlayingBar() {
     <div className="now-playing-bar">
       {/* Left: art + track meta */}
       <div className="np-left">
-        <AlbumArt serverId={track.serverId} thumb={track.thumb} className="np-art" />
+        <AlbumArt thumb={track.thumb} className="np-art" />
         <div className="np-meta">
           <div className="np-title">{track.title}</div>
           <div className="np-sub">{metaSub}</div>

@@ -70,7 +70,7 @@ export function ArtistDetailView({ artist }: Props) {
                 className="grid-card"
                 onClick={() => dispatch({ type: "navigate", view: { name: "album", album } })}
               >
-                <AlbumArt serverId={album.serverId} thumb={album.thumb} className="grid-card-art" />
+                <AlbumArt thumb={album.thumb} className="grid-card-art" />
                 <div className="grid-card-title">{album.title}</div>
                 <div className="grid-card-sub">{album.year != null ? String(album.year) : ""}</div>
               </button>

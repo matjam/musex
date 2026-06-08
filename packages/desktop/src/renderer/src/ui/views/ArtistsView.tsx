@@ -55,11 +55,7 @@ export function ArtistsView() {
             className="grid-card"
             onClick={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
           >
-            <AlbumArt
-              serverId={artist.serverId}
-              thumb={artist.thumb}
-              className="grid-card-art artist-art"
-            />
+            <AlbumArt thumb={artist.thumb} className="grid-card-art artist-art" />
             <div className="grid-card-title">{artist.name}</div>
           </button>
         ))}

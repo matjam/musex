@@ -14,9 +14,8 @@ export class Runtime {
   private pendingPin: Pin | null = null;
   private readonly registeredServers = new Set<string>();
 
-  init(): void {
-    // Client identity uses @ctrl/plex's public X_PLEX_IDENTIFIER (no BASE_HEADERS mutation).
-    this.proxy.install();
+  async init(): Promise<void> {
+    await this.proxy.start();
   }
 
   async restore(): Promise<void> {

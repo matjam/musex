@@ -38,22 +38,27 @@ export function registerIpc(rt: Runtime): void {
   });
 
   // Browse handlers also register the stream-proxy endpoint for the server, because
-  // artwork (musex-stream:// <img>) loads with browse results, before any playback.
+  // artwork loads with browse results, before any playback.
   // ensureProxyEndpoint reuses the gateway's cached connection, so it's ~free.
+  // Art URLs are baked here (full http://127.0.0.1:PORT/… URLs) so the renderer
+  // can use them directly without knowing anything about the proxy or token.
   ipcMain.handle(IPC.listArtists, async (_e, libraryId: string) => {
     const lib = rt.findLibrary(libraryId);
     await rt.ensureProxyEndpoint(lib.serverId);
-    return rt.gateway.listArtists(lib, rt.requireToken());
+    const artists = await rt.gateway.listArtists(lib, rt.requireToken());
+    return artists.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) }));
   });
   ipcMain.handle(IPC.listAlbums, async (_e, libraryId: string, artistId: string) => {
     const lib = rt.findLibrary(libraryId);
     await rt.ensureProxyEndpoint(lib.serverId);
-    return rt.gateway.listAlbums(lib, artistId, rt.requireToken());
+    const albums = await rt.gateway.listAlbums(lib, artistId, rt.requireToken());
+    return albums.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) }));
   });
   ipcMain.handle(IPC.listTracks, async (_e, libraryId: string, albumId: string) => {
     const lib = rt.findLibrary(libraryId);
     await rt.ensureProxyEndpoint(lib.serverId);
-    return rt.gateway.listTracks(lib, albumId, rt.requireToken());
+    const tracks = await rt.gateway.listTracks(lib, albumId, rt.requireToken());
+    return tracks.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) }));
   });
 
   ipcMain.handle(IPC.resolveStream, async (_e, track: Track) => {

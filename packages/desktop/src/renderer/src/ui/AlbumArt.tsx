@@ -1,29 +1,27 @@
 import { useState } from "react";
-import { artUrl } from "../util/art";
 
 interface Props {
-  serverId: string;
   thumb?: string;
   /** CSS class(es) applied to both the img and the fallback div. */
   className?: string;
 }
 
 /**
- * Renders album/artist art via the musex-stream proxy (token-safe).
+ * Renders album/artist art via the musex stream proxy.
+ * `thumb` is already a full http://127.0.0.1:PORT/… URL baked by the main process.
  * Falls back to the gradient placeholder div if thumb is absent or fails to load.
  */
-export function AlbumArt({ serverId, thumb, className }: Props) {
+export function AlbumArt({ thumb, className }: Props) {
   const [failed, setFailed] = useState(false);
-  const url = artUrl(serverId, thumb);
 
-  if (!url || failed) {
+  if (!thumb || failed) {
     return <div className={className} />;
   }
 
   return (
     <img
       className={className}
-      src={url}
+      src={thumb}
       alt=""
       onError={() => setFailed(true)}
       // Decorative art — screen readers don't need it
