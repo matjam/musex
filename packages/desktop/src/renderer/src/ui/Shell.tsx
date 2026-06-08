@@ -1,9 +1,32 @@
 import { useApp } from "../state/app";
+import { AlbumDetailView } from "./views/AlbumDetailView";
+import { ArtistDetailView } from "./views/ArtistDetailView";
+import { ArtistsView } from "./views/ArtistsView";
 
 export function Shell() {
   const { library, view, dispatch } = useApp();
 
   const serverLabel = library ? `${library.serverName} · ${library.title}` : "No library";
+
+  // Determine which nav item is visually active.
+  // artist/album drill-downs keep the Artists nav highlighted.
+  const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
+  const albumsActive = view.name === "albums";
+
+  function renderContent() {
+    switch (view.name) {
+      case "artists":
+        return <ArtistsView />;
+      case "artist":
+        return <ArtistDetailView artist={view.artist} />;
+      case "album":
+        return <AlbumDetailView album={view.album} />;
+      case "albums":
+        // Albums as a flat all-library grid is deferred (would require a slow
+        // flatten-all-albums fetch). Redirect to Artists instead.
+        return <ArtistsView />;
+    }
+  }
 
   return (
     <div className="app-body">
@@ -25,8 +48,8 @@ export function Shell() {
 
         <button
           type="button"
-          className={`nav-item${view.name === "albums" ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
+          className={`nav-item${albumsActive ? " active" : ""} dim`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
         >
           <span className="nav-ic" />
           Albums
@@ -34,7 +57,7 @@ export function Shell() {
 
         <button
           type="button"
-          className={`nav-item${view.name === "artists" ? " active" : ""}`}
+          className={`nav-item${artistsActive ? " active" : ""}`}
           onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
         >
           <span className="nav-ic" />
@@ -52,9 +75,7 @@ export function Shell() {
         </div>
       </nav>
 
-      <main className="content-area">
-        <div className="content-placeholder">Select Albums or Artists to browse your library</div>
-      </main>
+      <main className="content-area">{renderContent()}</main>
     </div>
   );
 }
