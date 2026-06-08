@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakePlexGateway, FakeTokenStore } from "../testing/fakes";
-import { signIn, SignInTimeoutError } from "./sign-in";
+import { SignInTimeoutError, signIn } from "./sign-in";
 
 function clock(values: number[]) {
   let i = 0;

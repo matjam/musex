@@ -4,7 +4,11 @@ import { FakePlexGateway } from "../testing/fakes";
 import { discoverMusicLibraries } from "./discover-libraries";
 
 function server(id: string): Server {
-  return { id, name: `Server ${id}`, connections: [{ uri: `http://${id}`, local: true, relay: false }] };
+  return {
+    id,
+    name: `Server ${id}`,
+    connections: [{ uri: `http://${id}`, local: true, relay: false }],
+  };
 }
 function library(id: string, serverId: string): Library {
   return { id, serverId, serverName: `Server ${serverId}`, title: `Music ${id}`, type: "music" };
