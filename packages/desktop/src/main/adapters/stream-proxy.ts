@@ -56,17 +56,22 @@ export class StreamProxy {
 
       try {
         const res = await net.fetch(upstream.toString(), { method: "GET", headers });
+        // Buffer the upstream body fully, then return it complete. Passing
+        // net.fetch's stream straight through protocol.handle truncated large
+        // responses mid-stream (net::ERR_FAILED ~1.25MB in). Buffering trades
+        // progressive start for reliability; gapless-5 downloads the whole file
+        // for Web Audio anyway. TODO: piped localhost HTTP proxy for true streaming.
+        const body = await res.arrayBuffer();
         console.log(
-          `[musex stream proxy] ${request.method} ${parsed.path} range=${range ?? "none"} -> ${res.status}`,
+          `[musex stream proxy] ${request.method} ${parsed.path} range=${range ?? "none"} -> ${res.status} (${body.byteLength}B)`,
         );
-        // Forward only media/range headers (NOT hop-by-hop/encoding ones, which break
-        // a re-streamed body) plus the CORS grant.
         const out = new Headers(CORS);
-        for (const h of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+        for (const h of ["content-type", "content-range", "accept-ranges"]) {
           const v = res.headers.get(h);
           if (v) out.set(h, v);
         }
-        return new Response(res.body, { status: res.status, headers: out });
+        out.set("content-length", String(body.byteLength));
+        return new Response(body, { status: res.status, headers: out });
       } catch (err) {
         console.error(
           `[musex stream proxy] ${parsed.path} (range=${range ?? "none"}) failed:`,
