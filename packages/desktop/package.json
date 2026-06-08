@@ -1,0 +1,32 @@
+{
+  "name": "@musex/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "package": "electron-vite build && electron-builder"
+  },
+  "dependencies": {
+    "@ctrl/plex": "^6.0.0",
+    "@musex/core": "workspace:*",
+    "@regosen/gapless-5": "^1.6.2",
+    "electron-store": "^11.0.2",
+    "hls.js": "^1.6.16"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^42.3.3",
+    "electron-builder": "^26.15.2",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3"
+  }
+}

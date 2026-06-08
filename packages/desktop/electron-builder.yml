@@ -1,0 +1,14 @@
+appId: com.musex.desktop
+productName: musex
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+mac:
+  category: public.app-category.music
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]

@@ -1,4 +1,14 @@
 packages:
   - "packages/*"
+
+# pnpm 11 gates dependency build scripts; allowlist the ones that need them.
 allowBuilds:
   esbuild: true
+  electron: true
+  electron-winstaller: false
+
+minimumReleaseAgeExclude:
+  - app-builder-lib@26.15.2
+  - dmg-builder@26.15.2
+  - electron-builder-squirrel-windows@26.15.2
+  - electron-builder@26.15.2
