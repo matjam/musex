@@ -31,11 +31,27 @@ interface RawTrack {
   parentRatingKey?: string;
   parentTitle?: string;
   grandparentTitle?: string;
+  thumb?: string;
   media?: RawMedia[];
 }
 
+/**
+ * Normalise a Plex thumb value to a server-relative path, stripping any host
+ * or token query params that the full Plex URL carries.  Returns undefined when
+ * there is nothing usable.
+ */
+export function thumbPath(thumb: string | undefined): string | undefined {
+  if (!thumb) return undefined;
+  if (thumb.startsWith("/")) return thumb; // already a path
+  try {
+    return new URL(thumb).pathname; // drop host + token query
+  } catch {
+    return undefined;
+  }
+}
+
 export function toArtist(raw: RawArtist, serverId: string): Artist {
-  return { id: raw.ratingKey, serverId, name: raw.title, thumb: raw.thumb };
+  return { id: raw.ratingKey, serverId, name: raw.title, thumb: thumbPath(raw.thumb) };
 }
 
 export function toAlbum(raw: RawAlbum, serverId: string): Album {
@@ -45,7 +61,7 @@ export function toAlbum(raw: RawAlbum, serverId: string): Album {
     artistId: raw.parentRatingKey ?? "",
     title: raw.title,
     year: raw.year,
-    thumb: raw.thumb,
+    thumb: thumbPath(raw.thumb),
   };
 }
 
@@ -71,6 +87,7 @@ export function toTrack(raw: RawTrack, serverId: string): Track {
     title: raw.title,
     trackNumber: raw.index,
     durationMs: raw.duration ?? 0,
+    thumb: thumbPath(raw.thumb),
     media: info,
   };
 }

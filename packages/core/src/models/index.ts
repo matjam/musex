@@ -51,6 +51,7 @@ export interface Track {
   title: string;
   durationMs: number;
   trackNumber?: number;
+  thumb?: string;
   media: MediaInfo;
 }
 

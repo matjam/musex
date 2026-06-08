@@ -1,6 +1,7 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import { usePlayer } from "../state/player";
 import { formatDuration } from "../util/format";
+import { AlbumArt } from "./AlbumArt";
 
 export function NowPlayingBar() {
   const { state, togglePlay, next, previous, seek, setVolume } = usePlayer();
@@ -46,7 +47,7 @@ export function NowPlayingBar() {
     <div className="now-playing-bar">
       {/* Left: art + track meta */}
       <div className="np-left">
-        <div className="np-art" />
+        <AlbumArt serverId={track.serverId} thumb={track.thumb} className="np-art" />
         <div className="np-meta">
           <div className="np-title">{track.title}</div>
           <div className="np-sub">{metaSub}</div>

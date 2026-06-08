@@ -1,6 +1,7 @@
 import type { Artist } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
+import { AlbumArt } from "../AlbumArt";
 
 type FetchState =
   | { status: "loading" }
@@ -54,7 +55,11 @@ export function ArtistsView() {
             className="grid-card"
             onClick={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
           >
-            <div className="grid-card-art artist-art" />
+            <AlbumArt
+              serverId={artist.serverId}
+              thumb={artist.thumb}
+              className="grid-card-art artist-art"
+            />
             <div className="grid-card-title">{artist.name}</div>
           </button>
         ))}

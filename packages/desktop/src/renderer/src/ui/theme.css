@@ -423,6 +423,13 @@ body {
   background: var(--panel-2);
 }
 
+/* When AlbumArt renders an <img> instead of a <div>, keep sizing consistent */
+img.grid-card-art {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+}
+
 .artist-art {
   border-radius: 50%;
 }
@@ -495,6 +502,10 @@ body {
   flex-shrink: 0;
   background: var(--panel-2);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+img.album-header-art {
+  object-fit: cover;
 }
 
 .album-meta-label {
@@ -640,6 +651,10 @@ body {
   border-radius: 6px;
   flex-shrink: 0;
   background: var(--panel-2);
+}
+
+img.np-art {
+  object-fit: cover;
 }
 
 .np-meta {

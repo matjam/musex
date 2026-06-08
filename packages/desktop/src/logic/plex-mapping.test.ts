@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { toAlbum, toArtist, toTrack } from "./plex-mapping";
+import { thumbPath, toAlbum, toArtist, toTrack } from "./plex-mapping";
+
+describe("thumbPath", () => {
+  it("passes through a server-relative path unchanged", () => {
+    expect(thumbPath("/library/metadata/1/thumb/2")).toBe("/library/metadata/1/thumb/2");
+  });
+  it("strips host and token query from a full Plex URL", () => {
+    expect(thumbPath("http://host:32400/library/metadata/1/thumb/2?X-Plex-Token=abc")).toBe(
+      "/library/metadata/1/thumb/2",
+    );
+  });
+  it("returns undefined for undefined input", () => {
+    expect(thumbPath(undefined)).toBeUndefined();
+  });
+  it("returns undefined for an unparseable non-path string", () => {
+    expect(thumbPath("not a url or path")).toBeUndefined();
+  });
+});
 
 describe("plex-mapping", () => {
   it("maps an artist", () => {
@@ -58,6 +75,30 @@ describe("plex-mapping", () => {
         partKey: "/library/parts/99/file.flac",
       },
     });
+  });
+  it("maps a track with a thumb, stripping the token from a full URL", () => {
+    const t = toTrack(
+      {
+        ratingKey: "32",
+        title: "Karma Police",
+        index: 4,
+        duration: 262000,
+        parentRatingKey: "20",
+        parentTitle: "OK Computer",
+        grandparentTitle: "Radiohead",
+        thumb: "http://192.168.1.1:32400/library/metadata/32/thumb/99?X-Plex-Token=secret",
+        media: [
+          {
+            audioCodec: "flac",
+            bitrate: 1000,
+            container: "flac",
+            parts: [{ id: 100, key: "/library/parts/100/file.flac", container: "flac" }],
+          },
+        ],
+      },
+      "srv-1",
+    );
+    expect(t.thumb).toBe("/library/metadata/32/thumb/99");
   });
   it("throws if a track has no playable media part (not silently dropped)", () => {
     expect(() =>

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { formatDuration } from "../../util/format";
+import { AlbumArt } from "../AlbumArt";
 
 type FetchState =
   | { status: "loading" }
@@ -59,7 +60,7 @@ export function AlbumDetailView({ album }: Props) {
       </div>
 
       <div className="album-header">
-        <div className="album-header-art" />
+        <AlbumArt serverId={album.serverId} thumb={album.thumb} className="album-header-art" />
         <div className="album-header-meta">
           <div className="album-meta-label">Album</div>
           <h1 className="album-meta-title">{album.title}</h1>
