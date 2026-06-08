@@ -175,10 +175,7 @@ git push origin main
 
 **Files (all under `packages/desktop/`):** `package.json`, `electron.vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`, `vitest.config.ts`, `electron-builder.yml`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/index.html`, `src/renderer/src/main.tsx`, `src/renderer/src/vite-env.d.ts`. Also modify root `.npmrc` and `pnpm-workspace.yaml`.
 
-- [ ] **Step 1: Root `.npmrc`** (create at repo root) — electron-builder needs a flat layout:
-```ini
-node-linker=hoisted
-```
+- [ ] **Step 1: No `.npmrc` node-linker.** pnpm 10/11 reads only auth/registry from `.npmrc`; a `node-linker` there is silently ignored (it lives in `pnpm-workspace.yaml` as `nodeLinker`). The flat layout electron-builder wants is a **packaging-time** decision (Risk #4) and is NOT needed for dev — the default isolated layout runs `electron-vite dev` fine. So do not create `.npmrc` for this.
 
 - [ ] **Step 2: Root `pnpm-workspace.yaml`** — allow electron's postinstall (downloads the binary). Update the `allowBuilds` block to:
 ```yaml
@@ -189,7 +186,9 @@ packages:
 allowBuilds:
   esbuild: true
   electron: true
+  electron-winstaller: false
 ```
+> If `pnpm install` aborts with `ERR_PNPM_IGNORED_BUILDS` on a package (e.g. `electron-winstaller`), add it here (`false` denies, `true` allows) and re-run — the abort can happen *before* electron's own build runs, leaving the binary missing. pnpm may also auto-add a `minimumReleaseAgeExclude` block; commit it.
 
 - [ ] **Step 3: `packages/desktop/package.json`**
 ```json
@@ -1314,5 +1313,5 @@ git push origin main
 1. **`@ctrl/plex` exact import paths + method names** (`MyPlexAccount.getWebLogin`, `resource.connect()`, `library.sectionByID`, `searchArtists`, `albums()`, `tracks()`, `fetchItem`, `BASE_HEADERS`): verified from v6 source in research, but confirm against the installed `.d.ts` and fix imports/names to match — the smoke test (B4 Step 3) is the gate.
 2. **safeStorage async methods** availability in the installed `electron` typings (B3 Step 1 fallback noted).
 3. **Sandboxed CJS preload**: electron-vite emits the preload as `index.cjs` (format `cjs`); confirm the window's `preload` path matches the actual emitted filename and that `window.musex` is present at runtime. If the sandboxed preload fails to load, verify the output is genuinely CommonJS (not an ESM `.js` under `type:module`) and that only `electron` is required at runtime (everything else bundled).
-4. **electron-builder + pnpm**: `node-linker=hoisted` + `allowBuilds: electron` must take effect; if `pnpm install` reports electron's build was ignored, run `pnpm rebuild electron` (or `pnpm approve-builds`) and confirm before packaging.
+4. **electron-builder + pnpm (packaging-time)**: pnpm 10/11 ignores `node-linker` in `.npmrc` — the flat layout electron-builder needs is set via `nodeLinker: hoisted` in `pnpm-workspace.yaml` (or a surgical `public-hoist-pattern` keeping isolation elsewhere). Decide/verify against electron-builder docs when implementing packaging; NOT required for `electron-vite dev`. For the electron *binary*, `allowBuilds: electron: true` must take effect — verify `pnpm --filter @musex/desktop exec electron --version`; if missing, see CLAUDE.md's electron-postinstall note.
 5. **Transcoded HLS through the custom protocol**: relative segment resolution is preserved by the path-preserving URL scheme, but confirm end-to-end in Plan C; direct-play is the slice-1 priority.
