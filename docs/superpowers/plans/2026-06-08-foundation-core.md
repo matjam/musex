@@ -65,7 +65,7 @@ musex/
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@9",
+  "packageManager": "pnpm@11.5.2",
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
@@ -75,10 +75,13 @@ musex/
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.0.0",
     "typescript": "^6.0.3",
     "vite": "^7.0.0",
     "vitest": "^4.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
   }
 }
 ```
