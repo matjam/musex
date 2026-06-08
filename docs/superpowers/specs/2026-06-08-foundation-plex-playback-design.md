@@ -125,14 +125,17 @@ interface TokenStore {
 }
 
 interface PlaybackEngine {
-  load(url: string, kind: 'direct' | 'hls'): Promise<void>;
-  preload(url: string, kind: 'direct' | 'hls'): Promise<void>; // next track, for gapless
+  load(ref: StreamRef): Promise<void>;
+  preload(ref: StreamRef): Promise<void>; // next track, for gapless
   play(): void; pause(): void; seek(seconds: number): void; setVolume(v: number): void;
   onPosition(cb: (seconds: number) => void): void;
-  onEnded(cb: () => void): void;     // fires at a true gapless boundary, not after a gap
+  onAdvanced(cb: () => void): void;  // engine gaplessly auto-advanced to the preloaded next track
+  onEnded(cb: () => void): void;     // playback fully stopped (end of content / nothing buffered)
   onError(cb: (err: Error) => void): void;
 }
 ```
+
+> Verified against Gapless-5 (docs-research, 2026-06-08): the engine fires `onnext` on auto-advance → mapped to `onAdvanced` (session bumps its cursor, no reload); `onfinishedall` → `onEnded`. Manual skips go through `load()` (teardown + reload; a tiny gap is acceptable). This resolves the gapless-contract question raised in core review.
 
 The `preload` method is what makes gapless possible: the session hands the engine the *next* track ahead of time so the engine (Gapless-5) can have it buffered and ready to start seamlessly.
 
@@ -144,12 +147,11 @@ The `preload` method is what makes gapless possible: the session hands the engin
 - **Transcoded tracks are best-effort, not gapless.** The transcode fallback emits HLS (`/music/:/transcode/universal/start.m3u8`), played via `hls.js`, which doesn't fit Gapless-5's full-buffer model. Transcode only fires for rare formats (ALAC/DSD/APE), so this is an acceptable slice-1 limitation.
 - **Memory note:** Gapless-5's Web Audio path holds the decoded current + next track in memory. Fine for songs; very long tracks (hour-long mixes) get large. If that ever bites, the `PlaybackEngine` port lets us swap in a streaming WebCodecs engine later with no core changes.
 
-**Token handling — proxy through main.** The renderer never receives the long-lived Plex token. Main runs a tiny localhost HTTP server that:
-- exposes `http://127.0.0.1:{port}/stream/{trackId}` (and an HLS variant for the transcode path),
-- adds `X-Plex-Token` server-side and forwards to Plex,
-- **supports HTTP range requests** (required for seeking) and streams the response through.
+**Token handling — proxy through main via a custom protocol** (updated from a localhost HTTP server after docs research; `protocol.handle` is simpler and safer). The renderer never receives the long-lived Plex token. Main:
+- registers a privileged scheme (`musex-stream`) with `{ standard, secure, supportFetchAPI, stream: true }` synchronously before `app.whenReady`,
+- `protocol.handle('musex-stream', handler)` where the handler maps the URL to the real Plex URL, injects `X-Plex-Token`, forwards the incoming `Range` header, and returns `net.fetch(...)`'s streaming response (206 partial content supported natively).
 
-The renderer's audio engine points only at the localhost proxy URL. Trade-off accepted: a real component to build and test (range handling, backpressure, cleanup) in exchange for keeping the credential entirely in the Node side.
+The renderer's audio engine plays `musex-stream://…` URLs only — no token, no open TCP port. Trade-off vs a localhost server: none meaningful; `protocol.handle` + `net.fetch` gives range support for free and keeps the credential entirely in main.
 
 ## 10. PlaybackSession state machine (core, pure)
 
