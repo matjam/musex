@@ -12,6 +12,11 @@ export const IPC = {
   resolveStream: "musex:resolveStream", // (track) -> StreamRef
   getVolume: "musex:getVolume", // -> number
   setVolume: "musex:setVolume", // (v) -> void
+  getPreferences: "musex:getPreferences", // -> Preferences
+  setCacheEnabled: "musex:setCacheEnabled", // (boolean) -> void
+  setCacheMaxBytes: "musex:setCacheMaxBytes", // (number bytes) -> void
+  getCacheStats: "musex:getCacheStats", // -> CacheStats
+  clearCache: "musex:clearCache", // -> { freedBytes: number }
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -19,6 +24,9 @@ export type SignInPollResult = { status: "pending" | "ok" | "error"; message?: s
 export type DiscoverResult = { libraries: Library[]; unreachable: Server[] };
 
 export type RestoreSessionResult = { library: Library | null };
+export type Preferences = { cacheEnabled: boolean; cacheMaxBytes: number };
+export type CacheStats = { bytes: number; files: number };
+export type ClearCacheResult = { freedBytes: number };
 
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
@@ -33,4 +41,9 @@ export interface MusexApi {
   resolveStream(track: Track): Promise<StreamRef>;
   getVolume(): Promise<number>;
   setVolume(v: number): Promise<void>;
+  getPreferences(): Promise<Preferences>;
+  setCacheEnabled(enabled: boolean): Promise<void>;
+  setCacheMaxBytes(bytes: number): Promise<void>;
+  getCacheStats(): Promise<CacheStats>;
+  clearCache(): Promise<ClearCacheResult>;
 }

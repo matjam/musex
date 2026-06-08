@@ -14,6 +14,11 @@ const api: MusexApi = {
   resolveStream: (track) => ipcRenderer.invoke(IPC.resolveStream, track),
   getVolume: () => ipcRenderer.invoke(IPC.getVolume),
   setVolume: (v) => ipcRenderer.invoke(IPC.setVolume, v),
+  getPreferences: () => ipcRenderer.invoke(IPC.getPreferences),
+  setCacheEnabled: (enabled) => ipcRenderer.invoke(IPC.setCacheEnabled, enabled),
+  setCacheMaxBytes: (bytes) => ipcRenderer.invoke(IPC.setCacheMaxBytes, bytes),
+  getCacheStats: () => ipcRenderer.invoke(IPC.getCacheStats),
+  clearCache: () => ipcRenderer.invoke(IPC.clearCache),
 };
 
 contextBridge.exposeInMainWorld("musex", api);

@@ -6,13 +6,20 @@ export interface PersistedState {
   clientId: string;
   library: Library | null;
   volume: number;
+  cacheEnabled: boolean;
+  cacheMaxBytes: number;
 }
+
+/** Default local-cache cap: 5 GiB. */
+export const DEFAULT_CACHE_MAX_BYTES = 5 * 1024 ** 3;
 
 const store = new Store<PersistedState>({
   defaults: {
     clientId: "",
     library: null,
     volume: 1,
+    cacheEnabled: false,
+    cacheMaxBytes: DEFAULT_CACHE_MAX_BYTES,
   },
 });
 
@@ -38,5 +45,17 @@ export const persistence = {
   },
   setVolume(v: number): void {
     store.set("volume", v);
+  },
+  getCacheEnabled(): boolean {
+    return store.get("cacheEnabled");
+  },
+  setCacheEnabled(v: boolean): void {
+    store.set("cacheEnabled", v);
+  },
+  getCacheMaxBytes(): number {
+    return store.get("cacheMaxBytes");
+  },
+  setCacheMaxBytes(v: number): void {
+    store.set("cacheMaxBytes", v);
   },
 };
