@@ -89,14 +89,16 @@ export function SettingsView() {
               don't re-stream from Plex. Only original (direct-play) files are cached.
             </div>
           </div>
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={state.cacheEnabled}
-              onChange={(e) => void toggleCache(e.target.checked)}
-            />
-            <span className="switch-track" />
-          </label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={state.cacheEnabled}
+            aria-label="Cache played tracks"
+            className={`toggle${state.cacheEnabled ? " toggle--on" : ""}`}
+            onClick={() => void toggleCache(!state.cacheEnabled)}
+          >
+            <span className="toggle-knob" />
+          </button>
         </div>
 
         <div className="settings-row">
