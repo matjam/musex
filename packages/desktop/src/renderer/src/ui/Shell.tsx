@@ -2,6 +2,7 @@ import { useApp } from "../state/app";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
+import { SettingsView } from "./views/SettingsView";
 
 export function Shell() {
   const { library, view, dispatch } = useApp();
@@ -12,6 +13,7 @@ export function Shell() {
   // artist/album drill-downs keep the Artists nav highlighted.
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
+  const settingsActive = view.name === "settings";
 
   function renderContent() {
     switch (view.name) {
@@ -25,6 +27,8 @@ export function Shell() {
         // Albums as a flat all-library grid is deferred (would require a slow
         // flatten-all-albums fetch). Redirect to Artists instead.
         return <ArtistsView />;
+      case "settings":
+        return <SettingsView />;
     }
   }
 
@@ -68,6 +72,17 @@ export function Shell() {
           <span className="nav-ic" />
           Tracks
         </div>
+
+        <div className="nav-section">App</div>
+
+        <button
+          type="button"
+          className={`nav-item${settingsActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
+        >
+          <span className="nav-ic" />
+          Settings
+        </button>
 
         <div className="lib-switch">
           <div className="lib-switch-label">Plex Library</div>
