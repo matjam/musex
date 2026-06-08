@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { app, safeStorage } from "electron";
 import type { TokenStore } from "@musex/core";
+import { app, safeStorage } from "electron";
 
 /** Persists the Plex token encrypted via the OS keychain (macOS Keychain).
  *  safeStorage only encrypts/decrypts — we persist the ciphertext to userData. */
