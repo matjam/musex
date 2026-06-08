@@ -34,12 +34,35 @@ export class StreamProxy {
       const range = request.headers.get("Range");
       if (range) headers.set("Range", range);
 
-      const res = await net.fetch(upstream.toString(), { method: "GET", headers });
-      // Allow the renderer's cross-origin XHR/fetch (gapless-5/hls.js) to read the
-      // response; combined with corsEnabled on the scheme this satisfies the CORS grant.
-      const outHeaders = new Headers(res.headers);
-      outHeaders.set("Access-Control-Allow-Origin", "*");
-      return new Response(res.body, { status: res.status, headers: outHeaders });
+      try {
+        const res = await net.fetch(upstream.toString(), { method: "GET", headers });
+        // Forward ONLY the headers needed for media playback + range. Copying
+        // hop-by-hop / encoding headers (Connection, Transfer-Encoding,
+        // Content-Encoding) onto a re-streamed body breaks subsequent loads with
+        // net::ERR_FAILED. Plus ACAO so the renderer's cross-origin XHR can read it.
+        const out = new Headers();
+        out.set("Access-Control-Allow-Origin", "*");
+        for (const h of [
+          "content-type",
+          "content-length",
+          "content-range",
+          "accept-ranges",
+          "etag",
+          "last-modified",
+          "cache-control",
+        ]) {
+          const v = res.headers.get(h);
+          if (v) out.set(h, v);
+        }
+        return new Response(res.body, { status: res.status, headers: out });
+      } catch (err) {
+        // Surface the real cause instead of an invisible ERR_FAILED in the renderer.
+        console.error(
+          `[musex stream proxy] ${parsed.path} (range=${range ?? "none"}) failed:`,
+          err,
+        );
+        return new Response("upstream error", { status: 502 });
+      }
     });
   }
 
