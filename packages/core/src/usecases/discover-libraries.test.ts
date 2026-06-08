@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Library, Server } from "../models/index";
+import { PlexAuthError } from "../ports/plex-gateway";
 import { FakePlexGateway } from "../testing/fakes";
 import { discoverMusicLibraries } from "./discover-libraries";
 
@@ -36,5 +37,13 @@ describe("discoverMusicLibraries", () => {
 
     expect(result.libraries.map((l) => l.id)).toEqual(["a1"]);
     expect(result.unreachable.map((s) => s.id)).toEqual(["b"]);
+  });
+
+  it("re-throws auth errors instead of marking the server unreachable", async () => {
+    const gateway = new FakePlexGateway();
+    gateway.servers = [server("a")];
+    gateway.authErrorServerIds.add("a");
+
+    await expect(discoverMusicLibraries(gateway, "tok")).rejects.toBeInstanceOf(PlexAuthError);
   });
 });

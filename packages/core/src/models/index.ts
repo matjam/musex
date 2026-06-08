@@ -47,6 +47,7 @@ export interface Track {
   serverId: string;
   albumId: string;
   artistName: string;
+  albumTitle?: string;
   title: string;
   durationMs: number;
   trackNumber?: number;

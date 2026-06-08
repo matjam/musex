@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { StreamResolver } from "../ports/stream-resolver";
 import { FakePlaybackEngine, FakeStreamResolver, makeTrack } from "../testing/fakes";
 import { PlaybackSession } from "./playback-session";
 
@@ -93,5 +94,39 @@ describe("PlaybackSession", () => {
     session.subscribe((s) => states.push(s.status));
     await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
     expect(states).toContain("playing");
+  });
+
+  it("goes to ended when next() is called on the last track", async () => {
+    const { session } = setup();
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.next();
+    expect(session.getState().status).toBe("ended");
+  });
+
+  it("ignores a superseded load when a newer playIndex starts", async () => {
+    let releaseTrack1!: () => void;
+    const track1Gate = new Promise<void>((resolve) => {
+      releaseTrack1 = resolve;
+    });
+    const engine = new FakePlaybackEngine();
+    const resolver: StreamResolver = {
+      async resolve(track) {
+        if (track.id === "1") await track1Gate;
+        return { url: `fake://stream/${track.id}`, kind: "direct" };
+      },
+    };
+    const session = new PlaybackSession(engine, resolver);
+
+    // Start loading track index 0 (id "1"); it suspends inside resolve().
+    const first = session.loadQueue({ tracks: [makeTrack("1"), makeTrack("2")], index: 0 });
+    // Start a newer load for index 1 (id "2"); it resolves immediately and wins.
+    const second = session.playIndex(1);
+    await second;
+    // Let the stale track-1 load finish; it must detect it was superseded.
+    releaseTrack1();
+    await first;
+
+    expect(engine.loaded.map((r) => r.url)).toEqual(["fake://stream/2"]);
+    expect(session.getState().queue?.index).toBe(1);
   });
 });

@@ -15,6 +15,7 @@ export { PlaybackSession } from "./playback/playback-session";
 export type { PlaybackEngine } from "./ports/playback-engine";
 // Ports
 export type { Pin, PlexGateway } from "./ports/plex-gateway";
+export { PlexAuthError } from "./ports/plex-gateway";
 export type { StreamKind, StreamRef, StreamResolver } from "./ports/stream-resolver";
 export type { TokenStore } from "./ports/token-store";
 export { buildQueue } from "./usecases/build-queue";

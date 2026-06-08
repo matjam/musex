@@ -26,6 +26,7 @@ export class PlaybackSession {
   private state: PlaybackState = INITIAL_STATE;
   private readonly listeners = new Set<(s: PlaybackState) => void>();
   private preloadedIndex: number | null = null;
+  private loadToken = 0;
 
   constructor(
     private readonly engine: PlaybackEngine,
@@ -60,10 +61,13 @@ export class PlaybackSession {
     const track = queue.tracks[index];
     if (!track) return;
 
+    const token = ++this.loadToken;
     this.preloadedIndex = null;
     this.patch({ queue: { ...queue, index }, status: "loading", positionSec: 0 });
     const ref = await this.resolver.resolve(track);
+    if (token !== this.loadToken) return; // superseded by a newer load
     await this.engine.load(ref);
+    if (token !== this.loadToken) return; // superseded by a newer load
     this.engine.play();
     this.patch({ status: "playing", durationSec: track.durationMs / 1000 });
     await this.preloadNext();
@@ -82,7 +86,12 @@ export class PlaybackSession {
 
   async next(): Promise<void> {
     const queue = this.state.queue;
-    if (queue) await this.playIndex(queue.index + 1);
+    if (!queue) return;
+    if (queue.index + 1 >= queue.tracks.length) {
+      this.patch({ status: "ended" });
+      return;
+    }
+    await this.playIndex(queue.index + 1);
   }
 
   async previous(): Promise<void> {

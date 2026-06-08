@@ -17,3 +17,13 @@ export interface PlexGateway {
   listAlbums(library: Library, artistId: string, token: string): Promise<Album[]>;
   listTracks(library: Library, albumId: string, token: string): Promise<Track[]>;
 }
+
+/** Thrown by a PlexGateway implementation when the Plex token is rejected (HTTP 401).
+ *  Distinct from connectivity failures so callers can trigger re-auth instead of
+ *  treating it as an offline server. */
+export class PlexAuthError extends Error {
+  constructor(message = "Plex authentication failed") {
+    super(message);
+    this.name = "PlexAuthError";
+  }
+}

@@ -1,6 +1,7 @@
 import type { Album, Artist, Library, Server, Track } from "../models/index";
 import type { PlaybackEngine } from "../ports/playback-engine";
 import type { Pin, PlexGateway } from "../ports/plex-gateway";
+import { PlexAuthError } from "../ports/plex-gateway";
 import type { StreamRef, StreamResolver } from "../ports/stream-resolver";
 import type { TokenStore } from "../ports/token-store";
 
@@ -28,6 +29,7 @@ export class FakePlexGateway implements PlexGateway {
   readonly albums = new Map<string, Album[]>(); // artistId -> albums
   readonly tracks = new Map<string, Track[]>(); // albumId -> tracks
   readonly unreachableServerIds = new Set<string>();
+  readonly authErrorServerIds = new Set<string>();
   createPinCalls = 0;
   private pollIdx = 0;
 
@@ -44,6 +46,9 @@ export class FakePlexGateway implements PlexGateway {
     return this.servers;
   }
   async listMusicLibraries(server: Server, _token: string): Promise<Library[]> {
+    if (this.authErrorServerIds.has(server.id)) {
+      throw new PlexAuthError();
+    }
     if (this.unreachableServerIds.has(server.id)) {
       throw new Error(`unreachable server: ${server.id}`);
     }
