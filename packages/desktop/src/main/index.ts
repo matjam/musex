@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, protocol } from "electron";
+import { registerIpc } from "./ipc.js";
+import { Runtime } from "./runtime.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -36,7 +38,11 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const runtime = new Runtime();
+  runtime.init();
+  await runtime.restore();
+  registerIpc(runtime);
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
