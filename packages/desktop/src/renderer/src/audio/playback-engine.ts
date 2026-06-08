@@ -81,9 +81,13 @@ export class WebPlaybackEngine implements PlaybackEngine {
   private ensureGapless(): Gapless5 {
     if (this.gapless) return this.gapless;
     const g = new Gapless5({
+      // Web Audio only: with useHTML5Audio also on, gapless-5 downloads each full
+      // file TWICE (HTML5 <audio> range request + Web Audio XHR), which — together
+      // with preloading — overwhelmed Plex (503 / dropped connections). One download
+      // per track. loadLimit caps concurrency to current + next (for gapless).
       useWebAudio: true,
-      useHTML5Audio: true,
-      loadLimit: 3,
+      useHTML5Audio: false,
+      loadLimit: 2,
       volume: this.volume,
     });
     // ontimeupdate receives (current_track_time_ms, current_track_index) — we only need the first
