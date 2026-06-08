@@ -71,4 +71,21 @@ export function registerIpc(rt: Runtime): void {
     if (typeof v !== "number" || v < 0 || v > 1) throw new Error("invalid volume");
     persistence.setVolume(v);
   });
+  ipcMain.handle(IPC.getPreferences, () => ({
+    cacheEnabled: persistence.getCacheEnabled(),
+    cacheMaxBytes: persistence.getCacheMaxBytes(),
+  }));
+  ipcMain.handle(IPC.setCacheEnabled, (_e, enabled: boolean) => {
+    if (typeof enabled !== "boolean") throw new Error("invalid cacheEnabled");
+    persistence.setCacheEnabled(enabled);
+  });
+  ipcMain.handle(IPC.setCacheMaxBytes, (_e, bytes: number) => {
+    const MIN = 100 * 1024 ** 2; // 100 MiB floor
+    if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < MIN) {
+      throw new Error("invalid cacheMaxBytes");
+    }
+    persistence.setCacheMaxBytes(bytes);
+  });
+  ipcMain.handle(IPC.getCacheStats, () => rt.cache.stats());
+  ipcMain.handle(IPC.clearCache, async () => ({ freedBytes: await rt.cache.clear() }));
 }
