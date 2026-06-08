@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Library, Server } from "../models/index";
 import { FakePlexGateway } from "../testing/fakes";
 import { discoverMusicLibraries } from "./discover-libraries";
@@ -21,21 +21,20 @@ describe("discoverMusicLibraries", () => {
     gateway.libraries.set("a", [library("a1", "a")]);
     gateway.libraries.set("b", [library("b1", "b")]);
 
-    const libs = await discoverMusicLibraries(gateway, "tok");
-    expect(libs.map((l) => l.id)).toEqual(["a1", "b1"]);
+    const result = await discoverMusicLibraries(gateway, "tok");
+    expect(result.libraries.map((l) => l.id)).toEqual(["a1", "b1"]);
+    expect(result.unreachable).toEqual([]);
   });
 
-  it("skips unreachable servers without failing the whole discovery", async () => {
+  it("reports unreachable servers without failing the whole discovery", async () => {
     const gateway = new FakePlexGateway();
     gateway.servers = [server("a"), server("b")];
     gateway.libraries.set("a", [library("a1", "a")]);
     gateway.unreachableServerIds.add("b");
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const libs = await discoverMusicLibraries(gateway, "tok");
+    const result = await discoverMusicLibraries(gateway, "tok");
 
-    expect(libs.map((l) => l.id)).toEqual(["a1"]);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    expect(result.libraries.map((l) => l.id)).toEqual(["a1"]);
+    expect(result.unreachable.map((s) => s.id)).toEqual(["b"]);
   });
 });

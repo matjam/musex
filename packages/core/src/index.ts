@@ -18,6 +18,7 @@ export type { Pin, PlexGateway } from "./ports/plex-gateway";
 export type { StreamKind, StreamRef, StreamResolver } from "./ports/stream-resolver";
 export type { TokenStore } from "./ports/token-store";
 export { buildQueue } from "./usecases/build-queue";
+export type { LibraryDiscovery } from "./usecases/discover-libraries";
 export { discoverMusicLibraries } from "./usecases/discover-libraries";
 export type { SignInDeps, SignInOptions, SignInResult } from "./usecases/sign-in";
 // Use-cases

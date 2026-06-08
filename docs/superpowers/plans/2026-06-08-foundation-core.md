@@ -957,7 +957,11 @@ import { FakePlexGateway } from "../testing/fakes";
 import { discoverMusicLibraries } from "./discover-libraries";
 
 function server(id: string): Server {
-  return { id, name: `Server ${id}`, connections: [{ uri: `http://${id}`, local: true, relay: false }] };
+  return {
+    id,
+    name: `Server ${id}`,
+    connections: [{ uri: `http://${id}`, local: true, relay: false }],
+  };
 }
 function library(id: string, serverId: string): Library {
   return { id, serverId, serverName: `Server ${serverId}`, title: `Music ${id}`, type: "music" };
@@ -970,22 +974,21 @@ describe("discoverMusicLibraries", () => {
     gateway.libraries.set("a", [library("a1", "a")]);
     gateway.libraries.set("b", [library("b1", "b")]);
 
-    const libs = await discoverMusicLibraries(gateway, "tok");
-    expect(libs.map((l) => l.id)).toEqual(["a1", "b1"]);
+    const result = await discoverMusicLibraries(gateway, "tok");
+    expect(result.libraries.map((l) => l.id)).toEqual(["a1", "b1"]);
+    expect(result.unreachable).toEqual([]);
   });
 
-  it("skips unreachable servers without failing the whole discovery", async () => {
+  it("reports unreachable servers without failing the whole discovery", async () => {
     const gateway = new FakePlexGateway();
     gateway.servers = [server("a"), server("b")];
     gateway.libraries.set("a", [library("a1", "a")]);
     gateway.unreachableServerIds.add("b");
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const libs = await discoverMusicLibraries(gateway, "tok");
+    const result = await discoverMusicLibraries(gateway, "tok");
 
-    expect(libs.map((l) => l.id)).toEqual(["a1"]);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    expect(result.libraries.map((l) => l.id)).toEqual(["a1"]);
+    expect(result.unreachable.map((s) => s.id)).toEqual(["b"]);
   });
 });
 ```
@@ -998,28 +1001,38 @@ Expected: FAIL — `Cannot find module './discover-libraries'`.
 - [ ] **Step 3: Implement `discover-libraries.ts`**
 
 ```ts
-import type { Library } from "../models/index";
+import type { Library, Server } from "../models/index";
 import type { PlexGateway } from "../ports/plex-gateway";
 
-/** Lists music libraries across every reachable server. An unreachable server is
- *  logged and skipped (not swallowed silently) rather than failing discovery. */
+export interface LibraryDiscovery {
+  libraries: Library[];
+  /** Servers that could not be reached; surfaced so the caller (e.g. the main
+   *  process adapter) can log or show them, rather than core assuming a logger. */
+  unreachable: Server[];
+}
+
+/** Lists music libraries across every reachable server. A server that can't be
+ *  reached is recorded in `unreachable` and skipped — not silently swallowed, and
+ *  not fatal to the whole discovery. Core does no logging itself (platform-agnostic). */
 export async function discoverMusicLibraries(
   gateway: PlexGateway,
   token: string,
-): Promise<Library[]> {
+): Promise<LibraryDiscovery> {
   const servers = await gateway.listServers(token);
   const libraries: Library[] = [];
+  const unreachable: Server[] = [];
   for (const server of servers) {
     try {
-      const libs = await gateway.listMusicLibraries(server, token);
-      libraries.push(...libs);
-    } catch (err) {
-      console.warn(`musex: skipping unreachable server "${server.name}" (${server.id})`, err);
+      libraries.push(...(await gateway.listMusicLibraries(server, token)));
+    } catch {
+      unreachable.push(server);
     }
   }
-  return libraries;
+  return { libraries, unreachable };
 }
 ```
+
+> Core deliberately does **not** call `console` (it would require asserting a platform global into the pure package). Unreachable servers are returned for the caller to surface.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1140,6 +1153,7 @@ export type { PlaybackState, PlaybackStatus } from "./playback/playback-session"
 export { signIn, SignInTimeoutError } from "./usecases/sign-in";
 export type { SignInDeps, SignInOptions, SignInResult } from "./usecases/sign-in";
 export { discoverMusicLibraries } from "./usecases/discover-libraries";
+export type { LibraryDiscovery } from "./usecases/discover-libraries";
 export { buildQueue } from "./usecases/build-queue";
 ```
 
