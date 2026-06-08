@@ -21,11 +21,29 @@ export class StreamProxy {
 
   /** Called once in app.whenReady. */
   install(): void {
+    // The renderer (localhost:5173 in dev) fetches these cross-origin. A GET with a
+    // Range header is NOT a CORS-safelisted request, so Chromium sends a preflight
+    // OPTIONS first — we must answer it with the right CORS headers and expose the
+    // range headers, or the media/XHR load fails with net::ERR_FAILED.
+    const CORS: Record<string, string> = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Range, Content-Type",
+      "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Length, Content-Type",
+    };
+
     protocol.handle("musex-stream", async (request) => {
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: { ...CORS, "Access-Control-Max-Age": "86400" },
+        });
+      }
+
       const parsed = parseProxyUrl(request.url);
-      if (!parsed) return new Response("bad request", { status: 400 });
+      if (!parsed) return new Response("bad request", { status: 400, headers: CORS });
       const endpoint = this.endpoints.get(parsed.serverId);
-      if (!endpoint) return new Response("unknown server", { status: 404 });
+      if (!endpoint) return new Response("unknown server", { status: 404, headers: CORS });
 
       const upstream = new URL(endpoint.baseUrl);
       upstream.pathname = parsed.path;
@@ -38,32 +56,23 @@ export class StreamProxy {
 
       try {
         const res = await net.fetch(upstream.toString(), { method: "GET", headers });
-        // Forward ONLY the headers needed for media playback + range. Copying
-        // hop-by-hop / encoding headers (Connection, Transfer-Encoding,
-        // Content-Encoding) onto a re-streamed body breaks subsequent loads with
-        // net::ERR_FAILED. Plus ACAO so the renderer's cross-origin XHR can read it.
-        const out = new Headers();
-        out.set("Access-Control-Allow-Origin", "*");
-        for (const h of [
-          "content-type",
-          "content-length",
-          "content-range",
-          "accept-ranges",
-          "etag",
-          "last-modified",
-          "cache-control",
-        ]) {
+        console.log(
+          `[musex stream proxy] ${request.method} ${parsed.path} range=${range ?? "none"} -> ${res.status}`,
+        );
+        // Forward only media/range headers (NOT hop-by-hop/encoding ones, which break
+        // a re-streamed body) plus the CORS grant.
+        const out = new Headers(CORS);
+        for (const h of ["content-type", "content-length", "content-range", "accept-ranges"]) {
           const v = res.headers.get(h);
           if (v) out.set(h, v);
         }
         return new Response(res.body, { status: res.status, headers: out });
       } catch (err) {
-        // Surface the real cause instead of an invisible ERR_FAILED in the renderer.
         console.error(
           `[musex stream proxy] ${parsed.path} (range=${range ?? "none"}) failed:`,
           err,
         );
-        return new Response("upstream error", { status: 502 });
+        return new Response("upstream error", { status: 502, headers: CORS });
       }
     });
   }
