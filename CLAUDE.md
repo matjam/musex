@@ -21,6 +21,7 @@ A macOS (Electron) music player that streams from Plex, with planned external-me
 
 ## Conventions
 
+- **Prior art first — don't roll our own.** Use mature, maintained libraries for hard sub-problems (Plex API, gapless playback, HLS, secure storage, etc.) and wrap each behind a core-owned port so it can be swapped. Candidates so far: `@ctrl/plex` / `@lukehagar/plexjs` (Plex), `@regosen/gapless-5` (gapless), `hls.js` (HLS), Electron `safeStorage` (token), `electron-store` (state).
 - **TDD.** Core is the primary test target, exercised against fake ports (`FakePlexGateway`, `FakeTokenStore`, `FakePlaybackEngine`). One opt-in integration smoke test against a real Plex server, env-gated (`MUSEX_PLEX_E2E=1`); not in normal CI.
 - **Local bar = CI bar:** run tests + lint + typecheck + format-check before every push.
 - No silently swallowed errors (empty `catch {}` is a bug). 401 from Plex → drop to signed-out and re-auth, don't loop.
