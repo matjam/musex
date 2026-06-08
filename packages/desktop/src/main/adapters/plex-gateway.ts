@@ -5,11 +5,18 @@ import type {
   PlexServer,
   Track as PlexTrack,
 } from "@ctrl/plex";
-import { MyPlexAccount, X_PLEX_IDENTIFIER } from "@ctrl/plex";
-// fetchItem is not re-exported from @ctrl/plex's root; deep-importing the internal
+import {
+  MyPlexAccount,
+  Album as PlexAlbumCls,
+  Track as PlexTrackCls,
+  X_PLEX_IDENTIFIER,
+} from "@ctrl/plex";
+// fetchItems is not re-exported from @ctrl/plex's root; deep-importing the internal
 // path resolves at runtime because the package ships no "exports" map (only
 // main/typings + files:["dist/src"]). Re-verify this path when upgrading @ctrl/plex.
-import { fetchItem } from "@ctrl/plex/dist/src/baseFunctionality.js";
+// NOTE: pass the item Class so results are HYDRATED instances (with .media/.parts etc.);
+// without a Cls, fetchItem(s) returns raw PlexItemData and methods like .albums() are absent.
+import { fetchItems } from "@ctrl/plex/dist/src/baseFunctionality.js";
 import type { Album, Artist, Library, Pin, PlexGateway, Server, Track } from "@musex/core";
 import { PlexAuthError } from "@musex/core";
 import { toAlbum, toArtist, toTrack } from "../../logic/plex-mapping.js";
@@ -110,8 +117,13 @@ export class PlexapiGateway implements PlexGateway {
   async listAlbums(library: Library, artistId: string, token: string): Promise<Album[]> {
     try {
       const plexServer = await this.connect(library.serverId, token);
-      const artist = await fetchItem<PlexArtist>(plexServer, `/library/metadata/${artistId}`);
-      const albums = await artist.albums();
+      // Fetch the artist's children (albums) directly, hydrated as Album instances.
+      const albums = await fetchItems(
+        plexServer,
+        `/library/metadata/${artistId}/children`,
+        undefined,
+        PlexAlbumCls,
+      );
       return albums.map((al) => toAlbumSafe(al, library.serverId));
     } catch (err) {
       asPlexAuthError(err);
@@ -121,8 +133,13 @@ export class PlexapiGateway implements PlexGateway {
   async listTracks(library: Library, albumId: string, token: string): Promise<Track[]> {
     try {
       const plexServer = await this.connect(library.serverId, token);
-      const album = await fetchItem<PlexAlbum>(plexServer, `/library/metadata/${albumId}`);
-      const tracks = await album.tracks();
+      // Fetch the album's children (tracks) directly, hydrated as Track instances.
+      const tracks = await fetchItems(
+        plexServer,
+        `/library/metadata/${albumId}/children`,
+        undefined,
+        PlexTrackCls,
+      );
       return tracks.map((t) => toTrackSafe(t, library.serverId));
     } catch (err) {
       asPlexAuthError(err);
