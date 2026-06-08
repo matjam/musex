@@ -10,7 +10,16 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "musex-stream",
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    // corsEnabled: gapless-5/hls.js load audio via XHR/fetch; without it Chromium
+    // rejects cross-origin requests to a custom scheme ("only supported for
+    // chrome/http/https…"). supportFetchAPI + corsEnabled make XHR/fetch work.
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
   },
 ]);
 

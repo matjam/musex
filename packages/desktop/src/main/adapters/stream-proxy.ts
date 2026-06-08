@@ -35,7 +35,11 @@ export class StreamProxy {
       if (range) headers.set("Range", range);
 
       const res = await net.fetch(upstream.toString(), { method: "GET", headers });
-      return new Response(res.body, { status: res.status, headers: res.headers });
+      // Allow the renderer's cross-origin XHR/fetch (gapless-5/hls.js) to read the
+      // response; combined with corsEnabled on the scheme this satisfies the CORS grant.
+      const outHeaders = new Headers(res.headers);
+      outHeaders.set("Access-Control-Allow-Origin", "*");
+      return new Response(res.body, { status: res.status, headers: outHeaders });
     });
   }
 
