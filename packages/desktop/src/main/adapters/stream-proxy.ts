@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
@@ -8,8 +8,10 @@ import type { StreamRef, Track } from "@musex/core";
 import {
   cacheKey,
   contentTypeForPath,
+  isArtPath,
   isCacheablePath,
   parseByteRange,
+  sniffImageType,
 } from "../../logic/cache.js";
 import { chooseStreamKind } from "../../logic/stream-kind.js";
 import type { MediaCache } from "./media-cache.js";
@@ -46,6 +48,15 @@ export class StreamProxy {
 
   private cache: MediaCache | null = null;
   private readCacheConfig: (() => CacheConfig) | null = null;
+
+  private artCache: MediaCache | null = null;
+  private artMaxBytes = 0;
+
+  /** Attach the always-on artwork cache (independent of the audio cache config). */
+  setArtCache(cache: MediaCache, maxBytes: number): void {
+    this.artCache = cache;
+    this.artMaxBytes = maxBytes;
+  }
 
   registerServer(serverId: string, endpoint: ServerEndpoint): void {
     this.endpoints.set(serverId, endpoint);
@@ -137,11 +148,24 @@ export class StreamProxy {
     const cachingOn = !!(cfg?.enabled && this.cache && isCacheablePath(plexPath));
     const key = cachingOn ? cacheKey(serverId, plexPath) : null;
 
+    // Art branch: always-on, immutable Cache-Control; sits AFTER all security checks.
+    const art = isArtPath(plexPath);
+    if (art && this.artCache) {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      const akey = cacheKey(serverId, plexPath);
+      const hit = await this.artCache.pathIfPresent(akey);
+      if (hit) {
+        const head = await this.readHead(hit, 12);
+        await this.serveFromFile(req, res, hit, sniffImageType(head));
+        return;
+      }
+    }
+
     // Serve from disk if we have a complete copy (works for full + range, even offline).
     if (cachingOn && this.cache && key) {
       const hit = await this.cache.pathIfPresent(key);
       if (hit) {
-        await this.serveFromFile(req, res, hit, plexPath);
+        await this.serveFromFile(req, res, hit, contentTypeForPath(plexPath));
         return;
       }
     }
@@ -162,11 +186,14 @@ export class StreamProxy {
     const headers: http.OutgoingHttpHeaders = {};
     if (req.headers.range) headers.Range = req.headers.range;
 
-    // Only the full-file GET (no Range) populates the cache; partials are not cached.
+    // Only the full-file GET (no Range) populates the audio cache; partials are not cached.
+    // Art paths always use the art cache (full GET; no Range on art).
     const writer =
-      cachingOn && this.cache && key && !req.headers.range
-        ? this.cache.beginWrite(key, cfg?.maxBytes ?? 0)
-        : null;
+      art && this.artCache
+        ? this.artCache.beginWrite(cacheKey(serverId, plexPath), this.artMaxBytes)
+        : cachingOn && this.cache && key && !req.headers.range
+          ? this.cache.beginWrite(key, cfg?.maxBytes ?? 0)
+          : null;
 
     const upstreamReq = client.request(upstream, { method: "GET", headers }, (upstreamRes) => {
       const h: http.OutgoingHttpHeaders = {};
@@ -224,12 +251,24 @@ export class StreamProxy {
     upstreamReq.end();
   }
 
+  /** Read the first n bytes of a file (for image magic-byte sniffing). */
+  private async readHead(filePath: string, n: number): Promise<Uint8Array> {
+    const fh = await open(filePath);
+    try {
+      const buf = Buffer.alloc(n);
+      const { bytesRead } = await fh.read(buf, 0, n, 0);
+      return buf.subarray(0, bytesRead);
+    } finally {
+      await fh.close();
+    }
+  }
+
   /** Serve a complete cache file, honouring Range requests for seeking. */
   private async serveFromFile(
     req: http.IncomingMessage,
     res: http.ServerResponse,
     filePath: string,
-    plexPath: string,
+    contentType: string,
   ): Promise<void> {
     let size: number;
     try {
@@ -240,7 +279,7 @@ export class StreamProxy {
       return;
     }
     res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader("Content-Type", contentTypeForPath(plexPath));
+    res.setHeader("Content-Type", contentType);
 
     // A 0-byte entry should never exist post-commit, but guard against it:
     // createReadStream(..., { end: -1 }) would throw after headers were sent.
