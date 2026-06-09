@@ -7,6 +7,7 @@ import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
+import { VirtualTrackList } from "../VirtualTrackList";
 
 const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
 
@@ -128,25 +129,29 @@ export function SearchView() {
       {results.tracks.length > 0 && (
         <div className="browse-section">
           <h3 className="browse-title">Songs</h3>
-          <div className="track-list">
-            {results.tracks.map((track, index) => (
-              <TrackRow
-                key={track.id}
-                track={track}
-                leading={null}
-                showSubtitle
-                isPlaying={track.id === playingTrackId}
-                onPlay={() => playTracks(results.tracks, index)}
-                onMenu={(pos) =>
-                  setMenu({
-                    ...pos,
-                    trackId: track.id,
-                    serverId: track.serverId,
-                  })
-                }
-              />
-            ))}
-          </div>
+          <VirtualTrackList
+            count={results.tracks.length}
+            renderRow={(index) => {
+              const track = results.tracks[index];
+              if (!track) return null;
+              return (
+                <TrackRow
+                  track={track}
+                  leading={null}
+                  showSubtitle
+                  isPlaying={track.id === playingTrackId}
+                  onPlay={() => playTracks(results.tracks, index)}
+                  onMenu={(pos) =>
+                    setMenu({
+                      ...pos,
+                      trackId: track.id,
+                      serverId: track.serverId,
+                    })
+                  }
+                />
+              );
+            }}
+          />
         </div>
       )}
 

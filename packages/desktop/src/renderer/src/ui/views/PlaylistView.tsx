@@ -10,6 +10,7 @@ import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
+import { VirtualTrackList } from "../VirtualTrackList";
 
 interface RenameDialogProps {
   current: string;
@@ -240,28 +241,32 @@ export function PlaylistView({ playlist }: Props) {
       )}
 
       {(fetch.status === "ok" || fetch.status === "paging") && items.length > 0 && (
-        <div className="track-list">
-          {items.map((pt, i) => (
-            <TrackRow
-              key={pt.playlistItemId}
-              track={pt.track}
-              leading={i + 1}
-              isPlaying={pt.track.id === playingTrackId}
-              onPlay={() => playTracks(tracks, i)}
-              onMenu={(pos) =>
-                setMenu({
-                  ...pos,
-                  trackId: pt.track.id,
-                  serverId: pt.track.serverId,
-                  playlistContext: {
-                    playlistId: playlist.id,
-                    playlistItemId: pt.playlistItemId,
-                  },
-                })
-              }
-            />
-          ))}
-        </div>
+        <VirtualTrackList
+          count={items.length}
+          renderRow={(i) => {
+            const pt = items[i];
+            if (!pt) return null;
+            return (
+              <TrackRow
+                track={pt.track}
+                leading={i + 1}
+                isPlaying={pt.track.id === playingTrackId}
+                onPlay={() => playTracks(tracks, i)}
+                onMenu={(pos) =>
+                  setMenu({
+                    ...pos,
+                    trackId: pt.track.id,
+                    serverId: pt.track.serverId,
+                    playlistContext: {
+                      playlistId: playlist.id,
+                      playlistItemId: pt.playlistItemId,
+                    },
+                  })
+                }
+              />
+            );
+          }}
+        />
       )}
 
       {menu !== null && (

@@ -8,6 +8,7 @@ import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
+import { VirtualTrackList } from "../VirtualTrackList";
 
 type FetchState =
   | { status: "loading" }
@@ -104,24 +105,28 @@ export function AlbumDetailView({ album }: Props) {
       )}
 
       {fetch.status === "ok" && tracks.length > 0 && (
-        <div className="track-list">
-          {tracks.map((track, index) => (
-            <TrackRow
-              key={track.id}
-              track={track}
-              leading={track.trackNumber ?? index + 1}
-              isPlaying={track.id === playingTrackId}
-              onPlay={() => playTracks(tracks, index)}
-              onMenu={(pos) =>
-                setMenu({
-                  ...pos,
-                  trackId: track.id,
-                  serverId: track.serverId,
-                })
-              }
-            />
-          ))}
-        </div>
+        <VirtualTrackList
+          count={tracks.length}
+          renderRow={(index) => {
+            const track = tracks[index];
+            if (!track) return null;
+            return (
+              <TrackRow
+                track={track}
+                leading={track.trackNumber ?? index + 1}
+                isPlaying={track.id === playingTrackId}
+                onPlay={() => playTracks(tracks, index)}
+                onMenu={(pos) =>
+                  setMenu({
+                    ...pos,
+                    trackId: track.id,
+                    serverId: track.serverId,
+                  })
+                }
+              />
+            );
+          }}
+        />
       )}
 
       {menu !== null && (

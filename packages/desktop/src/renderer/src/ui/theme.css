@@ -997,6 +997,30 @@ img.np-art {
   padding: 0 0 22px;
 }
 
+/* ---- Virtual track list (VirtualTrackList component) ---- */
+
+/* The spacer div that holds the full virtual height. Rows are absolutely
+   positioned within it via translateY, set by the virtualizer. */
+.vtl-inner {
+  position: relative;
+  width: 100%;
+}
+
+/* Each virtually-positioned row wrapper. */
+.vtl-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+/* In SearchView the Songs section gives VirtualTrackList a bounded height so
+   it can scroll independently within the scrolling .search-page. */
+.search-page .track-list {
+  max-height: 480px;
+  flex: none;
+}
+
 /* ---- Track row menu button ---- */
 
 .track-menu-btn {
