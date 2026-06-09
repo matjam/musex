@@ -745,12 +745,20 @@ img.np-art {
   border: none;
   color: inherit;
   font-size: 15px;
-  opacity: 0.8;
+  opacity: 0.6;
   cursor: pointer;
   padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .np-btn:hover {
+  opacity: 1;
+}
+
+.np-btn.active {
+  color: var(--green);
   opacity: 1;
 }
 
@@ -812,19 +820,20 @@ img.np-art {
   pointer-events: none;
 }
 
-/* Right: volume */
+/* Right: queue + volume */
 .np-right {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 130px;
+  width: 160px;
   justify-content: flex-end;
   flex-shrink: 0;
 }
 
-.np-vol-icon {
-  font-size: 14px;
-  opacity: 0.7;
+.np-vol-btn {
+  /* override base np-btn sizing for volume icon — keep it non-interactive looking */
+  cursor: default;
+  pointer-events: none;
 }
 
 .np-volume {

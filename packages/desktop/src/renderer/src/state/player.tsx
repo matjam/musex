@@ -20,6 +20,14 @@ interface PlayerApi {
   previous(): void;
   seek(sec: number): void;
   setVolume(v: number): void;
+  enqueueNext(tracks: Track[]): void;
+  enqueueEnd(tracks: Track[]): void;
+  removeFromQueue(index: number): void;
+  moveInQueue(from: number, to: number): void;
+  clearQueue(): void;
+  toggleShuffle(): void;
+  cycleRepeat(): void;
+  jumpTo(index: number): void;
 }
 
 const Ctx = createContext<PlayerApi | null>(null);
@@ -62,6 +70,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       session.setVolume(v);
       void window.musex.setVolume(v);
     },
+    enqueueNext: (tracks) => void session.enqueueNext(tracks),
+    enqueueEnd: (tracks) => void session.enqueueEnd(tracks),
+    removeFromQueue: (index) => session.removeAt(index),
+    moveInQueue: (from, to) => session.move(from, to),
+    clearQueue: () => session.clearQueue(),
+    toggleShuffle: () => session.setShuffle(!(state.queue?.shuffle ?? false)),
+    cycleRepeat: () => session.cycleRepeat(),
+    jumpTo: (index) => void session.jumpTo(index),
   };
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
