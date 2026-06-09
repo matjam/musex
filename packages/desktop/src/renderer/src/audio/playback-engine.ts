@@ -4,6 +4,13 @@ import Hls from "hls.js";
 
 type Cb0 = () => void;
 
+/** Mask long hex runs (the proxy's per-launch secret + server id) in debug logs
+ *  so the secret never reaches the console / a pasted log. Keeps the track path
+ *  (e.g. /library/parts/12345/…) visible for diagnostics. */
+function scrub(s: string): string {
+  return s.replace(/[0-9a-f]{32,}/gi, "<redacted>");
+}
+
 export class WebPlaybackEngine implements PlaybackEngine {
   private gapless: Gapless5 | null = null;
   private audio: HTMLAudioElement | null = null;
@@ -19,7 +26,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
   // --- core PlaybackEngine ---
 
   async load(ref: StreamRef): Promise<void> {
-    console.log("[musex-debug] engine.load", ref.kind, ref.url);
+    console.log("[musex-debug] engine.load", ref.kind, scrub(ref.url));
     if (ref.kind === "direct") {
       this.teardownHls();
       const g = this.ensureGapless();
@@ -40,7 +47,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
       ref.kind,
       this.mode,
       this.gapless?.getTracks?.().length ?? "n/a",
-      ref.url,
+      scrub(ref.url),
     );
     // Gapless only applies to direct tracks queued behind a direct current track.
     if (ref.kind === "direct" && this.mode === "direct" && this.gapless) {
@@ -102,7 +109,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
     // onnext fires on gapless auto-advance into the preloaded track -> tell the session
     // receives (from_track, to_track) — we don't need either
     g.onnext = (from: string, to: string) => {
-      console.log("[musex-debug] gapless onnext", from, "->", to);
+      console.log("[musex-debug] gapless onnext", scrub(from), "->", scrub(to));
       this.advancedCb();
     };
     // onfinishedall fires only at the true end of the gapless list
@@ -111,7 +118,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
       this.endedCb();
     };
     g.onerror = (path: string, err?: Error | string) => {
-      console.log("[musex-debug] gapless onerror", path, err);
+      console.log("[musex-debug] gapless onerror", scrub(path), scrub(String(err ?? "")));
       this.errorCb(err instanceof Error ? err : new Error(String(err ?? "audio error")));
     };
     this.gapless = g;
