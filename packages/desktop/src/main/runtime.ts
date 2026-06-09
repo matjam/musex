@@ -1,6 +1,8 @@
 import path from "node:path";
 import type { Library, Pin } from "@musex/core";
 import { app, shell } from "electron";
+import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
+import { ListCacheStore } from "./adapters/list-cache-store.js";
 import { MediaCache } from "./adapters/media-cache.js";
 import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
@@ -8,7 +10,9 @@ import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 
 export class Runtime {
-  readonly gateway = new PlexapiGateway();
+  private readonly realGateway = new PlexapiGateway();
+  readonly listCache = new ListCacheStore(path.join(app.getPath("userData"), "list-cache"));
+  readonly gateway = new CachingPlexGateway(this.realGateway, this.listCache);
   readonly tokenStore = new SafeStorageTokenStore();
   readonly proxy = new StreamProxy();
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
@@ -20,6 +24,7 @@ export class Runtime {
 
   async init(): Promise<void> {
     await this.cache.init();
+    await this.listCache.init();
     this.proxy.configureCache(this.cache, () => ({
       enabled: persistence.getCacheEnabled(),
       maxBytes: persistence.getCacheMaxBytes(),
