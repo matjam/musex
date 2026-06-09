@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Library } from "@musex/core";
+import type { Library, RepeatMode, Track } from "@musex/core";
 import Store from "electron-store";
 
 export interface PersistedState {
@@ -21,6 +21,25 @@ const store = new Store<PersistedState>({
     cacheEnabled: false,
     cacheMaxBytes: DEFAULT_CACHE_MAX_BYTES,
   },
+});
+
+export interface PlaybackCursor {
+  index: number;
+  positionSec: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
+}
+
+// The big track list lives in its own file so frequent cursor writes never
+// rewrite it. Tracks are stored with RAW thumbs (the IPC layer normalizes them),
+// so no per-launch proxy secret is ever persisted.
+const queueStore = new Store<{ tracks: Track[] | null }>({
+  name: "playback-queue",
+  defaults: { tracks: null },
+});
+const cursorStore = new Store<{ cursor: PlaybackCursor | null }>({
+  name: "playback-cursor",
+  defaults: { cursor: null },
 });
 
 /** A stable per-install Plex client identifier (generated once, then reused). */
@@ -57,5 +76,17 @@ export const persistence = {
   },
   setCacheMaxBytes(v: number): void {
     store.set("cacheMaxBytes", v);
+  },
+  getPlaybackQueue(): Track[] | null {
+    return queueStore.get("tracks") ?? null;
+  },
+  setPlaybackQueue(tracks: Track[]): void {
+    queueStore.set("tracks", tracks);
+  },
+  getPlaybackCursor(): PlaybackCursor | null {
+    return cursorStore.get("cursor") ?? null;
+  },
+  setPlaybackCursor(cursor: PlaybackCursor): void {
+    cursorStore.set("cursor", cursor);
   },
 };
