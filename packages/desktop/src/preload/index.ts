@@ -20,6 +20,19 @@ const api: MusexApi = {
   setCacheMaxBytes: (bytes) => ipcRenderer.invoke(IPC.setCacheMaxBytes, bytes),
   getCacheStats: () => ipcRenderer.invoke(IPC.getCacheStats),
   clearCache: () => ipcRenderer.invoke(IPC.clearCache),
+  listPlaylists: (libraryId) => ipcRenderer.invoke(IPC.listPlaylists, libraryId),
+  listPlaylistTracks: (playlistId, serverId) =>
+    ipcRenderer.invoke(IPC.listPlaylistTracks, playlistId, serverId),
+  createPlaylist: (libraryId, title, trackIds) =>
+    ipcRenderer.invoke(IPC.createPlaylist, libraryId, title, trackIds),
+  addToPlaylist: (playlistId, serverId, trackIds) =>
+    ipcRenderer.invoke(IPC.addToPlaylist, playlistId, serverId, trackIds),
+  removeFromPlaylist: (playlistId, serverId, playlistItemIds) =>
+    ipcRenderer.invoke(IPC.removeFromPlaylist, playlistId, serverId, playlistItemIds),
+  renamePlaylist: (playlistId, serverId, title) =>
+    ipcRenderer.invoke(IPC.renamePlaylist, playlistId, serverId, title),
+  deletePlaylist: (playlistId, serverId) =>
+    ipcRenderer.invoke(IPC.deletePlaylist, playlistId, serverId),
 };
 
 contextBridge.exposeInMainWorld("musex", api);

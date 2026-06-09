@@ -1,5 +1,5 @@
 import type { Track } from "@musex/core";
-import { discoverMusicLibraries } from "@musex/core";
+import { createPlaylist, discoverMusicLibraries } from "@musex/core";
 import { ipcMain } from "electron";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
@@ -98,4 +98,43 @@ export function registerIpc(rt: Runtime): void {
   });
   ipcMain.handle(IPC.getCacheStats, () => rt.cache.stats());
   ipcMain.handle(IPC.clearCache, async () => ({ freedBytes: await rt.cache.clear() }));
+
+  ipcMain.handle(IPC.listPlaylists, async (_e, libraryId: string) => {
+    const lib = rt.findLibrary(libraryId);
+    await rt.ensureProxyEndpoint(lib.serverId);
+    const playlists = await rt.gateway.listPlaylists(lib, rt.requireToken());
+    return playlists.map((p) => ({ ...p, thumb: rt.proxy.artUrl(p.serverId, p.thumb) }));
+  });
+  ipcMain.handle(IPC.listPlaylistTracks, async (_e, playlistId: string, serverId: string) => {
+    await rt.ensureProxyEndpoint(serverId);
+    const items = await rt.gateway.listPlaylistTracks(playlistId, serverId, rt.requireToken());
+    return items.map((it) => ({
+      ...it,
+      track: { ...it.track, thumb: rt.proxy.artUrl(it.track.serverId, it.track.thumb) },
+    }));
+  });
+  ipcMain.handle(
+    IPC.createPlaylist,
+    async (_e, libraryId: string, title: string, trackIds: string[]) => {
+      const lib = rt.findLibrary(libraryId);
+      const p = await createPlaylist(rt.gateway, lib, title, trackIds, rt.requireToken());
+      return { ...p, thumb: rt.proxy.artUrl(p.serverId, p.thumb) };
+    },
+  );
+  ipcMain.handle(
+    IPC.addToPlaylist,
+    (_e, playlistId: string, serverId: string, trackIds: string[]) =>
+      rt.gateway.addToPlaylist(playlistId, serverId, trackIds, rt.requireToken()),
+  );
+  ipcMain.handle(
+    IPC.removeFromPlaylist,
+    (_e, playlistId: string, serverId: string, itemIds: string[]) =>
+      rt.gateway.removeFromPlaylist(playlistId, serverId, itemIds, rt.requireToken()),
+  );
+  ipcMain.handle(IPC.renamePlaylist, (_e, playlistId: string, serverId: string, title: string) =>
+    rt.gateway.renamePlaylist(playlistId, serverId, title, rt.requireToken()),
+  );
+  ipcMain.handle(IPC.deletePlaylist, (_e, playlistId: string, serverId: string) =>
+    rt.gateway.deletePlaylist(playlistId, serverId, rt.requireToken()),
+  );
 }

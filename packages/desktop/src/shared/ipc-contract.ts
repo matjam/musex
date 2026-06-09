@@ -1,4 +1,14 @@
-import type { Album, Artist, Library, SearchResults, Server, StreamRef, Track } from "@musex/core";
+import type {
+  Album,
+  Artist,
+  Library,
+  Playlist,
+  PlaylistTrack,
+  SearchResults,
+  Server,
+  StreamRef,
+  Track,
+} from "@musex/core";
 
 export const IPC = {
   signInStart: "musex:signIn:start", // -> { code: string; authUrl: string }
@@ -18,6 +28,13 @@ export const IPC = {
   setCacheMaxBytes: "musex:setCacheMaxBytes", // (number bytes) -> void
   getCacheStats: "musex:getCacheStats", // -> CacheStats
   clearCache: "musex:clearCache", // -> { freedBytes: number }
+  listPlaylists: "musex:listPlaylists", // (libraryId) -> Playlist[]
+  listPlaylistTracks: "musex:listPlaylistTracks", // (playlistId, serverId) -> PlaylistTrack[]
+  createPlaylist: "musex:createPlaylist", // (libraryId, title, trackIds) -> Playlist
+  addToPlaylist: "musex:addToPlaylist", // (playlistId, serverId, trackIds) -> void
+  removeFromPlaylist: "musex:removeFromPlaylist", // (playlistId, serverId, playlistItemIds) -> void
+  renamePlaylist: "musex:renamePlaylist", // (playlistId, serverId, title) -> void
+  deletePlaylist: "musex:deletePlaylist", // (playlistId, serverId) -> void
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -48,4 +65,15 @@ export interface MusexApi {
   setCacheMaxBytes(bytes: number): Promise<void>;
   getCacheStats(): Promise<CacheStats>;
   clearCache(): Promise<ClearCacheResult>;
+  listPlaylists(libraryId: string): Promise<Playlist[]>;
+  listPlaylistTracks(playlistId: string, serverId: string): Promise<PlaylistTrack[]>;
+  createPlaylist(libraryId: string, title: string, trackIds: string[]): Promise<Playlist>;
+  addToPlaylist(playlistId: string, serverId: string, trackIds: string[]): Promise<void>;
+  removeFromPlaylist(
+    playlistId: string,
+    serverId: string,
+    playlistItemIds: string[],
+  ): Promise<void>;
+  renamePlaylist(playlistId: string, serverId: string, title: string): Promise<void>;
+  deletePlaylist(playlistId: string, serverId: string): Promise<void>;
 }
