@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.5.2",
   "scripts": {
+    "vendor": "node scripts/fetch-mpv.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "biome lint .",
