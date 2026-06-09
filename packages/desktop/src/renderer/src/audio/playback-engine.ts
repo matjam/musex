@@ -23,6 +23,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
   private nextReady = false; // `next` holds a preloaded direct src
   private hls: Hls | null = null;
   private mode: "direct" | "hls" = "direct";
+  private pendingSeek: number | null = null;
 
   private positionCb: (s: number) => void = () => {};
   private advancedCb: Cb0 = () => {};
@@ -51,6 +52,12 @@ export class WebPlaybackEngine implements PlaybackEngine {
         this.errorCb(new Error(`audio error (code ${el.error?.code ?? "?"})`));
       }
     });
+    el.addEventListener("loadedmetadata", () => {
+      if (el === this.current && this.pendingSeek != null) {
+        el.currentTime = this.pendingSeek;
+        this.pendingSeek = null;
+      }
+    });
   }
 
   // --- core PlaybackEngine ---
@@ -59,11 +66,12 @@ export class WebPlaybackEngine implements PlaybackEngine {
     if (ref.kind === "direct") {
       this.teardownHls();
       this.mode = "direct";
+      this.pendingSeek = null;
       this.clearNext();
       this.current.src = ref.url;
-      void this.current.play(); // progressive — starts as the stream buffers
     } else {
       this.mode = "hls";
+      this.pendingSeek = null;
       this.current.pause();
       this.clearNext();
       await this.loadHls(ref.url);
@@ -89,7 +97,14 @@ export class WebPlaybackEngine implements PlaybackEngine {
   }
 
   seek(seconds: number): void {
-    this.current.currentTime = seconds;
+    const el = this.current;
+    // HAVE_METADATA (readyState 1) is the minimum at which currentTime sticks.
+    if (el.readyState >= 1) {
+      el.currentTime = seconds;
+      this.pendingSeek = null;
+    } else {
+      this.pendingSeek = seconds; // applied on loadedmetadata (see wire())
+    }
   }
 
   setVolume(v: number): void {
@@ -154,7 +169,6 @@ export class WebPlaybackEngine implements PlaybackEngine {
       hls.attachMedia(this.current);
       hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
     }).catch((e: Error) => this.errorCb(e));
-    void this.current.play();
   }
 
   private teardownHls(): void {
