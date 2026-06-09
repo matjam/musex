@@ -23,6 +23,7 @@ export interface Artist {
   serverId: string;
   name: string;
   thumb?: string;
+  updatedAt?: number; // epoch ms, for cache validation
 }
 
 export interface Album {
@@ -32,6 +33,7 @@ export interface Album {
   title: string;
   year?: number;
   thumb?: string;
+  updatedAt?: number; // epoch ms, for cache validation
 }
 
 export interface MediaInfo {
@@ -73,6 +75,7 @@ export interface Playlist {
   trackCount: number;
   durationMs?: number;
   thumb?: string;
+  updatedAt?: number; // epoch ms, for cache validation
 }
 
 /** A track as it appears inside a playlist: the track plus its identity within
