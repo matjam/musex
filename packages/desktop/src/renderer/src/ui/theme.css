@@ -1799,3 +1799,44 @@ img.queue-row-art {
 .track-eq {
   color: var(--green);
 }
+
+/* ---- Grid card hover play ---- */
+
+.grid-card-artwrap {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.grid-card-artwrap .grid-card-art {
+  margin-bottom: 0;
+}
+
+.grid-card-play {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--bg);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.12s, transform 0.12s;
+  box-shadow: 0 6px 18px rgba(84, 210, 160, 0.35);
+}
+
+.grid-card:hover .grid-card-play,
+.grid-card-play:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.grid-card-play:hover {
+  filter: brightness(1.08);
+}

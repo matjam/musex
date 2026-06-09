@@ -2,7 +2,8 @@ import type { Album, LibrarySort } from "@musex/core";
 import { useEffect, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
-import { AlbumArt } from "../AlbumArt";
+import { GridCard } from "../GridCard";
+import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { SortSelector } from "../SortSelector";
 
 type FetchState =
@@ -12,6 +13,7 @@ type FetchState =
 
 export function AlbumsView() {
   const { library, dispatch } = useApp();
+  const { playAlbum } = useCollectionPlay();
   const [sort, setSort] = useState<LibrarySort>("title");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
@@ -63,16 +65,14 @@ export function AlbumsView() {
       </div>
       <div className="browse-grid">
         {albums.map((album) => (
-          <button
-            type="button"
+          <GridCard
             key={album.id}
-            className="grid-card"
-            onClick={() => dispatch({ type: "navigate", view: { name: "album", album } })}
-          >
-            <AlbumArt thumb={album.thumb} className="grid-card-art" />
-            <div className="grid-card-title">{album.title}</div>
-            {album.year != null && <div className="grid-card-sub">{album.year}</div>}
-          </button>
+            thumb={album.thumb}
+            title={album.title}
+            subtitle={album.year != null ? String(album.year) : undefined}
+            onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
+            onPlay={() => void playAlbum(album)}
+          />
         ))}
       </div>
     </div>

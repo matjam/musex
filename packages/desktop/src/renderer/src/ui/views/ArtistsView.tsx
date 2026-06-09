@@ -2,7 +2,8 @@ import type { Artist } from "@musex/core";
 import { useEffect, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
-import { AlbumArt } from "../AlbumArt";
+import { GridCard } from "../GridCard";
+import { useCollectionPlay } from "../hooks/useCollectionPlay";
 
 type FetchState =
   | { status: "loading" }
@@ -11,6 +12,7 @@ type FetchState =
 
 export function ArtistsView() {
   const { library, dispatch } = useApp();
+  const { playArtist } = useCollectionPlay();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {
@@ -58,15 +60,14 @@ export function ArtistsView() {
       </div>
       <div className="browse-grid">
         {artists.map((artist) => (
-          <button
-            type="button"
+          <GridCard
             key={artist.id}
-            className="grid-card"
-            onClick={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
-          >
-            <AlbumArt thumb={artist.thumb} className="grid-card-art artist-art" />
-            <div className="grid-card-title">{artist.name}</div>
-          </button>
+            thumb={artist.thumb}
+            title={artist.name}
+            round
+            onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+            onPlay={() => void playArtist(artist)}
+          />
         ))}
       </div>
     </div>
