@@ -721,3 +721,20 @@ describe("PlaybackSession — playTrackNext", () => {
     expect(engine.loaded.at(-1)?.url).toBe("fake://stream/x");
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// loadQueueShuffled (shuffle-play an album/artist)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("PlaybackSession — loadQueueShuffled", () => {
+  it("shuffles the whole list, plays from the top, shuffle on", async () => {
+    const { engine, session } = setup(reverseShuffleRest);
+    await session.loadQueueShuffled([makeTrack("a"), makeTrack("b"), makeTrack("c")]);
+    const q = session.getState().queue;
+    if (!q) throw new Error("queue is null");
+    expect(q.shuffle).toBe(true);
+    expect(q.tracks.map((t) => t.id)).toEqual(["c", "b", "a"]);
+    expect(q.index).toBe(0);
+    expect(engine.loaded.at(-1)?.url).toBe("fake://stream/c");
+  });
+});

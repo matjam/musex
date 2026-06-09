@@ -1,5 +1,5 @@
 import type { Album, Artist, Track } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
+import { ListEnd, ListPlus, MoreHorizontal, Play, Shuffle } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -17,7 +17,7 @@ interface Props {
 
 export function ArtistDetailView({ artist }: Props) {
   const { library, dispatch } = useApp();
-  const { enqueueNext, enqueueEnd } = usePlayer();
+  const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd } = usePlayer();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
@@ -55,6 +55,26 @@ export function ArtistDetailView({ artist }: Props) {
   function handleMoreClick(e: React.MouseEvent) {
     setMorePos({ x: e.clientX, y: e.clientY });
     setMoreOpen((o) => !o);
+  }
+
+  async function handlePlayAll() {
+    setQueueFetch("busy");
+    try {
+      const tracks = await fetchAllTracks();
+      if (tracks.length > 0) playTracks(tracks, 0);
+    } finally {
+      setQueueFetch("idle");
+    }
+  }
+
+  async function handleShuffleAll() {
+    setQueueFetch("busy");
+    try {
+      const tracks = await fetchAllTracks();
+      if (tracks.length > 0) playTracksShuffled(tracks);
+    } finally {
+      setQueueFetch("idle");
+    }
   }
 
   async function handlePlayNext() {
@@ -96,15 +116,35 @@ export function ArtistDetailView({ artist }: Props) {
       <div className="artist-header">
         <h3 className="browse-title">{artist.name}</h3>
         {fetch.status === "ok" && fetch.albums.length > 0 && (
-          <button
-            type="button"
-            className="album-more-btn"
-            title={queueFetch === "busy" ? "Loading…" : "More actions"}
-            disabled={queueFetch === "busy"}
-            onClick={handleMoreClick}
-          >
-            <MoreHorizontal size={18} />
-          </button>
+          <div className="album-actions">
+            <button
+              type="button"
+              className="play-btn"
+              title="Play all"
+              disabled={queueFetch === "busy"}
+              onClick={() => void handlePlayAll()}
+            >
+              <Play size={18} />
+            </button>
+            <button
+              type="button"
+              className="shuffle-btn"
+              title="Shuffle all"
+              disabled={queueFetch === "busy"}
+              onClick={() => void handleShuffleAll()}
+            >
+              <Shuffle size={16} />
+            </button>
+            <button
+              type="button"
+              className="album-more-btn"
+              title={queueFetch === "busy" ? "Loading…" : "More actions"}
+              disabled={queueFetch === "busy"}
+              onClick={handleMoreClick}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
         )}
       </div>
 

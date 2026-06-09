@@ -1,5 +1,5 @@
 import type { Album, Track } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
+import { ListEnd, ListPlus, MoreHorizontal, Play, Shuffle } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -23,7 +23,8 @@ interface Props {
 
 export function AlbumDetailView({ album }: Props) {
   const { library, dispatch } = useApp();
-  const { state, playTracks, playTrackNext, enqueueNext, enqueueEnd } = usePlayer();
+  const { state, playTracks, playTracksShuffled, playTrackNext, enqueueNext, enqueueEnd } =
+    usePlayer();
   const { selectedTrack, select } = useSelection();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
@@ -92,7 +93,15 @@ export function AlbumDetailView({ album }: Props) {
                 title="Play album"
                 onClick={() => playTracks(tracks, 0)}
               >
-                ▶
+                <Play size={18} />
+              </button>
+              <button
+                type="button"
+                className="shuffle-btn"
+                title="Shuffle album"
+                onClick={() => playTracksShuffled(tracks)}
+              >
+                <Shuffle size={16} />
               </button>
               <button
                 type="button"

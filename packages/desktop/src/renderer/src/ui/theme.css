@@ -676,6 +676,33 @@ img.album-header-art {
   opacity: 0.9;
 }
 
+.play-btn:disabled,
+.shuffle-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.shuffle-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.shuffle-btn:hover {
+  color: var(--green);
+  border-color: var(--green);
+}
+
 /* ---- Track list ---- */
 
 .track-list {
