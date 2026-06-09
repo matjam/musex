@@ -1,4 +1,4 @@
-import type { Album, Artist } from "@musex/core";
+import type { Album, Artist, Playlist } from "@musex/core";
 import { useCallback } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -40,5 +40,18 @@ export function useCollectionPlay() {
     [library, playTracks],
   );
 
-  return { playAlbum, playArtist };
+  const playPlaylist = useCallback(
+    async (playlist: Playlist) => {
+      const items = await window.musex.listPlaylistTracks(
+        playlist.id,
+        playlist.serverId,
+        listValidator(playlist.updatedAt, playlist.trackCount),
+      );
+      const tracks = items.map((i) => i.track);
+      if (tracks.length > 0) playTracks(tracks, 0);
+    },
+    [playTracks],
+  );
+
+  return { playAlbum, playArtist, playPlaylist };
 }

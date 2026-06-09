@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useContext, useEffect, useReducer } from
 
 type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";
 export type View =
+  | { name: "home" }
   | { name: "albums" }
   | { name: "artists" }
   | { name: "tracks" }
@@ -36,7 +37,7 @@ function reducer(s: AppState, a: Action): AppState {
         auth: "signed-in",
         library: a.library,
         signInCode: null,
-        view: { name: "albums" },
+        view: { name: "home" },
       };
     case "restore-done":
       return a.library
@@ -70,7 +71,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     auth: "restoring",
     signInCode: null,
     library: null,
-    view: { name: "albums" },
+    view: { name: "home" },
     searchQuery: "",
   });
 

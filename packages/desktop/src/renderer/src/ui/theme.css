@@ -1840,3 +1840,15 @@ img.queue-row-art {
 .grid-card-play:hover {
   filter: brightness(1.08);
 }
+
+/* ---- Home view ---- */
+
+.home-greeting {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 4px 0 18px;
+}
+
+.home-row {
+  margin-bottom: 26px;
+}

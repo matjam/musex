@@ -6,6 +6,7 @@ import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
+import { HomeView } from "./views/HomeView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
@@ -19,6 +20,7 @@ export function Shell() {
 
   // Determine which nav item is visually active.
   // artist/album drill-downs keep the Artists nav highlighted.
+  const homeActive = view.name === "home";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   const tracksActive = view.name === "tracks";
@@ -26,6 +28,8 @@ export function Shell() {
 
   function renderContent() {
     switch (view.name) {
+      case "home":
+        return <HomeView />;
       case "artists":
         return <ArtistsView />;
       case "artist":
@@ -48,10 +52,14 @@ export function Shell() {
   return (
     <div className="app-body">
       <nav className="sidebar">
-        <div className="nav-item dim">
+        <button
+          type="button"
+          className={`nav-item${homeActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "home" } })}
+        >
           <Home size={16} />
           Home
-        </div>
+        </button>
 
         <div className="nav-section">Library</div>
 
