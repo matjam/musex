@@ -2,6 +2,7 @@ import type {
   Album,
   Artist,
   Library,
+  LibrarySort,
   Playlist,
   PlaylistTrack,
   SearchResults,
@@ -31,6 +32,8 @@ export const IPC = {
   listPlaylists: "musex:listPlaylists", // (libraryId) -> Playlist[]
   listPlaylistTracks: "musex:listPlaylistTracks", // (playlistId, serverId) -> PlaylistTrack[]
   listPlaylistTracksPage: "musex:listPlaylistTracksPage", // (playlistId, serverId, start, size) -> { items: PlaylistTrack[]; total: number }
+  listAllAlbums: "musex:listAllAlbums", // (libraryId, sort, validator?) -> Album[]
+  listAllTracksPage: "musex:listAllTracksPage", // (libraryId, sort, start, size) -> { items: Track[]; total: number }
   createPlaylist: "musex:createPlaylist", // (libraryId, title, trackIds) -> Playlist
   addToPlaylist: "musex:addToPlaylist", // (playlistId, serverId, trackIds) -> void
   removeFromPlaylist: "musex:removeFromPlaylist", // (playlistId, serverId, playlistItemIds) -> void
@@ -78,6 +81,13 @@ export interface MusexApi {
     start: number,
     size: number,
   ): Promise<{ items: PlaylistTrack[]; total: number }>;
+  listAllAlbums(libraryId: string, sort: LibrarySort, validator?: string): Promise<Album[]>;
+  listAllTracksPage(
+    libraryId: string,
+    sort: LibrarySort,
+    start: number,
+    size: number,
+  ): Promise<{ items: Track[]; total: number }>;
   createPlaylist(libraryId: string, title: string, trackIds: string[]): Promise<Playlist>;
   addToPlaylist(playlistId: string, serverId: string, trackIds: string[]): Promise<void>;
   removeFromPlaylist(

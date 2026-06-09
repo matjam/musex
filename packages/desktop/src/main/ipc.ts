@@ -1,4 +1,4 @@
-import type { Track } from "@musex/core";
+import type { LibrarySort, Track } from "@musex/core";
 import { createPlaylist, discoverMusicLibraries } from "@musex/core";
 import { ipcMain } from "electron";
 import { IPC } from "../shared/ipc-contract.js";
@@ -150,6 +150,27 @@ export function registerIpc(rt: Runtime): void {
           ...it,
           track: { ...it.track, thumb: rt.proxy.artUrl(it.track.serverId, it.track.thumb) },
         })),
+      };
+    },
+  );
+  ipcMain.handle(
+    IPC.listAllAlbums,
+    async (_e, libraryId: string, sort: LibrarySort, validator?: string) => {
+      const lib = rt.findLibrary(libraryId);
+      await rt.ensureProxyEndpoint(lib.serverId);
+      const albums = await rt.gateway.listAllAlbums(lib, sort, rt.requireToken(), validator);
+      return albums.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) }));
+    },
+  );
+  ipcMain.handle(
+    IPC.listAllTracksPage,
+    async (_e, libraryId: string, sort: LibrarySort, start: number, size: number) => {
+      const lib = rt.findLibrary(libraryId);
+      await rt.ensureProxyEndpoint(lib.serverId);
+      const result = await rt.gateway.listAllTracksPage(lib, sort, start, size, rt.requireToken());
+      return {
+        ...result,
+        items: result.items.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) })),
       };
     },
   );
