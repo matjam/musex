@@ -1,12 +1,13 @@
 import type { StreamRef } from "./stream-resolver";
 
-/** Audio output. Implemented in the renderer (Gapless-5 / hls.js). The session
- *  drives it and consumes its events; it performs no queue logic itself.
+/** Audio output. Implemented per surface (desktop: renderer IpcPlaybackEngine
+ *  bridging to an mpv process in main). The session drives it and consumes its
+ *  events; it performs no queue logic itself.
  *
- *  Gapless contract (verified against Gapless-5): when the current track ends and
- *  a track was `preload`ed, the engine seamlessly continues into it and fires
- *  `onAdvanced` (NOT `onEnded`). `onEnded` fires only when playback fully stops
- *  with nothing buffered to continue (true end of content). Manual skips go through
+ *  Gapless contract: when the current track ends and a track was `preload`ed,
+ *  the engine seamlessly continues into it and fires `onAdvanced` (NOT
+ *  `onEnded`). `onEnded` fires only when playback fully stops with nothing
+ *  buffered to continue (true end of content). Manual skips go through
  *  `load()` (teardown + reload; a tiny gap is acceptable). */
 export interface PlaybackEngine {
   /** Prepare a track for playback. `load()` does NOT start playback — it only

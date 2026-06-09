@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  '@regosen/gapless-5@1.6.2': 65d3a86eef464a89acb3c05fe20a664afbfdaa10f3d9707b4843575a24d7eecf
-
 importers:
 
   .:
@@ -37,18 +34,12 @@ importers:
       '@musex/core':
         specifier: workspace:*
         version: link:../core
-      '@regosen/gapless-5':
-        specifier: ^1.6.2
-        version: 1.6.2(patch_hash=65d3a86eef464a89acb3c05fe20a664afbfdaa10f3d9707b4843575a24d7eecf)
       '@tanstack/react-virtual':
         specifier: ^3.14.2
         version: 3.14.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       electron-store:
         specifier: ^11.0.2
         version: 11.0.2
-      hls.js:
-        specifier: ^1.6.16
-        version: 1.6.16
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.7)
@@ -635,9 +626,6 @@ packages:
   '@peculiar/webcrypto@1.7.1':
     resolution: {integrity: sha512-ODOov0sGMJMf3jPonOkgGqPknTsu+DdQ7kD++gz8aI+aFMOMHFbWAA2taqXXVTdP+OTOQR/znGvSpmkeI0WTYQ==}
     engines: {node: '>=14.18.0'}
-
-  '@regosen/gapless-5@1.6.2':
-    resolution: {integrity: sha512-dUTy8vkebZD9q8thcNJEw6Ca69ZtUMSl1GMzgf9dgdCI+jC0gfNYrWaERWMqCXzjN/yrydfeve6EYnoYimu5iA==}
 
   '@rolldown/pluginutils@1.0.0-rc.3':
     resolution: {integrity: sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q==}
@@ -1409,9 +1397,6 @@ packages:
   hasown@2.0.4:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
-
-  hls.js@1.6.16:
-    resolution: {integrity: sha512-VSIRpLfRwlAAdGL4wiTucx2ScRipo0ed1FBatWkyt832jC4CReKstga6yIhYVwGu9LOBjuX9wzmRMeQdBJtzEA==}
 
   hosted-git-info@4.1.0:
     resolution: {integrity: sha512-kyCuEOWjJqZuDbRHzL8V93NzQhwIB71oFWSyzVo+KPZI+pnQPPxucdkrOZvkLRnrf5URsQM+IJ09Dw29cRALIA==}
@@ -2643,8 +2628,6 @@ snapshots:
       tslib: 2.8.1
       webcrypto-core: 1.9.2
 
-  '@regosen/gapless-5@1.6.2(patch_hash=65d3a86eef464a89acb3c05fe20a664afbfdaa10f3d9707b4843575a24d7eecf)': {}
-
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 
   '@rollup/rollup-android-arm-eabi@4.61.1':
@@ -3535,8 +3518,6 @@ snapshots:
   hasown@2.0.4:
     dependencies:
       function-bind: 1.1.2
-
-  hls.js@1.6.16: {}
 
   hosted-git-info@4.1.0:
     dependencies:

@@ -12,6 +12,3 @@ minimumReleaseAgeExclude:
   - dmg-builder@26.15.2
   - electron-builder-squirrel-windows@26.15.2
   - electron-builder@26.15.2
-
-patchedDependencies:
-  '@regosen/gapless-5@1.6.2': patches/@regosen__gapless-5@1.6.2.patch

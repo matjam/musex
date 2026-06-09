@@ -13,7 +13,6 @@ import {
   parseByteRange,
   sniffImageType,
 } from "../../logic/cache.js";
-import { chooseStreamKind } from "../../logic/stream-kind.js";
 import type { MediaCache } from "./media-cache.js";
 
 const PREFETCH_DEPTH = 10;
@@ -105,14 +104,9 @@ export class StreamProxy {
   }
 
   resolve(track: Track): StreamRef {
-    const kind = chooseStreamKind(track.media.audioCodec);
-    const path =
-      kind === "direct"
-        ? track.media.partKey
-        : `/music/:/transcode/universal/start.m3u8?path=${encodeURIComponent(
-            `/library/metadata/${track.id}`,
-          )}&protocol=hls&directStreamAudio=1`;
-    return { url: this.mediaUrl(track.serverId, path), kind };
+    // mpv decodes every codec Plex can store, so everything direct-plays the
+    // original file — no Plex transcode path needed.
+    return { url: this.mediaUrl(track.serverId, track.media.partKey), kind: "direct" };
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

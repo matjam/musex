@@ -2,7 +2,6 @@ import type { LibrarySort, Queue, Track } from "@musex/core";
 import { createPlaylist, discoverMusicLibraries } from "@musex/core";
 import { ipcMain } from "electron";
 import { parseProxyPath } from "../logic/proxy-url.js";
-import { chooseStreamKind } from "../logic/stream-kind.js";
 import type { LoadPlaybackResult, PlaybackCursorDto } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
@@ -282,7 +281,6 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.prefetch, async (_e, tracks: Track[]) => {
     const upcoming: { serverId: string; plexPath: string }[] = [];
     for (const t of tracks) {
-      if (chooseStreamKind(t.media.audioCodec) !== "direct") continue;
       await rt.ensureProxyEndpoint(t.serverId);
       upcoming.push({ serverId: t.serverId, plexPath: t.media.partKey });
     }
