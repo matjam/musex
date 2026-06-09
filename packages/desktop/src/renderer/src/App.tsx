@@ -1,5 +1,6 @@
 import { AppProvider, useApp } from "./state/app";
 import { PlayerProvider } from "./state/player";
+import { PlaylistsProvider } from "./state/playlists";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { Shell } from "./ui/Shell";
 import { SignIn } from "./ui/SignIn";
@@ -19,10 +20,12 @@ function Inner() {
   }
   if (auth === "signed-in") {
     return (
-      <div className="app-root">
-        <Shell />
-        <NowPlayingBar />
-      </div>
+      <PlaylistsProvider>
+        <div className="app-root">
+          <Shell />
+          <NowPlayingBar />
+        </div>
+      </PlaylistsProvider>
     );
   }
   return <SignIn />;
