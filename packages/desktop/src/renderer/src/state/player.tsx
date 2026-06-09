@@ -1,4 +1,10 @@
-import { buildQueue, PlaybackSession, type PlaybackState, type Track } from "@musex/core";
+import {
+  buildQueue,
+  PlaybackSession,
+  type PlaybackState,
+  type RepeatMode,
+  type Track,
+} from "@musex/core";
 import {
   createContext,
   type ReactNode,
@@ -39,6 +45,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   );
   const stateRef = useRef(session.getState());
 
+  // Refs let the save effects skip re-persisting the just-restored state.
+  const savedTracksRef = useRef<Track[] | null>(null);
+  const savedCursorRef = useRef<{ index: number; shuffle: boolean; repeat: RepeatMode } | null>(
+    null,
+  );
+  const restoredRef = useRef(false);
+
   const subscribe = useCallback(
     (cb: () => void) =>
       session.subscribe((s) => {
@@ -72,21 +85,64 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
   }, [session]);
 
+  // Restore persisted playback (queue + cursor + position) once on mount.
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    void (async () => {
+      const saved = await window.musex.loadPlayback();
+      if (!saved) return;
+      savedTracksRef.current = saved.queue.tracks;
+      savedCursorRef.current = {
+        index: saved.queue.index,
+        shuffle: saved.queue.shuffle,
+        repeat: saved.queue.repeat,
+      };
+      await session.restore(saved.queue, saved.positionSec);
+    })();
+  }, [session]);
+
+  // Persist the track list whenever it changes (reference compare distinguishes
+  // a list change from a cursor-only move — the session reuses the array on moves).
+  useEffect(() => {
+    const q = state.queue;
+    if (!q) return;
+    if (q.tracks !== savedTracksRef.current) {
+      savedTracksRef.current = q.tracks;
+      void window.musex.savePlaybackQueue(q.tracks);
+    }
+  }, [state.queue]);
+
+  // Persist the cursor: immediately on index/shuffle/repeat change, otherwise
+  // throttled (~5s) so position-only ticks don't hammer the store.
+  const lastCursorSaveRef = useRef(0);
+  useEffect(() => {
+    const q = state.queue;
+    if (!q) return;
+    const prev = savedCursorRef.current;
+    const cursorChanged =
+      prev == null ||
+      q.index !== prev.index ||
+      q.shuffle !== prev.shuffle ||
+      q.repeat !== prev.repeat;
+    const now = performance.now();
+    if (!cursorChanged && now - lastCursorSaveRef.current < 5000) return;
+    savedCursorRef.current = { index: q.index, shuffle: q.shuffle, repeat: q.repeat };
+    lastCursorSaveRef.current = now;
+    void window.musex.savePlaybackCursor({
+      index: q.index,
+      positionSec: state.positionSec,
+      shuffle: q.shuffle,
+      repeat: q.repeat,
+    });
+  }, [state.queue, state.positionSec]);
+
   const api: PlayerApi = {
     state,
-    playTracks: (tracks, startIndex) => {
-      console.log("[musex-debug] api.playTracks index", startIndex, "len", tracks.length);
-      void session.loadQueue(buildQueue(tracks, startIndex));
-    },
+    playTracks: (tracks, startIndex) => void session.loadQueue(buildQueue(tracks, startIndex)),
     togglePlay: () => (state.status === "playing" ? session.pause() : session.play()),
-    next: () => {
-      console.log("[musex-debug] api.next");
-      void session.next();
-    },
-    previous: () => {
-      console.log("[musex-debug] api.previous");
-      void session.previous();
-    },
+    next: () => void session.next(),
+    previous: () => void session.previous(),
     seek: (sec) => session.seek(sec),
     setVolume: (v) => {
       session.setVolume(v);
@@ -99,10 +155,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     clearQueue: () => session.clearQueue(),
     toggleShuffle: () => session.setShuffle(!(state.queue?.shuffle ?? false)),
     cycleRepeat: () => session.cycleRepeat(),
-    jumpTo: (index) => {
-      console.log("[musex-debug] api.jumpTo", index);
-      void session.jumpTo(index);
-    },
+    jumpTo: (index) => void session.jumpTo(index),
   };
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
