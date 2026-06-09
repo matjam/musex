@@ -949,3 +949,41 @@ img.np-art {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---- Search view ---- */
+.search-page {
+  padding: 20px 24px;
+  height: 100%;
+  overflow: auto;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 10px 16px;
+  margin-bottom: 22px;
+  max-width: 480px;
+}
+
+.search-icon {
+  opacity: 0.5;
+  font-size: 14px;
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.search-input::placeholder {
+  color: rgba(231, 233, 238, 0.4);
+}

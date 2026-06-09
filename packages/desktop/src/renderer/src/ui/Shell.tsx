@@ -2,6 +2,7 @@ import { useApp } from "../state/app";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
+import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
 
 export function Shell() {
@@ -14,6 +15,7 @@ export function Shell() {
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   const settingsActive = view.name === "settings";
+  const searchActive = view.name === "search";
 
   function renderContent() {
     switch (view.name) {
@@ -29,6 +31,8 @@ export function Shell() {
         return <ArtistsView />;
       case "settings":
         return <SettingsView />;
+      case "search":
+        return <SearchView />;
     }
   }
 
@@ -43,10 +47,14 @@ export function Shell() {
           <span className="nav-ic" />
           Home
         </div>
-        <div className="nav-item dim">
+        <button
+          type="button"
+          className={`nav-item${searchActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "search" } })}
+        >
           <span className="nav-ic" />
           Search
-        </div>
+        </button>
 
         <div className="nav-section">Library</div>
 

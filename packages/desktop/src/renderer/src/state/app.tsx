@@ -7,7 +7,8 @@ export type View =
   | { name: "artists" }
   | { name: "album"; album: Album }
   | { name: "artist"; artist: Artist }
-  | { name: "settings" };
+  | { name: "settings" }
+  | { name: "search" };
 
 interface AppState {
   auth: AuthState;
