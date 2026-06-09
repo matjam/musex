@@ -4,6 +4,7 @@ interface RawArtist {
   ratingKey: string;
   title: string;
   thumb?: string;
+  updatedAt?: number;
 }
 interface RawAlbum {
   ratingKey: string;
@@ -11,6 +12,7 @@ interface RawAlbum {
   year?: number;
   thumb?: string;
   parentRatingKey?: string;
+  updatedAt?: number;
 }
 interface RawPart {
   id: string | number;
@@ -51,7 +53,13 @@ export function thumbPath(thumb: string | undefined): string | undefined {
 }
 
 export function toArtist(raw: RawArtist, serverId: string): Artist {
-  return { id: raw.ratingKey, serverId, name: raw.title, thumb: thumbPath(raw.thumb) };
+  return {
+    id: raw.ratingKey,
+    serverId,
+    name: raw.title,
+    thumb: thumbPath(raw.thumb),
+    updatedAt: raw.updatedAt,
+  };
 }
 
 export function toAlbum(raw: RawAlbum, serverId: string): Album {
@@ -62,6 +70,7 @@ export function toAlbum(raw: RawAlbum, serverId: string): Album {
     title: raw.title,
     year: raw.year,
     thumb: thumbPath(raw.thumb),
+    updatedAt: raw.updatedAt,
   };
 }
 

@@ -349,6 +349,7 @@ function toArtistSafe(a: PlexArtist, serverId: string): Artist {
       ratingKey: String(a.ratingKey ?? ""),
       title: a.title ?? "",
       thumb: a.thumb,
+      updatedAt: a.updatedAt ? a.updatedAt.getTime() : undefined,
     },
     serverId,
   );
@@ -362,6 +363,7 @@ function toAlbumSafe(al: PlexAlbum, serverId: string): Album {
       year: al.year,
       thumb: al.thumb,
       parentRatingKey: al.parentRatingKey !== undefined ? String(al.parentRatingKey) : undefined,
+      updatedAt: al.updatedAt ? al.updatedAt.getTime() : undefined,
     },
     serverId,
   );
@@ -376,6 +378,7 @@ function toPlaylistSafe(p: PlexPlaylistCls, serverId: string): Playlist {
     durationMs: typeof p.duration === "number" ? p.duration : undefined,
     // composite is the playlist cover image (mosaic of track art); Playlist has no .thumb
     thumb: p.composite || undefined,
+    updatedAt: p.updatedAt ? p.updatedAt.getTime() : undefined,
   };
 }
 

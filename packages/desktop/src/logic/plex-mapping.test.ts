@@ -23,6 +23,13 @@ describe("plex-mapping", () => {
     const a = toArtist({ ratingKey: "10", title: "Radiohead", thumb: "/t.jpg" }, "srv-1");
     expect(a).toEqual({ id: "10", serverId: "srv-1", name: "Radiohead", thumb: "/t.jpg" });
   });
+  it("maps an artist with updatedAt", () => {
+    const a = toArtist(
+      { ratingKey: "10", title: "Radiohead", thumb: "/t.jpg", updatedAt: 1717800000000 },
+      "srv-1",
+    );
+    expect(a.updatedAt).toBe(1717800000000);
+  });
   it("maps an album with year + parent artist id", () => {
     const al = toAlbum(
       { ratingKey: "20", title: "In Rainbows", year: 2007, thumb: "/a.jpg", parentRatingKey: "10" },
@@ -36,6 +43,20 @@ describe("plex-mapping", () => {
       year: 2007,
       thumb: "/a.jpg",
     });
+  });
+  it("maps an album with updatedAt", () => {
+    const al = toAlbum(
+      {
+        ratingKey: "20",
+        title: "In Rainbows",
+        year: 2007,
+        thumb: "/a.jpg",
+        parentRatingKey: "10",
+        updatedAt: 1717900000000,
+      },
+      "srv-1",
+    );
+    expect(al.updatedAt).toBe(1717900000000);
   });
   it("maps a track with media/part and denormalized titles", () => {
     const t = toTrack(
