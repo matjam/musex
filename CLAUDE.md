@@ -53,6 +53,7 @@ Verified 2026-06-08:
 - **TDD.** Core is the primary test target, exercised against fake ports (`FakePlexGateway`, `FakeTokenStore`, `FakePlaybackEngine`). One opt-in integration smoke test against a real Plex server, env-gated (`MUSEX_PLEX_E2E=1`); not in normal CI.
 - **Local bar = CI bar:** run tests + lint + typecheck + format-check before every push.
 - No silently swallowed errors (empty `catch {}` is a bug). 401 from Plex → drop to signed-out and re-auth, don't loop.
+- **Icons: always `lucide-react` (the project icon package). No emoji in the UI** — transport controls, nav, buttons, etc. all use lucide icons for a consistent look. If a spec/mockup shows an emoji glyph it's shorthand; implement it with the matching lucide icon.
 
 ## Delivery
 

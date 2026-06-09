@@ -10,7 +10,7 @@ Give playback a real, manageable **play queue**: queue a song / album / artist; 
 ## Decisions (confirmed)
 
 - **Queue UI:** a **right-side drawer**, toggled by a "Queue" button in the Now Playing bar; overlays the right of the content, stays open while browsing.
-- **Controls in the transport row** (Spotify order): `🔀 shuffle · ⏮ prev · ▶/⏸ · ⏭ next · 🔁 repeat`. Shuffle/repeat are NOT in the drawer.
+- **Controls in the transport row** (Spotify order): shuffle · prev · play/pause · next · repeat. Shuffle/repeat are NOT in the drawer. **All icons are lucide-react** (consistent with the nav): `Shuffle`, `SkipBack`, `Play`/`Pause`, `SkipForward`, `Repeat`/`Repeat1`, plus a queue icon (`ListMusic` or `ListOrdered`). The existing emoji transport/volume glyphs (`⏮ ⏸ ▶ ⏭ 🔊`) are upgraded to lucide in the same pass. **No emoji in the UI** — always use the icon package.
 - **Shuffle:** randomizes the upcoming tracks (current keeps playing); turning it **off restores the original order** from the current track onward.
 - **Repeat cycle:** Off → All → One → Off (icon reflects mode; repeat-one shows a "1").
 - **Reorder:** drag-and-drop within the drawer.
@@ -60,7 +60,7 @@ This logic is the heart of the slice and is **TDD'd against `FakePlaybackEngine`
 
 ### Renderer
 
-**Now Playing bar (`NowPlayingBar.tsx`):** add to the transport cluster — a **shuffle** toggle (left of prev; green/active when on), a **repeat** button (right of next; three visual states, repeat-one shows a "1"), and a **Queue** button (toggles the drawer; lucide icons throughout). Wire to new player API.
+**Now Playing bar (`NowPlayingBar.tsx`):** add to the transport cluster — a **shuffle** toggle (`Shuffle`, left of prev; green/active when on), a **repeat** button (right of next; `Repeat` for all, `Repeat1` for one, dimmed for off), and a **Queue** button (`ListMusic`/`ListOrdered`, toggles the drawer). **Also replace the existing emoji transport + volume glyphs** (`⏮ ⏸ ▶ ⏭ 🔊`) with lucide icons (`SkipBack`, `Play`/`Pause`, `SkipForward`, `Volume2`/`VolumeX`) so the whole bar matches the nav. Wire to the new player API.
 
 **Queue drawer (`QueueDrawer.tsx`, new):** a right-side overlay panel (animate in/out). Header: "Queue" + **Clear**. Sections: **Now playing** (the current track), **Next up** (the upcoming tracks). Each upcoming row: drag handle, art, title/artist, remove (✕); click a row to jump to it (`playIndex`). **Drag-and-drop** reorder via HTML5 DnD (dragstart stores index → drop computes target → `move(from,to)`); no new dependency. Shows the upcoming list scrollably (the next several visible; for very large queues render a bounded window — reuse `VirtualTrackList` if needed, though DnD + virtualization interaction is a known tension; the plan picks the simplest correct approach, e.g. render up to ~100 upcoming rows with a "+N more" note since reordering far down is rare).
 
