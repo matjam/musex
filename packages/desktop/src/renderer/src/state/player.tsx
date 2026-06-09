@@ -74,10 +74,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const api: PlayerApi = {
     state,
-    playTracks: (tracks, startIndex) => void session.loadQueue(buildQueue(tracks, startIndex)),
+    playTracks: (tracks, startIndex) => {
+      console.log("[musex-debug] api.playTracks index", startIndex, "len", tracks.length);
+      void session.loadQueue(buildQueue(tracks, startIndex));
+    },
     togglePlay: () => (state.status === "playing" ? session.pause() : session.play()),
-    next: () => void session.next(),
-    previous: () => void session.previous(),
+    next: () => {
+      console.log("[musex-debug] api.next");
+      void session.next();
+    },
+    previous: () => {
+      console.log("[musex-debug] api.previous");
+      void session.previous();
+    },
     seek: (sec) => session.seek(sec),
     setVolume: (v) => {
       session.setVolume(v);
@@ -90,7 +99,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     clearQueue: () => session.clearQueue(),
     toggleShuffle: () => session.setShuffle(!(state.queue?.shuffle ?? false)),
     cycleRepeat: () => session.cycleRepeat(),
-    jumpTo: (index) => void session.jumpTo(index),
+    jumpTo: (index) => {
+      console.log("[musex-debug] api.jumpTo", index);
+      void session.jumpTo(index);
+    },
   };
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
