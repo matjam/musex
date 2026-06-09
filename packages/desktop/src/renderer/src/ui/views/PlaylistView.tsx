@@ -257,6 +257,7 @@ export function PlaylistView({ playlist }: Props) {
                     ...pos,
                     trackId: pt.track.id,
                     serverId: pt.track.serverId,
+                    track: pt.track,
                     playlistContext: {
                       playlistId: playlist.id,
                       playlistItemId: pt.playlistItemId,

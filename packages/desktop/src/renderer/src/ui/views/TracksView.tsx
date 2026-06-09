@@ -91,6 +91,7 @@ export function TracksView() {
                     ...pos,
                     trackId: track.id,
                     serverId: track.serverId,
+                    track,
                   })
                 }
               />

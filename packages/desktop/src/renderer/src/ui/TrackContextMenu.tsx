@@ -1,5 +1,7 @@
-import type { Playlist } from "@musex/core";
+import type { Playlist, Track } from "@musex/core";
+import { ListEnd, ListPlus } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePlayer } from "../state/player";
 import { usePlaylists } from "../state/playlists";
 
 const VIEWPORT_MARGIN = 8;
@@ -10,6 +12,8 @@ export interface TrackMenuTarget {
   y: number;
   trackId: string;
   serverId: string;
+  /** The full Track object — required for queue actions. */
+  track: Track;
   /** Provided only when the row is inside a playlist (enables Remove). */
   playlistContext?: { playlistId: string; playlistItemId: string };
 }
@@ -24,6 +28,7 @@ interface Props {
 
 export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: Props) {
   const { playlists, addTo, remove } = usePlaylists();
+  const { enqueueNext, enqueueEnd } = usePlayer();
   const [submenu, setSubmenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   // Start at the click point; clamp into the viewport before paint (below).
@@ -83,6 +88,29 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
       style={{ left: pos.left, top: pos.top }}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <button
+        type="button"
+        className="ctx-item ctx-item--icon"
+        onClick={() => {
+          enqueueNext([target.track]);
+          onClose();
+        }}
+      >
+        <ListPlus size={14} />
+        Play next
+      </button>
+      <button
+        type="button"
+        className="ctx-item ctx-item--icon"
+        onClick={() => {
+          enqueueEnd([target.track]);
+          onClose();
+        }}
+      >
+        <ListEnd size={14} />
+        Add to queue
+      </button>
+      <div className="ctx-sep" />
       <div
         className="ctx-item ctx-haschild"
         role="menuitem"

@@ -414,6 +414,14 @@ body {
   font-size: 22px;
 }
 
+/* Artist/browse header row: title + optional action button inline */
+.artist-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .browse-sub {
   opacity: 0.5;
   font-size: 12px;
@@ -1144,6 +1152,42 @@ img.np-art {
 
 .ctx-arrow {
   opacity: 0.5;
+}
+
+/* Icon + label items: flex-start so icon and text stay together on the left. */
+.ctx-item--icon {
+  justify-content: flex-start;
+}
+
+/* Album/artist action bar: sits next to the play button */
+.album-more-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.album-more-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Inline dropdown for album/artist more-menu */
+.more-dropdown {
+  position: fixed;
+  z-index: 50;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 .ctx-submenu {

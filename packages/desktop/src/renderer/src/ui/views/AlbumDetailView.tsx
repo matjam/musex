@@ -1,5 +1,6 @@
 import type { Album, Track } from "@musex/core";
-import { useEffect, useState } from "react";
+import { ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
@@ -21,10 +22,12 @@ interface Props {
 
 export function AlbumDetailView({ album }: Props) {
   const { library, dispatch } = useApp();
-  const { state, playTracks } = usePlayer();
+  const { state, playTracks, enqueueNext, enqueueEnd } = usePlayer();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [morePos, setMorePos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!library) return;
@@ -89,6 +92,17 @@ export function AlbumDetailView({ album }: Props) {
               >
                 ▶
               </button>
+              <button
+                type="button"
+                className="album-more-btn"
+                title="More actions"
+                onClick={(e) => {
+                  setMorePos({ x: e.clientX, y: e.clientY });
+                  setMoreOpen((o) => !o);
+                }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
             </div>
           )}
         </div>
@@ -121,6 +135,7 @@ export function AlbumDetailView({ album }: Props) {
                     ...pos,
                     trackId: track.id,
                     serverId: track.serverId,
+                    track,
                   })
                 }
               />
@@ -143,6 +158,88 @@ export function AlbumDetailView({ album }: Props) {
       {newSeed !== null && (
         <NewPlaylistDialog seedTrackIds={newSeed} onClose={() => setNewSeed(null)} />
       )}
+
+      {moreOpen && (
+        <AlbumMoreMenu
+          x={morePos.x}
+          y={morePos.y}
+          onClose={() => setMoreOpen(false)}
+          onPlayNext={() => {
+            enqueueNext(tracks);
+            setMoreOpen(false);
+          }}
+          onAddToQueue={() => {
+            enqueueEnd(tracks);
+            setMoreOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+interface MoreMenuProps {
+  x: number;
+  y: number;
+  onClose: () => void;
+  onPlayNext: () => void;
+  onAddToQueue: () => void;
+}
+
+/** Tiny fixed-position dropdown for "Play next" / "Add to queue" on an album or artist. */
+function AlbumMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue }: MoreMenuProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+  const MARGIN = 8;
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = x;
+    let top = y;
+    if (left + rect.width > vw - MARGIN) left = vw - rect.width - MARGIN;
+    if (top + rect.height > vh - MARGIN) top = vh - rect.height - MARGIN;
+    left = Math.max(MARGIN, left);
+    top = Math.max(MARGIN, top);
+    setPos({ left, top });
+  }, [x, y]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="more-dropdown"
+      role="menu"
+      style={{ left: pos.left, top: pos.top }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <button type="button" className="ctx-item ctx-item--icon" onClick={onPlayNext}>
+        <ListPlus size={14} />
+        Play next
+      </button>
+      <button type="button" className="ctx-item ctx-item--icon" onClick={onAddToQueue}>
+        <ListEnd size={14} />
+        Add to queue
+      </button>
     </div>
   );
 }

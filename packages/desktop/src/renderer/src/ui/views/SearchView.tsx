@@ -146,6 +146,7 @@ export function SearchView() {
                       ...pos,
                       trackId: track.id,
                       serverId: track.serverId,
+                      track,
                     })
                   }
                 />
