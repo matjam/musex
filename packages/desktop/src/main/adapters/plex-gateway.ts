@@ -204,6 +204,50 @@ export class PlexapiGateway implements PlexGateway {
     }
   }
 
+  /**
+   * Fetch a single page of playlist tracks using Plex container windowing.
+   *
+   * Pagination is implemented by appending X-Plex-Container-Start and
+   * X-Plex-Container-Size as URL query params directly on the path string,
+   * then calling server.query() directly — fetchItems()'s `options` param is
+   * used for client-side result filtering only, not URL params.
+   *
+   * `total` is read from MediaContainer.totalSize returned by Plex (same
+   * mechanism used by @ctrl/plex's own server.history() pagination).
+   */
+  async listPlaylistTracksPage(
+    playlistId: string,
+    serverId: string,
+    start: number,
+    size: number,
+    token: string,
+  ): Promise<{ items: PlaylistTrack[]; total: number }> {
+    try {
+      const server = await this.connect(serverId, token);
+      const path = `/playlists/${playlistId}/items?X-Plex-Container-Start=${start}&X-Plex-Container-Size=${size}&includeGuids=1`;
+      const response = (await server.query({ path })) as {
+        MediaContainer: {
+          totalSize?: number;
+          size?: number;
+          Metadata?: Record<string, unknown>[];
+        };
+      };
+      const total = response.MediaContainer.totalSize ?? 0;
+      const rawItems = response.MediaContainer.Metadata ?? [];
+      // Hydrate raw metadata objects into PlexTrack instances so toTrackSafe can read .media etc.
+      const items: PlaylistTrack[] = rawItems.map((raw) => {
+        const t = new PlexTrackCls(server, raw, undefined, undefined);
+        return {
+          track: toTrackSafe(t as PlexTrack, serverId),
+          playlistItemId: String((raw["playlistItemID"] as number | undefined) ?? ""),
+        };
+      });
+      return { items, total };
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
   async createPlaylist(
     library: Library,
     title: string,

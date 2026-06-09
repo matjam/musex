@@ -30,6 +30,7 @@ export const IPC = {
   clearCache: "musex:clearCache", // -> { freedBytes: number }
   listPlaylists: "musex:listPlaylists", // (libraryId) -> Playlist[]
   listPlaylistTracks: "musex:listPlaylistTracks", // (playlistId, serverId) -> PlaylistTrack[]
+  listPlaylistTracksPage: "musex:listPlaylistTracksPage", // (playlistId, serverId, start, size) -> { items: PlaylistTrack[]; total: number }
   createPlaylist: "musex:createPlaylist", // (libraryId, title, trackIds) -> Playlist
   addToPlaylist: "musex:addToPlaylist", // (playlistId, serverId, trackIds) -> void
   removeFromPlaylist: "musex:removeFromPlaylist", // (playlistId, serverId, playlistItemIds) -> void
@@ -71,6 +72,12 @@ export interface MusexApi {
     serverId: string,
     validator?: string,
   ): Promise<PlaylistTrack[]>;
+  listPlaylistTracksPage(
+    playlistId: string,
+    serverId: string,
+    start: number,
+    size: number,
+  ): Promise<{ items: PlaylistTrack[]; total: number }>;
   createPlaylist(libraryId: string, title: string, trackIds: string[]): Promise<Playlist>;
   addToPlaylist(playlistId: string, serverId: string, trackIds: string[]): Promise<void>;
   removeFromPlaylist(

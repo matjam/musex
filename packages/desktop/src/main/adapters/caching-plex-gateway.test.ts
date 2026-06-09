@@ -34,8 +34,16 @@ function setup() {
       baseUrl: "http://localhost",
       token,
     })),
+    listPlaylistTracksPage: vi.fn(async () => ({ items: ptracks, total: ptracks.length })),
   } as unknown as import("@musex/core").PlexGateway & {
     endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }>;
+    listPlaylistTracksPage(
+      playlistId: string,
+      serverId: string,
+      start: number,
+      size: number,
+      token: string,
+    ): Promise<{ items: PlaylistTrack[]; total: number }>;
   };
   const store = new ListCacheStore(dir, 50);
   return { inner, gw: new CachingPlexGateway(inner, store), store };

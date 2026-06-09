@@ -1,19 +1,15 @@
-import type { Playlist, PlaylistTrack } from "@musex/core";
+import type { Playlist } from "@musex/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { usePlaylists } from "../../state/playlists";
 import { AlbumArt } from "../AlbumArt";
+import { useProgressiveList } from "../hooks/useProgressiveList";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
-
-type FetchState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ok"; items: PlaylistTrack[] };
 
 interface RenameDialogProps {
   current: string;
@@ -154,37 +150,30 @@ export function PlaylistView({ playlist }: Props) {
   const { playlists, rename, destroy } = usePlaylists();
   const live = playlists.find((p) => p.id === playlist.id) ?? playlist;
 
-  const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  // useProgressiveList: on cache HIT → instant "ok"; on MISS → pages in progressively.
+  // validator is derived from the live (store) playlist so mutations (remove/add) trigger
+  // a re-fetch automatically — usePlaylists.remove() calls refresh() which updates
+  // live.trackCount/updatedAt, changing the validator and causing the hook to re-run.
+  const fetch = useProgressiveList(
+    playlist.id,
+    playlist.serverId,
+    listValidator(live.updatedAt, live.trackCount),
+  );
+
+  // onChanged callback for TrackContextMenu. The mutation path (usePlaylists.remove →
+  // refresh → live updates → validator changes) already re-triggers the hook, so this
+  // is a no-op. Kept as a stable reference for TrackContextMenu's prop.
+  const load = useCallback(() => {}, []);
+
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [actionsPos, setActionsPos] = useState<{ x: number; y: number } | null>(null);
 
-  const load = useCallback(() => {
-    setFetch({ status: "loading" });
-    window.musex
-      .listPlaylistTracks(
-        playlist.id,
-        playlist.serverId,
-        listValidator(live.updatedAt, live.trackCount),
-      )
-      .then((items) => setFetch({ status: "ok", items }))
-      .catch((err: unknown) =>
-        setFetch({
-          status: "error",
-          message: err instanceof Error ? err.message : "Failed to load tracks",
-        }),
-      );
-  }, [playlist.id, playlist.serverId, live.updatedAt, live.trackCount]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
   const playingTrackId =
     state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
 
-  const items = fetch.status === "ok" ? fetch.items : [];
+  const items = fetch.status === "ok" || fetch.status === "paging" ? fetch.items : [];
   const tracks = items.map((pt) => pt.track);
   const totalMs = tracks.reduce((sum, t) => sum + t.durationMs, 0);
   const totalMin = Math.round(totalMs / 60000);
@@ -206,14 +195,16 @@ export function PlaylistView({ playlist }: Props) {
           <div className="album-meta-label">Playlist</div>
           <h1 className="album-meta-title">{live.title}</h1>
           <div className="album-meta-by">
-            {fetch.status === "ok" && (
+            {(fetch.status === "ok" || fetch.status === "paging") && (
               <span className="album-meta-muted">
-                {items.length} song{items.length !== 1 ? "s" : ""} · {totalMin} min
+                {fetch.status === "paging"
+                  ? `Loading… ${fetch.loaded} / ${fetch.total}`
+                  : `${items.length} song${items.length !== 1 ? "s" : ""} · ${totalMin} min`}
               </span>
             )}
           </div>
           <div className="album-actions">
-            {fetch.status === "ok" && tracks.length > 0 && (
+            {(fetch.status === "ok" || fetch.status === "paging") && tracks.length > 0 && (
               <button
                 type="button"
                 className="play-btn"
@@ -248,7 +239,7 @@ export function PlaylistView({ playlist }: Props) {
         <div className="content-placeholder">No tracks in this playlist.</div>
       )}
 
-      {fetch.status === "ok" && items.length > 0 && (
+      {(fetch.status === "ok" || fetch.status === "paging") && items.length > 0 && (
         <div className="track-list">
           {items.map((pt, i) => (
             <TrackRow

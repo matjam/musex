@@ -128,6 +128,26 @@ export function registerIpc(rt: Runtime): void {
     },
   );
   ipcMain.handle(
+    IPC.listPlaylistTracksPage,
+    async (_e, playlistId: string, serverId: string, start: number, size: number) => {
+      await rt.ensureProxyEndpoint(serverId);
+      const result = await rt.gateway.listPlaylistTracksPage(
+        playlistId,
+        serverId,
+        start,
+        size,
+        rt.requireToken(),
+      );
+      return {
+        ...result,
+        items: result.items.map((it) => ({
+          ...it,
+          track: { ...it.track, thumb: rt.proxy.artUrl(it.track.serverId, it.track.thumb) },
+        })),
+      };
+    },
+  );
+  ipcMain.handle(
     IPC.createPlaylist,
     async (_e, libraryId: string, title: string, trackIds: string[]) => {
       const lib = rt.findLibrary(libraryId);

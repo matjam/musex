@@ -20,6 +20,13 @@ export class CachingPlexGateway implements PlexGateway {
   constructor(
     private readonly inner: PlexGateway & {
       endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }>;
+      listPlaylistTracksPage(
+        playlistId: string,
+        serverId: string,
+        start: number,
+        size: number,
+        token: string,
+      ): Promise<{ items: PlaylistTrack[]; total: number }>;
     },
     private readonly cache: ListCacheStore,
   ) {}
@@ -152,5 +159,21 @@ export class CachingPlexGateway implements PlexGateway {
 
   endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }> {
     return this.inner.endpoint(serverId, token);
+  }
+
+  /**
+   * Paged fetch — pass-through only. Pages are NOT individually cached here;
+   * the renderer assembles all pages and then populates the full-list cache
+   * via the normal listPlaylistTracks IPC call once all pages are loaded.
+   * That guarantees re-open uses a single cached full-list hit, not repeated pages.
+   */
+  listPlaylistTracksPage(
+    playlistId: string,
+    serverId: string,
+    start: number,
+    size: number,
+    token: string,
+  ): Promise<{ items: PlaylistTrack[]; total: number }> {
+    return this.inner.listPlaylistTracksPage(playlistId, serverId, start, size, token);
   }
 }

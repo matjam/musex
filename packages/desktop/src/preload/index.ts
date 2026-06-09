@@ -25,6 +25,8 @@ const api: MusexApi = {
   listPlaylists: (libraryId) => ipcRenderer.invoke(IPC.listPlaylists, libraryId),
   listPlaylistTracks: (playlistId, serverId, validator) =>
     ipcRenderer.invoke(IPC.listPlaylistTracks, playlistId, serverId, validator),
+  listPlaylistTracksPage: (playlistId, serverId, start, size) =>
+    ipcRenderer.invoke(IPC.listPlaylistTracksPage, playlistId, serverId, start, size),
   createPlaylist: (libraryId, title, trackIds) =>
     ipcRenderer.invoke(IPC.createPlaylist, libraryId, title, trackIds),
   addToPlaylist: (playlistId, serverId, trackIds) =>
