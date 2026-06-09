@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   cacheKey,
   contentTypeForPath,
+  isArtPath,
   isCacheablePath,
   parseByteRange,
   selectEvictions,
+  sniffImageType,
 } from "./cache";
 
 describe("cacheKey", () => {
@@ -86,5 +88,31 @@ describe("selectEvictions", () => {
   it("evicts multiple when needed", () => {
     const entries = [e("a", 500, 1), e("b", 500, 2), e("c", 500, 3)];
     expect(selectEvictions(entries, 600)).toEqual(["a", "b"]);
+  });
+});
+
+describe("isArtPath", () => {
+  it("matches Plex art/thumb/photo paths", () => {
+    expect(isArtPath("/library/metadata/55/thumb/1766818200")).toBe(true);
+    expect(isArtPath("/library/metadata/55/art/1766818200")).toBe(true);
+    expect(isArtPath("/photo/:/transcode?url=%2Flibrary...")).toBe(true);
+  });
+  it("does not match audio parts or transcode", () => {
+    expect(isArtPath("/library/parts/6152/167/file.flac")).toBe(false);
+    expect(isArtPath("/music/:/transcode/universal/start.m3u8")).toBe(false);
+  });
+});
+
+describe("sniffImageType", () => {
+  it("detects jpeg/png/gif/webp from magic bytes", () => {
+    expect(sniffImageType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe("image/jpeg");
+    expect(sniffImageType(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe("image/png");
+    expect(sniffImageType(new Uint8Array([0x47, 0x49, 0x46, 0x38]))).toBe("image/gif");
+    expect(
+      sniffImageType(new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50])),
+    ).toBe("image/webp");
+  });
+  it("falls back to octet-stream for unknown bytes", () => {
+    expect(sniffImageType(new Uint8Array([0, 1, 2, 3]))).toBe("application/octet-stream");
   });
 });
