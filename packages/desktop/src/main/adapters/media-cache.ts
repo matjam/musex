@@ -74,9 +74,16 @@ export class MediaCache {
     // 'error' event — that is fatal in Electron's main process. Mark the writer
     // failed; commit/abort discard the temp. The client response is a separate
     // pipe, so playback continues (just uncached).
+    //
+    // ERR_STREAM_DESTROYED is expected and benign: aborting a write (track change,
+    // prefetch cancel) calls destroy() while best-effort chunks are still buffered,
+    // and each buffered write then errors in its async fs callback. We're discarding
+    // the temp anyway, so swallow that specific code and only surface real I/O errors.
     stream.on("error", (err) => {
       failed = true;
-      console.error("[musex cache] write failed:", err);
+      if ((err as NodeJS.ErrnoException).code !== "ERR_STREAM_DESTROYED") {
+        console.error("[musex cache] write failed:", err);
+      }
     });
 
     return {
