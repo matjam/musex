@@ -1290,3 +1290,244 @@ img.np-art {
 .ctx-danger {
   color: var(--red);
 }
+
+/* ---- Queue drawer ---- */
+
+.queue-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  /* sit above the now-playing bar (68px) */
+  bottom: 68px;
+  width: 320px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+}
+
+.queue-drawer--open {
+  transform: translateX(0);
+}
+
+.queue-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.queue-drawer-title {
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.queue-drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-clear-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 0.1s, color 0.1s;
+}
+
+.queue-clear-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text);
+}
+
+.queue-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.1s;
+}
+
+.queue-close-btn:hover {
+  color: var(--text);
+}
+
+.queue-drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+}
+
+.queue-empty {
+  padding: 32px 16px;
+  text-align: center;
+  opacity: 0.4;
+  font-size: 13px;
+}
+
+.queue-empty--sub {
+  padding: 16px;
+  font-size: 12px;
+}
+
+.queue-section {
+  margin-bottom: 4px;
+}
+
+.queue-section-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.4;
+  padding: 10px 14px 6px;
+}
+
+/* Now-playing highlight row (non-interactive) */
+.queue-now-playing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: rgba(84, 210, 160, 0.07);
+  border-left: 2px solid var(--green);
+}
+
+/* Upcoming draggable rows */
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 6px;
+  margin: 0 6px;
+  transition: background 0.1s;
+  position: relative;
+}
+
+.queue-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.queue-row.drag-over {
+  background: rgba(124, 92, 255, 0.15);
+  box-shadow: inset 0 2px 0 0 var(--purple);
+}
+
+.queue-row-handle {
+  display: flex;
+  align-items: center;
+  opacity: 0.3;
+  cursor: grab;
+  padding: 2px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.queue-row:hover .queue-row-handle {
+  opacity: 0.7;
+}
+
+.queue-row-handle:active {
+  cursor: grabbing;
+}
+
+/* Clickable body inside the row */
+.queue-row-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px 2px;
+  outline: none;
+}
+
+.queue-row-body:focus-visible {
+  box-shadow: 0 0 0 2px var(--purple);
+}
+
+.queue-row-art {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: var(--panel-2);
+}
+
+img.queue-row-art {
+  object-fit: cover;
+}
+
+.queue-row-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.queue-row-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-row-title--playing {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.queue-row-sub {
+  font-size: 11px;
+  opacity: 0.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-row-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.queue-row:hover .queue-row-remove {
+  opacity: 0.6;
+}
+
+.queue-row-remove:hover {
+  opacity: 1 !important;
+  color: var(--text);
+}
+
+.queue-overflow {
+  padding: 8px 14px;
+  font-size: 11.5px;
+  opacity: 0.4;
+  text-align: center;
+}

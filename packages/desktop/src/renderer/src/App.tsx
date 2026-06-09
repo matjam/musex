@@ -1,13 +1,17 @@
+import { useState } from "react";
 import { AppProvider, useApp } from "./state/app";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
+import { QueueDrawer } from "./ui/QueueDrawer";
 import { Shell } from "./ui/Shell";
 import { SignIn } from "./ui/SignIn";
 import "./ui/theme.css";
 
 function Inner() {
   const { auth } = useApp();
+  const [queueOpen, setQueueOpen] = useState(false);
+
   if (auth === "restoring") {
     return (
       <div className="signin-screen">
@@ -23,7 +27,8 @@ function Inner() {
       <PlaylistsProvider>
         <div className="app-root">
           <Shell />
-          <NowPlayingBar />
+          <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
+          <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
         </div>
       </PlaylistsProvider>
     );
