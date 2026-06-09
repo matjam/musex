@@ -52,6 +52,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const state = useSyncExternalStore(subscribe, getSnapshot);
 
+  // Prefetch upcoming tracks into the cache whenever the upcoming set changes.
+  // Keyed on upcomingKey (track ids joined) so this does NOT fire on position ticks.
+  const PREFETCH_DEPTH = 10;
+  const upcoming =
+    state.queue != null
+      ? state.queue.tracks.slice(state.queue.index + 1, state.queue.index + 1 + PREFETCH_DEPTH)
+      : [];
+  const upcomingKey = upcoming.map((t) => t.id).join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on upcomingKey
+  useEffect(() => {
+    void window.musex.prefetch(upcoming);
+  }, [upcomingKey]);
+
   // Initialise volume from main-process store on mount
   useEffect(() => {
     window.musex.getVolume().then((v) => {

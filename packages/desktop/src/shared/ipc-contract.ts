@@ -40,6 +40,7 @@ export const IPC = {
   removeFromPlaylist: "musex:removeFromPlaylist", // (playlistId, serverId, playlistItemIds) -> void
   renamePlaylist: "musex:renamePlaylist", // (playlistId, serverId, title) -> void
   deletePlaylist: "musex:deletePlaylist", // (playlistId, serverId) -> void
+  prefetch: "musex:prefetch", // (tracks: Track[]) -> void
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -99,4 +100,5 @@ export interface MusexApi {
   ): Promise<void>;
   renamePlaylist(playlistId: string, serverId: string, title: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string): Promise<void>;
+  prefetch(tracks: Track[]): Promise<void>;
 }
