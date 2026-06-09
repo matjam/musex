@@ -1,5 +1,5 @@
 import type { SearchResults } from "@musex/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { AlbumArt } from "../AlbumArt";
@@ -12,19 +12,13 @@ import { VirtualTrackList } from "../VirtualTrackList";
 const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
 
 export function SearchView() {
-  const { library, dispatch } = useApp();
+  // The query lives in app state (driven by the top-bar search box).
+  const { library, dispatch, searchQuery: query } = useApp();
   const { state, playTracks } = usePlayer();
-  const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
-
-  // Focus the input on mount.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   // Debounced live search (~250ms). Blank query clears immediately.
   useEffect(() => {
@@ -69,18 +63,6 @@ export function SearchView() {
 
   return (
     <div className="search-page">
-      <div className="search-bar">
-        <span className="search-icon">🔍</span>
-        <input
-          ref={inputRef}
-          className="search-input"
-          type="text"
-          placeholder="Search your library"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
-
       {!hasQuery && <div className="content-placeholder">Search artists, albums and songs.</div>}
       {hasQuery && loading && empty && <div className="content-placeholder">Searching…</div>}
       {hasQuery && !loading && empty && (

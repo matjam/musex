@@ -1,4 +1,4 @@
-import { Disc3, Home, ListMusic, Mic2, Music, Search, Settings } from "lucide-react";
+import { Disc3, Home, ListMusic, Mic2, Music, Settings } from "lucide-react";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { AlbumDetailView } from "./views/AlbumDetailView";
@@ -22,7 +22,6 @@ export function Shell() {
   const albumsActive = view.name === "albums";
   const tracksActive = view.name === "tracks";
   const settingsActive = view.name === "settings";
-  const searchActive = view.name === "search";
 
   function renderContent() {
     switch (view.name) {
@@ -48,22 +47,10 @@ export function Shell() {
   return (
     <div className="app-body">
       <nav className="sidebar">
-        <div className="sidebar-logo brand">
-          mus<span>ex</span>
-        </div>
-
         <div className="nav-item dim">
           <Home size={16} />
           Home
         </div>
-        <button
-          type="button"
-          className={`nav-item${searchActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "search" } })}
-        >
-          <Search size={16} />
-          Search
-        </button>
 
         <div className="nav-section">Library</div>
 

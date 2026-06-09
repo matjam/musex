@@ -17,12 +17,14 @@ interface AppState {
   signInCode: string | null;
   library: Library | null;
   view: View;
+  searchQuery: string;
 }
 type Action =
   | { type: "signing-in"; code: string }
   | { type: "signed-in"; library: Library }
   | { type: "restore-done"; library: Library | null }
-  | { type: "navigate"; view: View };
+  | { type: "navigate"; view: View }
+  | { type: "set-search"; query: string };
 
 function reducer(s: AppState, a: Action): AppState {
   switch (a.type) {
@@ -48,6 +50,13 @@ function reducer(s: AppState, a: Action): AppState {
         : { ...s, auth: "signed-out" };
     case "navigate":
       return { ...s, view: a.view };
+    case "set-search":
+      // Typing routes to the search view; clearing the box leaves you where you are.
+      return {
+        ...s,
+        searchQuery: a.query,
+        view: a.query.trim() ? { name: "search" } : s.view,
+      };
   }
 }
 
@@ -62,6 +71,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     signInCode: null,
     library: null,
     view: { name: "albums" },
+    searchQuery: "",
   });
 
   useEffect(() => {

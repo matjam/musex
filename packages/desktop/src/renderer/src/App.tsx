@@ -6,6 +6,7 @@ import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
 import { Shell } from "./ui/Shell";
 import { SignIn } from "./ui/SignIn";
+import { TopBar } from "./ui/TopBar";
 import "./ui/theme.css";
 
 function Inner() {
@@ -26,6 +27,7 @@ function Inner() {
     return (
       <PlaylistsProvider>
         <div className="app-root">
+          <TopBar />
           <Shell />
           <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
           <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
