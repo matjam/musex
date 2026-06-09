@@ -8,11 +8,15 @@ describe("buildQueue", () => {
     const queue = buildQueue(tracks, 1);
     expect(queue.tracks).toBe(tracks);
     expect(queue.index).toBe(1);
+    expect(queue.shuffle).toBe(false);
+    expect(queue.repeat).toBe("none");
   });
 
   it("defaults to index 0", () => {
     const queue = buildQueue([makeTrack("1")]);
     expect(queue.index).toBe(0);
+    expect(queue.shuffle).toBe(false);
+    expect(queue.repeat).toBe("none");
   });
 
   it("clamps an out-of-range index", () => {

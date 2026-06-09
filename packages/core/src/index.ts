@@ -9,6 +9,7 @@ export type {
   Playlist,
   PlaylistTrack,
   Queue,
+  RepeatMode,
   SearchResults,
   Server,
   Track,

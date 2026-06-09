@@ -60,9 +60,13 @@ export interface Track {
   media: MediaInfo;
 }
 
+export type RepeatMode = "none" | "all" | "one";
+
 export interface Queue {
   tracks: Track[];
   index: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
 }
 
 export interface SearchResults {

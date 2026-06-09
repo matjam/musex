@@ -14,7 +14,7 @@ describe("PlaybackSession", () => {
   it("loads a queue, plays the start index, and reports playing", async () => {
     const { engine, session } = setup();
     const tracks = [makeTrack("1"), makeTrack("2"), makeTrack("3")];
-    await session.loadQueue({ tracks, index: 0 });
+    await session.loadQueue({ tracks, index: 0, shuffle: false, repeat: "none" });
 
     expect(engine.loaded.map((r) => r.url)).toEqual(["fake://stream/1"]);
     expect(engine.playCalls).toBe(1);
@@ -25,21 +25,21 @@ describe("PlaybackSession", () => {
   it("preloads the next track for gapless playback", async () => {
     const { engine, session } = setup();
     const tracks = [makeTrack("1"), makeTrack("2")];
-    await session.loadQueue({ tracks, index: 0 });
+    await session.loadQueue({ tracks, index: 0, shuffle: false, repeat: "none" });
 
     expect(engine.preloaded.map((r) => r.url)).toEqual(["fake://stream/2"]);
   });
 
   it("does not preload past the end of the queue", async () => {
     const { engine, session } = setup();
-    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
     expect(engine.preloaded).toEqual([]);
   });
 
   it("advances to the next track when the current one ends", async () => {
     const { engine, session } = setup();
     const tracks = [makeTrack("1"), makeTrack("2")];
-    await session.loadQueue({ tracks, index: 0 });
+    await session.loadQueue({ tracks, index: 0, shuffle: false, repeat: "none" });
     engine.emitEnded();
 
     // onEnded triggers an async advance chain; poll until it settles.
@@ -51,7 +51,7 @@ describe("PlaybackSession", () => {
 
   it("ends when the last track finishes", async () => {
     const { engine, session } = setup();
-    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
     engine.emitEnded();
 
     await vi.waitFor(() => {
@@ -61,7 +61,7 @@ describe("PlaybackSession", () => {
 
   it("pause and play update status and call the engine", async () => {
     const { engine, session } = setup();
-    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
     session.pause();
     expect(engine.pauseCalls).toBe(1);
     expect(session.getState().status).toBe("paused");
@@ -71,7 +71,7 @@ describe("PlaybackSession", () => {
 
   it("seek and setVolume delegate to the engine and update state", async () => {
     const { engine, session } = setup();
-    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
     session.seek(42);
     session.setVolume(0.5);
     expect(engine.seekCalls).toEqual([42]);
@@ -82,7 +82,7 @@ describe("PlaybackSession", () => {
 
   it("surfaces engine errors as error status", async () => {
     const { engine, session } = setup();
-    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
     engine.emitError(new Error("decode failed"));
     expect(session.getState().status).toBe("error");
     expect(session.getState().error).toBe("decode failed");
@@ -92,13 +92,13 @@ describe("PlaybackSession", () => {
     const { session } = setup();
     const states: string[] = [];
     session.subscribe((s) => states.push(s.status));
-    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
     expect(states).toContain("playing");
   });
 
   it("goes to ended when next() is called on the last track", async () => {
     const { session } = setup();
-    await session.loadQueue({ tracks: [makeTrack("1")], index: 0 });
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
     await session.next();
     expect(session.getState().status).toBe("ended");
   });
@@ -106,7 +106,7 @@ describe("PlaybackSession", () => {
   it("on gapless auto-advance, bumps the index without reloading and preloads the following track", async () => {
     const { engine, session } = setup();
     const tracks = [makeTrack("1"), makeTrack("2"), makeTrack("3")];
-    await session.loadQueue({ tracks, index: 0 });
+    await session.loadQueue({ tracks, index: 0, shuffle: false, repeat: "none" });
     // after load: engine.loaded == ["1"], engine.preloaded == ["2"]
     engine.emitAdvanced();
 
@@ -135,7 +135,12 @@ describe("PlaybackSession", () => {
     const session = new PlaybackSession(engine, resolver);
 
     // Start loading track index 0 (id "1"); it suspends inside resolve().
-    const first = session.loadQueue({ tracks: [makeTrack("1"), makeTrack("2")], index: 0 });
+    const first = session.loadQueue({
+      tracks: [makeTrack("1"), makeTrack("2")],
+      index: 0,
+      shuffle: false,
+      repeat: "none",
+    });
     // Start a newer load for index 1 (id "2"); it resolves immediately and wins.
     const second = session.playIndex(1);
     await second;
