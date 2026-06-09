@@ -1,27 +1,28 @@
 import type { PlaybackEngine, StreamRef } from "@musex/core";
-import { Gapless5 } from "@regosen/gapless-5";
 import Hls from "hls.js";
 
 type Cb0 = () => void;
 
-/** Mask long hex runs (the proxy's per-launch secret + server id) in debug logs
- *  so the secret never reaches the console / a pasted log. Keeps the track path
- *  (e.g. /library/parts/12345/…) visible for diagnostics. */
-function scrub(s: string): string {
-  return s.replace(/[0-9a-f]{32,}/gi, "<redacted>");
-}
-
-/** If a freshly-loaded direct track produces no audio progress within this
- *  window, the play watchdog re-issues the load (recovering from silent HTML5
- *  stalls). */
-const PLAY_WATCHDOG_MS = 3000;
-const MAX_PLAY_RETRIES = 2;
-
+/**
+ * Web playback engine.
+ *
+ * Direct-play uses raw HTML5 `<audio>`: setting `src` + `play()` streams
+ * progressively and starts on the first buffered chunk (instant start), is
+ * browser-managed and reliable, and plays straight from the proxy/disk cache.
+ * A second `<audio>` element buffers the *next* track ahead of time so the
+ * transition is near-gapless (a tiny gap is possible — not sample-accurate).
+ *
+ * Transcoded tracks use hls.js attached to the same active element.
+ *
+ * Only the active (`current`) element drives the callbacks; the other element
+ * is purely a look-ahead buffer, so its events are ignored until we swap to it.
+ */
 export class WebPlaybackEngine implements PlaybackEngine {
-  private gapless: Gapless5 | null = null;
-  private audio: HTMLAudioElement | null = null;
+  private current: HTMLAudioElement;
+  private next: HTMLAudioElement;
+  private nextReady = false; // `next` holds a preloaded direct src
   private hls: Hls | null = null;
-  private mode: "direct" | "hls" | null = null;
+  private mode: "direct" | "hls" = "direct";
 
   private positionCb: (s: number) => void = () => {};
   private advancedCb: Cb0 = () => {};
@@ -29,76 +30,72 @@ export class WebPlaybackEngine implements PlaybackEngine {
   private errorCb: (e: Error) => void = () => {};
   private volume = 1;
 
-  // Play watchdog state (direct tracks only).
-  private currentRef: StreamRef | null = null;
-  /** True once the current track has actually produced audio progress. */
-  private progressed = false;
-  private watchdog: ReturnType<typeof setTimeout> | null = null;
-  private retries = 0;
+  constructor() {
+    this.current = new Audio();
+    this.next = new Audio();
+    this.wire(this.current);
+    this.wire(this.next);
+  }
+
+  private wire(el: HTMLAudioElement): void {
+    el.preload = "auto";
+    el.volume = this.volume;
+    el.addEventListener("timeupdate", () => {
+      if (el === this.current) this.positionCb(el.currentTime);
+    });
+    el.addEventListener("ended", () => {
+      if (el === this.current) this.handleCurrentEnded();
+    });
+    el.addEventListener("error", () => {
+      if (el === this.current && el.currentSrc) {
+        this.errorCb(new Error(`audio error (code ${el.error?.code ?? "?"})`));
+      }
+    });
+  }
 
   // --- core PlaybackEngine ---
 
   async load(ref: StreamRef): Promise<void> {
-    console.log("[musex-debug] engine.load", ref.kind, scrub(ref.url));
-    this.currentRef = ref;
-    this.retries = 0;
     if (ref.kind === "direct") {
       this.teardownHls();
       this.mode = "direct";
-      this.playDirect(ref.url);
-      this.armWatchdog();
+      this.clearNext();
+      this.current.src = ref.url;
+      void this.current.play(); // progressive — starts as the stream buffers
     } else {
-      this.clearWatchdog();
-      this.teardownGaplessPlayback();
-      await this.loadHls(ref.url);
       this.mode = "hls";
+      this.current.pause();
+      this.clearNext();
+      await this.loadHls(ref.url);
     }
-  }
-
-  /** (Re)load a direct track into gapless and play from the start. */
-  private playDirect(url: string): void {
-    const g = this.ensureGapless();
-    g.removeAllTracks();
-    g.addTrack(url);
-    g.gotoTrack(0, true);
   }
 
   async preload(ref: StreamRef): Promise<void> {
-    console.log(
-      "[musex-debug] engine.preload",
-      ref.kind,
-      this.mode,
-      this.gapless?.getTracks?.().length ?? "n/a",
-      scrub(ref.url),
-    );
-    // Gapless only applies to direct tracks queued behind a direct current track.
-    if (ref.kind === "direct" && this.mode === "direct" && this.gapless) {
-      this.gapless.addTrack(ref.url); // buffered ahead; loadLimit bounds memory
+    // Buffer the next direct track ahead for a near-gapless swap.
+    if (ref.kind === "direct" && this.mode === "direct") {
+      this.next.src = ref.url;
+      this.next.load();
+      this.nextReady = true;
     }
-    // For hls next-tracks there is no gapless preload; the session's onEnded
-    // fallback will load() the next track when the current one finishes.
+    // HLS next-tracks aren't preloaded; the session's onEnded fallback load()s them.
   }
 
   play(): void {
-    if (this.mode === "hls") void this.audio?.play();
-    else this.gapless?.play();
+    void this.current.play();
   }
+
   pause(): void {
-    this.clearWatchdog(); // intentional non-progress — don't let the watchdog retry
-    if (this.mode === "hls") this.audio?.pause();
-    else this.gapless?.pause();
+    this.current.pause();
   }
+
   seek(seconds: number): void {
-    if (this.mode === "hls") {
-      if (this.audio) this.audio.currentTime = seconds;
-    } else {
-      this.gapless?.setPosition(seconds * 1000); // gapless-5 uses ms
-    }
+    this.current.currentTime = seconds;
   }
+
   setVolume(v: number): void {
     this.volume = v;
-    this.gapless?.setVolume(v);
-    if (this.audio) this.audio.volume = v;
+    this.current.volume = v;
+    this.next.volume = v;
   }
 
   onPosition(cb: (s: number) => void): void {
@@ -114,89 +111,39 @@ export class WebPlaybackEngine implements PlaybackEngine {
     this.errorCb = cb;
   }
 
-  // --- gapless-5 wiring ---
+  // --- internals ---
 
-  private ensureGapless(): Gapless5 {
-    if (this.gapless) return this.gapless;
-    const g = new Gapless5({
-      // HTML5-only: progressive playback starts as soon as the stream begins
-      // buffering (instant start), is browser-managed and reliable, and benefits
-      // from the prefetch/disk cache. The Web Audio path was disabled because it
-      // fully downloads + decodes each file before playing — slow over the network
-      // and destabilizing when a load stalls. Trade-off: transitions are
-      // near-gapless (a tiny gap is possible) rather than sample-accurate.
-      // loadLimit caps concurrency to current + next.
-      useWebAudio: false,
-      useHTML5Audio: true,
-      loadLimit: 2,
-      volume: this.volume,
-    });
-    // ontimeupdate receives (current_track_time_ms, current_track_index) — we only need the first
-    g.ontimeupdate = (ms: number, _index: number) => {
-      // Real audio progress -> the track actually started; cancel the watchdog.
-      if (ms > 200) {
-        this.progressed = true;
-        this.clearWatchdog();
-      }
-      this.positionCb(ms / 1000);
-    };
-    // onnext fires on gapless auto-advance into the preloaded track -> tell the session
-    // receives (from_track, to_track) — we don't need either
-    g.onnext = (from: string, to: string) => {
-      console.log("[musex-debug] gapless onnext", scrub(from), "->", scrub(to));
-      this.advancedCb();
-    };
-    // onfinishedall fires only at the true end of the gapless list
-    g.onfinishedall = () => {
-      console.log("[musex-debug] gapless onfinishedall");
+  private handleCurrentEnded(): void {
+    if (this.mode === "hls") {
       this.endedCb();
-    };
-    g.onerror = (path: string, err?: Error | string) => {
-      console.log("[musex-debug] gapless onerror", scrub(path), scrub(String(err ?? "")));
-      this.errorCb(err instanceof Error ? err : new Error(String(err ?? "audio error")));
-    };
-    this.gapless = g;
-    return g;
-  }
-
-  // --- play watchdog: recover from a silent HTML5 stall ---
-  // Occasionally an HTML5 audio load stalls and never starts, with no 'error'
-  // event. If a freshly-loaded direct track produces no audio progress within
-  // the window, re-issue the load — which re-requests through the proxy (served
-  // from the disk cache if present, else downloaded). Give up after a few tries
-  // and surface an error so the session leaves the stuck state.
-
-  private armWatchdog(): void {
-    this.clearWatchdog();
-    this.progressed = false;
-    this.watchdog = setTimeout(() => this.onWatchdog(), PLAY_WATCHDOG_MS);
-  }
-
-  private clearWatchdog(): void {
-    if (this.watchdog !== null) {
-      clearTimeout(this.watchdog);
-      this.watchdog = null;
-    }
-  }
-
-  private onWatchdog(): void {
-    this.watchdog = null;
-    if (this.progressed || this.mode !== "direct" || !this.currentRef) return;
-    if (this.retries >= MAX_PLAY_RETRIES) {
-      console.log("[musex-debug] watchdog gave up", scrub(this.currentRef.url));
-      this.errorCb(new Error("Track failed to start playing"));
       return;
     }
-    this.retries += 1;
-    console.log("[musex-debug] watchdog retry", this.retries, scrub(this.currentRef.url));
-    this.playDirect(this.currentRef.url); // re-request via the proxy (cache or download)
-    this.armWatchdog();
+    if (this.nextReady) {
+      // Swap to the preloaded element for a near-gapless transition.
+      const finished = this.current;
+      this.current = this.next;
+      this.next = finished;
+      this.nextReady = false;
+      this.clearNext(); // reset the just-finished element (now the look-ahead buffer)
+      this.current.volume = this.volume;
+      void this.current.play();
+      this.advancedCb(); // session advances its index + preloads the new next
+    } else {
+      this.endedCb();
+    }
   }
 
-  // --- hls.js wiring ---
+  private clearNext(): void {
+    this.nextReady = false;
+    this.next.pause();
+    this.next.removeAttribute("src");
+    this.next.load(); // abandon any buffered data
+  }
+
+  // --- hls.js (transcode) ---
 
   private async loadHls(url: string): Promise<void> {
-    const audio = this.ensureAudio();
+    this.teardownHls();
     const hls = new Hls({ enableWorker: true });
     this.hls = hls;
     await new Promise<void>((resolve, reject) => {
@@ -204,29 +151,16 @@ export class WebPlaybackEngine implements PlaybackEngine {
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) reject(new Error(`hls: ${data.details}`));
       });
-      hls.attachMedia(audio);
+      hls.attachMedia(this.current);
       hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
     }).catch((e: Error) => this.errorCb(e));
-    void audio.play();
-  }
-
-  private ensureAudio(): HTMLAudioElement {
-    if (this.audio) return this.audio;
-    const a = new Audio();
-    a.volume = this.volume;
-    a.addEventListener("timeupdate", () => this.positionCb(a.currentTime));
-    a.addEventListener("ended", () => this.endedCb());
-    a.addEventListener("error", () => this.errorCb(new Error("audio element error")));
-    this.audio = a;
-    return a;
+    void this.current.play();
   }
 
   private teardownHls(): void {
-    this.hls?.destroy();
-    this.hls = null;
-    this.audio?.pause();
-  }
-  private teardownGaplessPlayback(): void {
-    this.gapless?.stop();
+    if (this.hls) {
+      this.hls.destroy();
+      this.hls = null;
+    }
   }
 }
