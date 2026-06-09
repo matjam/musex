@@ -9,6 +9,8 @@ import type { StreamRef } from "./stream-resolver";
  *  with nothing buffered to continue (true end of content). Manual skips go through
  *  `load()` (teardown + reload; a tiny gap is acceptable). */
 export interface PlaybackEngine {
+  /** Prepare a track for playback. `load()` does NOT start playback — it only
+   *  prepares the track; the caller must call `play()` to start. */
   load(ref: StreamRef): Promise<void>;
   preload(ref: StreamRef): Promise<void>;
   play(): void;

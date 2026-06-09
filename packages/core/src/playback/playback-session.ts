@@ -77,6 +77,35 @@ export class PlaybackSession {
     await this.playIndex(queue.index);
   }
 
+  /** Restore a previously-persisted queue, paused at `positionSec`, without
+   *  auto-playing (load() is prepare-only). Loads the current track, seeks to the
+   *  saved position, leaves status "paused", and preloads the next track.
+   *  We do not persist the pre-shuffle order, so a restored shuffled queue treats
+   *  its current order as the base (unshuffled = null). */
+  async restore(queue: Queue, positionSec: number): Promise<void> {
+    if (queue.tracks.length === 0) return;
+    const index = Math.min(Math.max(queue.index, 0), queue.tracks.length - 1);
+    const track = queue.tracks[index];
+    if (!track) return;
+    this.unshuffled = null;
+    const token = ++this.loadToken;
+    this.preloadedIndex = null;
+    this.patch({
+      queue: { ...queue, index },
+      status: "paused",
+      positionSec,
+      durationSec: track.durationMs / 1000,
+      error: null,
+    });
+    const ref = await this.resolver.resolve(track);
+    if (token !== this.loadToken) return;
+    await this.engine.load(ref);
+    if (token !== this.loadToken) return;
+    this.engine.seek(positionSec);
+    this.patch({ status: "paused", positionSec });
+    await this.preloadNext();
+  }
+
   async playIndex(index: number): Promise<void> {
     const queue = this.state.queue;
     if (!queue) return;

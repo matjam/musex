@@ -157,6 +157,48 @@ describe("PlaybackSession", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// restore()
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("PlaybackSession — restore()", () => {
+  it("restore() loads the current track paused at the saved position, no autoplay", async () => {
+    const engine = new FakePlaybackEngine();
+    const resolver = new FakeStreamResolver();
+    const session = new PlaybackSession(engine, resolver);
+    const tracks = [makeTrack("a"), makeTrack("b"), makeTrack("c")];
+    const queue = { tracks, index: 1, shuffle: false, repeat: "none" as const };
+
+    await session.restore(queue, 42);
+
+    const s = session.getState();
+    expect(s.status).toBe("paused");
+    expect(s.queue?.index).toBe(1);
+    expect(s.positionSec).toBe(42);
+    expect(engine.loaded.at(-1)?.url).toBe("fake://stream/b");
+    expect(engine.seekCalls).toContain(42);
+    expect(engine.playCalls).toBe(0);
+    expect(engine.preloaded.at(-1)?.url).toBe("fake://stream/c");
+  });
+
+  it("restore() clamps an out-of-bounds index", async () => {
+    const engine = new FakePlaybackEngine();
+    const session = new PlaybackSession(engine, new FakeStreamResolver());
+    const tracks = [makeTrack("a"), makeTrack("b")];
+    await session.restore({ tracks, index: 99, shuffle: false, repeat: "none" }, 0);
+    expect(session.getState().queue?.index).toBe(1);
+    expect(engine.loaded.at(-1)?.url).toBe("fake://stream/b");
+  });
+
+  it("restore() is a no-op for an empty queue", async () => {
+    const engine = new FakePlaybackEngine();
+    const session = new PlaybackSession(engine, new FakeStreamResolver());
+    await session.restore({ tracks: [], index: 0, shuffle: false, repeat: "none" }, 0);
+    expect(session.getState().queue).toBeNull();
+    expect(engine.loaded).toHaveLength(0);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Repeat mode tests
 // ──────────────────────────────────────────────────────────────────────────────
 
