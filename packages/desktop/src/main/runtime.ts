@@ -12,7 +12,11 @@ import { SafeStorageTokenStore } from "./adapters/token-store.js";
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
 
 export class Runtime {
-  private readonly realGateway = new PlexapiGateway();
+  private readonly realGateway = new PlexapiGateway({
+    get: (id) => persistence.getServerUrl(id),
+    set: (id, url) => persistence.setServerUrl(id, url),
+    delete: (id) => persistence.deleteServerUrl(id),
+  });
   readonly listCache = new ListCacheStore(path.join(app.getPath("userData"), "list-cache"));
   readonly gateway = new CachingPlexGateway(this.realGateway, this.listCache);
   readonly tokenStore = new SafeStorageTokenStore();
@@ -69,7 +73,9 @@ export class Runtime {
    *  Uses the cached gateway connection — no extra network round-trip after first browse. */
   async ensureProxyEndpoint(serverId: string): Promise<void> {
     if (this.registeredServers.has(serverId)) return;
+    const t = Date.now();
     const ep = await this.gateway.endpoint(serverId, this.requireToken());
+    console.log("[musex-startup] ensureProxyEndpoint", serverId, Date.now() - t, "ms");
     this.proxy.registerServer(serverId, ep);
     this.registeredServers.add(serverId);
   }

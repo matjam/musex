@@ -2,13 +2,13 @@ import type {
   MusicSection,
   Album as PlexAlbum,
   Artist as PlexArtist,
-  PlexServer,
   Track as PlexTrack,
 } from "@ctrl/plex";
 import {
   MyPlexAccount,
   Album as PlexAlbumCls,
   Playlist as PlexPlaylistCls,
+  PlexServer,
   Track as PlexTrackCls,
   X_PLEX_IDENTIFIER,
 } from "@ctrl/plex";
@@ -50,10 +50,28 @@ function asPlexAuthError(err: unknown): never {
   throw err;
 }
 
+/** Persists each server's last known-good base URL so we can skip @ctrl/plex's
+ *  slow connection probe on subsequent launches. Backed by electron-store in the
+ *  real app; trivially fakeable in tests. */
+export interface ServerUrlCache {
+  get(serverId: string): string | undefined;
+  set(serverId: string, baseUrl: string): void;
+  delete(serverId: string): void;
+}
+
+/** Bound for both the cached-URL reachability check and the discovery probe, so
+ *  an unreachable URL fails fast instead of hanging ~10s. */
+const CONNECT_TIMEOUT_MS = 4000;
+
 export class PlexapiGateway implements PlexGateway {
   /** Cache connected PlexServer objects by Plex machine identifier so browse
    *  calls reuse the same connection within a gateway instance lifetime. */
   private readonly serverCache = new Map<string, PlexServer>();
+  /** De-dupes concurrent connect() calls for the same server (e.g. a browse +
+   *  a playback restore racing on launch) onto a single network operation. */
+  private readonly inflight = new Map<string, Promise<PlexServer>>();
+
+  constructor(private readonly urlCache?: ServerUrlCache) {}
 
   async createPin(): Promise<Pin> {
     // WebLogin shape: { id: number, code: string, uri: string }
@@ -390,16 +408,52 @@ export class PlexapiGateway implements PlexGateway {
     return new MyPlexAccount({ token });
   }
 
-  /** Connect to a Plex server by its machine identifier, caching the result. */
+  /** Connect to a Plex server by its machine identifier, caching the result.
+   *  Reuses the in-session connection, de-dupes concurrent connects, and prefers
+   *  the persisted base URL to skip @ctrl/plex's slow connection probe. */
   private async connect(serverId: string, token: string): Promise<PlexServer> {
     const cached = this.serverCache.get(serverId);
     if (cached) return cached;
+    const pending = this.inflight.get(serverId);
+    if (pending) return pending;
+    const p = this.doConnect(serverId, token);
+    this.inflight.set(serverId, p);
+    try {
+      return await p;
+    } finally {
+      this.inflight.delete(serverId);
+    }
+  }
+
+  private async doConnect(serverId: string, token: string): Promise<PlexServer> {
+    // Fast path: reuse the last working base URL (skips the ~10s probe). Validate
+    // with one cheap, timeout-bounded query; if it's stale (e.g. network changed)
+    // drop it and fall through to full discovery.
+    const cachedUrl = this.urlCache?.get(serverId);
+    if (cachedUrl) {
+      const server = new PlexServer(cachedUrl, token, CONNECT_TIMEOUT_MS);
+      try {
+        const tq = Date.now();
+        await server.query({ path: "/" });
+        console.log("[musex-startup] cached-url connect", Date.now() - tq, "ms ->", cachedUrl);
+        this.serverCache.set(serverId, server);
+        return server;
+      } catch {
+        console.log("[musex-startup] cached-url stale, rediscovering ->", cachedUrl);
+        this.urlCache?.delete(serverId);
+      }
+    }
 
     const account = this.account(token);
+    const tr = Date.now();
     const resources = await account.resources();
+    console.log("[musex-startup] account.resources()", Date.now() - tr, "ms");
     const resource = resources.find((r) => r.clientIdentifier === serverId);
     if (!resource) throw new Error(`Plex server ${serverId} not found for this account`);
-    const plexServer = await resource.connect();
+    const tc = Date.now();
+    const plexServer = await resource.connect(null, CONNECT_TIMEOUT_MS);
+    console.log("[musex-startup] resource.connect()", Date.now() - tc, "ms ->", plexServer.baseurl);
+    this.urlCache?.set(serverId, plexServer.baseurl);
     this.serverCache.set(serverId, plexServer);
     return plexServer;
   }

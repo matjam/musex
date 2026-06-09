@@ -8,6 +8,10 @@ export interface PersistedState {
   volume: number;
   cacheEnabled: boolean;
   cacheMaxBytes: number;
+  // Last known-good base URL per Plex server (machineIdentifier -> URL). Lets us
+  // skip @ctrl/plex's slow connection probe on startup — we connect straight to
+  // the cached URL and only rediscover if it's unreachable.
+  serverUrls: Record<string, string>;
 }
 
 /** Default local-cache cap: 5 GiB. */
@@ -20,6 +24,7 @@ const store = new Store<PersistedState>({
     volume: 1,
     cacheEnabled: false,
     cacheMaxBytes: DEFAULT_CACHE_MAX_BYTES,
+    serverUrls: {},
   },
 });
 
@@ -88,5 +93,16 @@ export const persistence = {
   },
   setPlaybackCursor(cursor: PlaybackCursor): void {
     cursorStore.set("cursor", cursor);
+  },
+  getServerUrl(serverId: string): string | undefined {
+    return store.get("serverUrls")[serverId];
+  },
+  setServerUrl(serverId: string, baseUrl: string): void {
+    store.set("serverUrls", { ...store.get("serverUrls"), [serverId]: baseUrl });
+  },
+  deleteServerUrl(serverId: string): void {
+    const all = { ...store.get("serverUrls") };
+    delete all[serverId];
+    store.set("serverUrls", all);
   },
 };

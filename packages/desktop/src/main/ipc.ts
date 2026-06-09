@@ -13,18 +13,32 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.signInPoll, () => rt.signInPoll());
 
   ipcMain.handle(IPC.restoreSession, async () => {
-    if (!rt.token) return { library: null };
+    const t0 = Date.now();
+    if (!rt.token) {
+      console.log("[musex-startup] restoreSession: no token (instant)", Date.now() - t0, "ms");
+      return { library: null };
+    }
     const lib = persistence.getLibrary();
     if (lib) {
       rt.libraries = [lib];
+      console.log(
+        "[musex-startup] restoreSession: persisted library (instant)",
+        Date.now() - t0,
+        "ms",
+      );
       return { library: lib }; // instant — no network
     }
     // Signed in but no library chosen yet: discover once.
+    console.log("[musex-startup] restoreSession: NO persisted library -> discovering (network)...");
     try {
       const result = await discoverMusicLibraries(rt.gateway, rt.token);
       rt.libraries = result.libraries;
-      return { library: result.libraries[0] ?? null };
-    } catch {
+      const first = result.libraries[0] ?? null;
+      if (first) persistence.setLibrary(first); // self-heal: next launch skips discovery
+      console.log("[musex-startup] restoreSession: discover done", Date.now() - t0, "ms");
+      return { library: first };
+    } catch (e) {
+      console.log("[musex-startup] restoreSession: discover FAILED", Date.now() - t0, "ms", e);
       return { library: null };
     }
   });
