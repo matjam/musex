@@ -1,3 +1,4 @@
+import { Disc3, Home, ListMusic, Mic2, Music, Search, Settings } from "lucide-react";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { AlbumDetailView } from "./views/AlbumDetailView";
@@ -49,7 +50,7 @@ export function Shell() {
         </div>
 
         <div className="nav-item dim">
-          <span className="nav-ic" />
+          <Home size={16} />
           Home
         </div>
         <button
@@ -57,7 +58,7 @@ export function Shell() {
           className={`nav-item${searchActive ? " active" : ""}`}
           onClick={() => dispatch({ type: "navigate", view: { name: "search" } })}
         >
-          <span className="nav-ic" />
+          <Search size={16} />
           Search
         </button>
 
@@ -68,7 +69,7 @@ export function Shell() {
           className={`nav-item${albumsActive ? " active" : ""} dim`}
           onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
         >
-          <span className="nav-ic" />
+          <Disc3 size={16} />
           Albums
         </button>
 
@@ -77,17 +78,18 @@ export function Shell() {
           className={`nav-item${artistsActive ? " active" : ""}`}
           onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
         >
-          <span className="nav-ic" />
+          <Mic2 size={16} />
           Artists
         </button>
 
         <div className="nav-item dim">
-          <span className="nav-ic" />
+          <Music size={16} />
           Tracks
         </div>
 
         <div className="playlist-rail">
           <div className="playlist-rail-head">
+            <ListMusic size={14} />
             <span>Playlists</span>
           </div>
           {playlists.map((p) => (
@@ -111,7 +113,7 @@ export function Shell() {
           className={`nav-item${settingsActive ? " active" : ""}`}
           onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
         >
-          <span className="nav-ic" />
+          <Settings size={16} />
           Settings
         </button>
 
