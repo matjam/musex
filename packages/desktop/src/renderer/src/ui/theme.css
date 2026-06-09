@@ -987,3 +987,12 @@ img.np-art {
 .search-input::placeholder {
   color: rgba(231, 233, 238, 0.4);
 }
+
+/* Stacked result groups flow within the single scrolling .search-page; they
+   size to content rather than each taking full height (the default
+   .browse-section is a sole-view container). */
+.search-page .browse-section {
+  height: auto;
+  overflow: visible;
+  padding: 0 0 22px;
+}
