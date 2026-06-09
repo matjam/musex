@@ -85,8 +85,9 @@ export function SettingsView() {
           <div className="settings-row-text">
             <div className="settings-row-label">Cache played tracks on this Mac</div>
             <div className="settings-row-desc">
-              Songs are saved to disk as they play and loaded locally next time, so repeat listens
-              don't re-stream from Plex. Only original (direct-play) files are cached.
+              Audio files are saved to disk as they play and loaded locally next time, so repeat
+              listens don't re-stream from Plex. Only original (direct-play) files are cached.
+              Artwork is always cached regardless of this setting.
             </div>
           </div>
           <button

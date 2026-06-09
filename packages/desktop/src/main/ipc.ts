@@ -102,8 +102,14 @@ export function registerIpc(rt: Runtime): void {
     }
     persistence.setCacheMaxBytes(bytes);
   });
-  ipcMain.handle(IPC.getCacheStats, () => rt.cache.stats());
-  ipcMain.handle(IPC.clearCache, async () => ({ freedBytes: await rt.cache.clear() }));
+  ipcMain.handle(IPC.getCacheStats, async () => {
+    const [audio, art] = await Promise.all([rt.cache.stats(), rt.artCache.stats()]);
+    return { bytes: audio.bytes + art.bytes, files: audio.files + art.files };
+  });
+  ipcMain.handle(IPC.clearCache, async () => {
+    const [audioFreed, artFreed] = await Promise.all([rt.cache.clear(), rt.artCache.clear()]);
+    return { freedBytes: audioFreed + artFreed };
+  });
 
   ipcMain.handle(IPC.listPlaylists, async (_e, libraryId: string) => {
     const lib = rt.findLibrary(libraryId);
