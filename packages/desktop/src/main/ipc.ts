@@ -60,6 +60,16 @@ export function registerIpc(rt: Runtime): void {
     const tracks = await rt.gateway.listTracks(lib, albumId, rt.requireToken());
     return tracks.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) }));
   });
+  ipcMain.handle(IPC.search, async (_e, libraryId: string, query: string) => {
+    const lib = rt.findLibrary(libraryId);
+    await rt.ensureProxyEndpoint(lib.serverId);
+    const results = await rt.gateway.search(lib, query, rt.requireToken());
+    return {
+      artists: results.artists.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) })),
+      albums: results.albums.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) })),
+      tracks: results.tracks.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) })),
+    };
+  });
 
   ipcMain.handle(IPC.resolveStream, async (_e, track: Track) => {
     await rt.ensureProxyEndpoint(track.serverId);

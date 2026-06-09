@@ -1,4 +1,4 @@
-import type { Album, Artist, Library, Server, StreamRef, Track } from "@musex/core";
+import type { Album, Artist, Library, SearchResults, Server, StreamRef, Track } from "@musex/core";
 
 export const IPC = {
   signInStart: "musex:signIn:start", // -> { code: string; authUrl: string }
@@ -9,6 +9,7 @@ export const IPC = {
   listArtists: "musex:listArtists", // (libraryId) -> Artist[]
   listAlbums: "musex:listAlbums", // (libraryId, artistId) -> Album[]
   listTracks: "musex:listTracks", // (libraryId, albumId) -> Track[]
+  search: "musex:search", // (libraryId, query) -> SearchResults
   resolveStream: "musex:resolveStream", // (track) -> StreamRef
   getVolume: "musex:getVolume", // -> number
   setVolume: "musex:setVolume", // (v) -> void
@@ -38,6 +39,7 @@ export interface MusexApi {
   listArtists(libraryId: string): Promise<Artist[]>;
   listAlbums(libraryId: string, artistId: string): Promise<Album[]>;
   listTracks(libraryId: string, albumId: string): Promise<Track[]>;
+  search(libraryId: string, query: string): Promise<SearchResults>;
   resolveStream(track: Track): Promise<StreamRef>;
   getVolume(): Promise<number>;
   setVolume(v: number): Promise<void>;

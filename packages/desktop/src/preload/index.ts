@@ -11,6 +11,7 @@ const api: MusexApi = {
   listArtists: (libraryId) => ipcRenderer.invoke(IPC.listArtists, libraryId),
   listAlbums: (libraryId, artistId) => ipcRenderer.invoke(IPC.listAlbums, libraryId, artistId),
   listTracks: (libraryId, albumId) => ipcRenderer.invoke(IPC.listTracks, libraryId, albumId),
+  search: (libraryId, query) => ipcRenderer.invoke(IPC.search, libraryId, query),
   resolveStream: (track) => ipcRenderer.invoke(IPC.resolveStream, track),
   getVolume: () => ipcRenderer.invoke(IPC.getVolume),
   setVolume: (v) => ipcRenderer.invoke(IPC.setVolume, v),
