@@ -11,5 +11,6 @@ export async function createPlaylist(
 ): Promise<Playlist> {
   const trimmed = title.trim();
   if (trimmed === "") throw new Error("Playlist title is required");
+  if (trackIds.length === 0) throw new Error("A playlist needs at least one track");
   return gateway.createPlaylist(library, trimmed, trackIds, token);
 }

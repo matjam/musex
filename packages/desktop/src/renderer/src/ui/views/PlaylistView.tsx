@@ -150,15 +150,14 @@ interface Props {
 export function PlaylistView({ playlist }: Props) {
   const { dispatch } = useApp();
   const { state, playTracks } = usePlayer();
-  const { rename, destroy } = usePlaylists();
+  const { playlists, rename, destroy } = usePlaylists();
+  const live = playlists.find((p) => p.id === playlist.id) ?? playlist;
 
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [actionsPos, setActionsPos] = useState<{ x: number; y: number } | null>(null);
-  // Local title tracks the header; the store's refresh() updates the sidebar rail.
-  const [localTitle, setLocalTitle] = useState(playlist.title);
 
   const load = useCallback(() => {
     setFetch({ status: "loading" });
@@ -177,11 +176,6 @@ export function PlaylistView({ playlist }: Props) {
     load();
   }, [load]);
 
-  // Sync localTitle when navigating to a different playlist.
-  useEffect(() => {
-    setLocalTitle(playlist.title);
-  }, [playlist.title]);
-
   const playingTrackId =
     state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
 
@@ -192,7 +186,6 @@ export function PlaylistView({ playlist }: Props) {
 
   async function handleRename(newTitle: string) {
     await rename(playlist.id, playlist.serverId, newTitle);
-    setLocalTitle(newTitle);
   }
 
   async function handleDelete() {
@@ -203,10 +196,10 @@ export function PlaylistView({ playlist }: Props) {
   return (
     <div className="album-detail">
       <div className="album-header">
-        <AlbumArt thumb={playlist.thumb} className="album-header-art" />
+        <AlbumArt thumb={live.thumb} className="album-header-art" />
         <div className="album-header-meta">
           <div className="album-meta-label">Playlist</div>
-          <h1 className="album-meta-title">{localTitle}</h1>
+          <h1 className="album-meta-title">{live.title}</h1>
           <div className="album-meta-by">
             {fetch.status === "ok" && (
               <span className="album-meta-muted">
@@ -303,7 +296,7 @@ export function PlaylistView({ playlist }: Props) {
 
       {renaming && (
         <RenameDialog
-          current={localTitle}
+          current={live.title}
           onClose={() => setRenaming(false)}
           onConfirm={handleRename}
         />

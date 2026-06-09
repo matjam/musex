@@ -30,4 +30,10 @@ describe("createPlaylist", () => {
     await expect(createPlaylist(g, library, "   ", [], "tok")).rejects.toThrow(/title/i);
     expect(createPlaylistFn).not.toHaveBeenCalled();
   });
+
+  it("rejects an empty trackIds array without calling the gateway", async () => {
+    const { g, createPlaylistFn } = gateway();
+    await expect(createPlaylist(g, library, "Road Trip", [], "tok")).rejects.toThrow(/track/i);
+    expect(createPlaylistFn).not.toHaveBeenCalled();
+  });
 });
