@@ -9,6 +9,8 @@ import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 
+const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
+
 export class Runtime {
   private readonly realGateway = new PlexapiGateway();
   readonly listCache = new ListCacheStore(path.join(app.getPath("userData"), "list-cache"));
@@ -16,6 +18,7 @@ export class Runtime {
   readonly tokenStore = new SafeStorageTokenStore();
   readonly proxy = new StreamProxy();
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
+  readonly artCache = new MediaCache(path.join(app.getPath("userData"), "art-cache"));
   token: string | null = null;
   libraries: Library[] = [];
 
@@ -29,6 +32,8 @@ export class Runtime {
       enabled: persistence.getCacheEnabled(),
       maxBytes: persistence.getCacheMaxBytes(),
     }));
+    await this.artCache.init();
+    this.proxy.setArtCache(this.artCache, ART_CACHE_MAX_BYTES);
     await this.proxy.start();
   }
 
