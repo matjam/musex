@@ -1,7 +1,9 @@
-import type { LibrarySort, Track } from "@musex/core";
+import type { LibrarySort, Queue, Track } from "@musex/core";
 import { createPlaylist, discoverMusicLibraries } from "@musex/core";
 import { ipcMain } from "electron";
+import { parseProxyPath } from "../logic/proxy-url.js";
 import { chooseStreamKind } from "../logic/stream-kind.js";
+import type { LoadPlaybackResult, PlaybackCursorDto } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
 import type { Runtime } from "./runtime.js";
@@ -81,6 +83,49 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.resolveStream, async (_e, track: Track) => {
     await rt.ensureProxyEndpoint(track.serverId);
     return rt.proxy.resolve(track);
+  });
+
+  // Persist the queue with thumbs normalized to raw Plex paths (no per-launch
+  // proxy secret on disk).
+  ipcMain.handle(IPC.savePlaybackQueue, (_e, tracks: Track[]) => {
+    const normalized = tracks.map((t) => {
+      if (!t.thumb) return t;
+      const parsed = parseProxyPath(t.thumb);
+      return parsed ? { ...t, thumb: parsed.plexPath } : t;
+    });
+    persistence.setPlaybackQueue(normalized);
+  });
+
+  ipcMain.handle(IPC.savePlaybackCursor, (_e, cursor: PlaybackCursorDto) => {
+    persistence.setPlaybackCursor(cursor);
+  });
+
+  // Re-bake thumbs with the CURRENT secret/port and ensure the proxy endpoint(s)
+  // for the restored server(s), so restored art + the eventual play both work.
+  ipcMain.handle(IPC.loadPlayback, async (): Promise<LoadPlaybackResult> => {
+    const tracks = persistence.getPlaybackQueue();
+    const cursor = persistence.getPlaybackCursor();
+    if (!tracks || tracks.length === 0 || !cursor) return null;
+
+    const servers = new Set(tracks.map((t) => t.serverId));
+    for (const serverId of servers) {
+      try {
+        await rt.ensureProxyEndpoint(serverId);
+      } catch {
+        // best-effort: art/play for an unreachable server degrade, not crash
+      }
+    }
+    const rebaked = tracks.map((t) =>
+      t.thumb ? { ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) } : t,
+    );
+    const index = Math.min(Math.max(cursor.index, 0), rebaked.length - 1);
+    const queue: Queue = {
+      tracks: rebaked,
+      index,
+      shuffle: cursor.shuffle,
+      repeat: cursor.repeat,
+    };
+    return { queue, positionSec: cursor.positionSec };
   });
 
   ipcMain.handle(IPC.getVolume, () => persistence.getVolume());

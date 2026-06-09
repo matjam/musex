@@ -44,6 +44,9 @@ const api: MusexApi = {
   deletePlaylist: (playlistId, serverId) =>
     ipcRenderer.invoke(IPC.deletePlaylist, playlistId, serverId),
   prefetch: (tracks) => ipcRenderer.invoke(IPC.prefetch, tracks),
+  savePlaybackQueue: (tracks) => ipcRenderer.invoke(IPC.savePlaybackQueue, tracks),
+  savePlaybackCursor: (cursor) => ipcRenderer.invoke(IPC.savePlaybackCursor, cursor),
+  loadPlayback: () => ipcRenderer.invoke(IPC.loadPlayback),
 };
 
 contextBridge.exposeInMainWorld("musex", api);

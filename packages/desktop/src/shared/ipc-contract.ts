@@ -5,6 +5,8 @@ import type {
   LibrarySort,
   Playlist,
   PlaylistTrack,
+  Queue,
+  RepeatMode,
   SearchResults,
   Server,
   StreamRef,
@@ -41,6 +43,9 @@ export const IPC = {
   renamePlaylist: "musex:renamePlaylist", // (playlistId, serverId, title) -> void
   deletePlaylist: "musex:deletePlaylist", // (playlistId, serverId) -> void
   prefetch: "musex:prefetch", // (tracks: Track[]) -> void
+  savePlaybackQueue: "musex:playback:saveQueue", // (tracks: Track[]) -> void
+  savePlaybackCursor: "musex:playback:saveCursor", // (cursor: PlaybackCursorDto) -> void
+  loadPlayback: "musex:playback:load", // -> LoadPlaybackResult
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -51,6 +56,13 @@ export type RestoreSessionResult = { library: Library | null };
 export type Preferences = { cacheEnabled: boolean; cacheMaxBytes: number };
 export type CacheStats = { bytes: number; files: number };
 export type ClearCacheResult = { freedBytes: number };
+export type PlaybackCursorDto = {
+  index: number;
+  positionSec: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
+};
+export type LoadPlaybackResult = { queue: Queue; positionSec: number } | null;
 
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
@@ -101,4 +113,7 @@ export interface MusexApi {
   renamePlaylist(playlistId: string, serverId: string, title: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string): Promise<void>;
   prefetch(tracks: Track[]): Promise<void>;
+  savePlaybackQueue(tracks: Track[]): Promise<void>;
+  savePlaybackCursor(cursor: PlaybackCursorDto): Promise<void>;
+  loadPlayback(): Promise<LoadPlaybackResult>;
 }
