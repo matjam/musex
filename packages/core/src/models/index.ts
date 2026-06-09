@@ -65,3 +65,20 @@ export interface SearchResults {
   albums: Album[];
   tracks: Track[];
 }
+
+export interface Playlist {
+  id: string; // Plex playlist ratingKey
+  serverId: string;
+  title: string;
+  trackCount: number;
+  durationMs?: number;
+  thumb?: string;
+}
+
+/** A track as it appears inside a playlist: the track plus its identity within
+ *  that playlist (Plex playlistItemID), needed to remove the right row even when
+ *  the same track appears more than once. */
+export interface PlaylistTrack {
+  track: Track;
+  playlistItemId: string;
+}

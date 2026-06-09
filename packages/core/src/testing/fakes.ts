@@ -1,4 +1,4 @@
-import type { Album, Artist, Library, SearchResults, Server, Track } from "../models/index";
+import type { Album, Artist, Library, Playlist, PlaylistTrack, SearchResults, Server, Track } from "../models/index";
 import type { PlaybackEngine } from "../ports/playback-engine";
 import type { Pin, PlexGateway } from "../ports/plex-gateway";
 import { PlexAuthError } from "../ports/plex-gateway";
@@ -32,6 +32,8 @@ export class FakePlexGateway implements PlexGateway {
   readonly authErrorServerIds = new Set<string>();
   createPinCalls = 0;
   private pollIdx = 0;
+  private playlists = new Map<string, { playlist: Playlist; items: PlaylistTrack[] }>();
+  private playlistIdCounter = 0;
 
   async createPin(): Promise<Pin> {
     this.createPinCalls++;
@@ -73,6 +75,69 @@ export class FakePlexGateway implements PlexGateway {
       albums: allAlbums.filter((a) => a.title.toLowerCase().includes(q)),
       tracks: allTracks.filter((t) => t.title.toLowerCase().includes(q)),
     };
+  }
+
+  async listPlaylists(library: Library, _token: string): Promise<Playlist[]> {
+    return [...this.playlists.values()]
+      .filter((entry) => entry.playlist.serverId === library.serverId)
+      .map((entry) => entry.playlist);
+  }
+
+  async listPlaylistTracks(playlistId: string, _serverId: string, _token: string): Promise<PlaylistTrack[]> {
+    return this.playlists.get(playlistId)?.items ?? [];
+  }
+
+  async createPlaylist(library: Library, title: string, trackIds: string[], _token: string): Promise<Playlist> {
+    const plId = `pl-${++this.playlistIdCounter}`;
+    const allTracks = [...this.tracks.values()].flat();
+    const items: PlaylistTrack[] = trackIds
+      .map((id, i) => {
+        const track = allTracks.find((t) => t.id === id);
+        if (!track) return null;
+        return { track, playlistItemId: `${plId}-${i}` };
+      })
+      .filter((item): item is PlaylistTrack => item !== null);
+    const playlist: Playlist = {
+      id: plId,
+      serverId: library.serverId,
+      title,
+      trackCount: items.length,
+    };
+    this.playlists.set(plId, { playlist, items });
+    return playlist;
+  }
+
+  async addToPlaylist(playlistId: string, _serverId: string, trackIds: string[], _token: string): Promise<void> {
+    const entry = this.playlists.get(playlistId);
+    if (!entry) return;
+    const allTracks = [...this.tracks.values()].flat();
+    const startIdx = entry.items.length;
+    const newItems: PlaylistTrack[] = trackIds
+      .map((id, i) => {
+        const track = allTracks.find((t) => t.id === id);
+        if (!track) return null;
+        return { track, playlistItemId: `${playlistId}-${startIdx + i}` };
+      })
+      .filter((item): item is PlaylistTrack => item !== null);
+    entry.items.push(...newItems);
+    entry.playlist = { ...entry.playlist, trackCount: entry.items.length };
+  }
+
+  async removeFromPlaylist(playlistId: string, _serverId: string, playlistItemIds: string[], _token: string): Promise<void> {
+    const entry = this.playlists.get(playlistId);
+    if (!entry) return;
+    entry.items = entry.items.filter((item) => !playlistItemIds.includes(item.playlistItemId));
+    entry.playlist = { ...entry.playlist, trackCount: entry.items.length };
+  }
+
+  async renamePlaylist(playlistId: string, _serverId: string, title: string, _token: string): Promise<void> {
+    const entry = this.playlists.get(playlistId);
+    if (!entry) return;
+    entry.playlist = { ...entry.playlist, title };
+  }
+
+  async deletePlaylist(playlistId: string, _serverId: string, _token: string): Promise<void> {
+    this.playlists.delete(playlistId);
   }
 }
 
