@@ -85,9 +85,13 @@ export class PlaybackSession {
 
     const token = ++this.loadToken;
     this.preloadedIndex = null;
+    console.log("[musex-debug] playIndex", index, "token", token, "track", track.title);
     this.patch({ queue: { ...queue, index }, status: "loading", positionSec: 0 });
     const ref = await this.resolver.resolve(track);
-    if (token !== this.loadToken) return; // superseded by a newer load
+    if (token !== this.loadToken) {
+      console.log("[musex-debug] playIndex superseded after resolve", index, "token", token);
+      return; // superseded by a newer load
+    }
     await this.engine.load(ref);
     if (token !== this.loadToken) return; // superseded by a newer load
     this.engine.play();
@@ -364,6 +368,7 @@ export class PlaybackSession {
   private async handleAdvanced(): Promise<void> {
     const queue = this.state.queue;
     if (!queue) return;
+    console.log("[musex-debug] handleAdvanced from index", queue.index, "status", this.state.status);
     const nextIndex = this.computeNext(queue);
     if (nextIndex === null) return; // engine signalled advance but we have no next; onEnded will finalize
 

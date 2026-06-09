@@ -19,6 +19,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
   // --- core PlaybackEngine ---
 
   async load(ref: StreamRef): Promise<void> {
+    console.log("[musex-debug] engine.load", ref.kind, ref.url);
     if (ref.kind === "direct") {
       this.teardownHls();
       const g = this.ensureGapless();
@@ -34,6 +35,13 @@ export class WebPlaybackEngine implements PlaybackEngine {
   }
 
   async preload(ref: StreamRef): Promise<void> {
+    console.log(
+      "[musex-debug] engine.preload",
+      ref.kind,
+      this.mode,
+      this.gapless?.getTracks?.().length ?? "n/a",
+      ref.url,
+    );
     // Gapless only applies to direct tracks queued behind a direct current track.
     if (ref.kind === "direct" && this.mode === "direct" && this.gapless) {
       this.gapless.addTrack(ref.url); // buffered ahead; loadLimit bounds memory
@@ -93,11 +101,19 @@ export class WebPlaybackEngine implements PlaybackEngine {
     g.ontimeupdate = (ms: number, _index: number) => this.positionCb(ms / 1000);
     // onnext fires on gapless auto-advance into the preloaded track -> tell the session
     // receives (from_track, to_track) — we don't need either
-    g.onnext = (_from: string, _to: string) => this.advancedCb();
+    g.onnext = (from: string, to: string) => {
+      console.log("[musex-debug] gapless onnext", from, "->", to);
+      this.advancedCb();
+    };
     // onfinishedall fires only at the true end of the gapless list
-    g.onfinishedall = () => this.endedCb();
-    g.onerror = (_path: string, err?: Error | string) =>
+    g.onfinishedall = () => {
+      console.log("[musex-debug] gapless onfinishedall");
+      this.endedCb();
+    };
+    g.onerror = (path: string, err?: Error | string) => {
+      console.log("[musex-debug] gapless onerror", path, err);
       this.errorCb(err instanceof Error ? err : new Error(String(err ?? "audio error")));
+    };
     this.gapless = g;
     return g;
   }
