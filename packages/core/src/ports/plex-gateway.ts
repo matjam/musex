@@ -1,4 +1,13 @@
-import type { Album, Artist, Library, Playlist, PlaylistTrack, SearchResults, Server, Track } from "../models/index";
+import type {
+  Album,
+  Artist,
+  Library,
+  Playlist,
+  PlaylistTrack,
+  SearchResults,
+  Server,
+  Track,
+} from "../models/index";
 
 export interface Pin {
   id: string;
@@ -19,9 +28,24 @@ export interface PlexGateway {
   search(library: Library, query: string, token: string): Promise<SearchResults>;
   listPlaylists(library: Library, token: string): Promise<Playlist[]>;
   listPlaylistTracks(playlistId: string, serverId: string, token: string): Promise<PlaylistTrack[]>;
-  createPlaylist(library: Library, title: string, trackIds: string[], token: string): Promise<Playlist>;
-  addToPlaylist(playlistId: string, serverId: string, trackIds: string[], token: string): Promise<void>;
-  removeFromPlaylist(playlistId: string, serverId: string, playlistItemIds: string[], token: string): Promise<void>;
+  createPlaylist(
+    library: Library,
+    title: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<Playlist>;
+  addToPlaylist(
+    playlistId: string,
+    serverId: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<void>;
+  removeFromPlaylist(
+    playlistId: string,
+    serverId: string,
+    playlistItemIds: string[],
+    token: string,
+  ): Promise<void>;
   renamePlaylist(playlistId: string, serverId: string, title: string, token: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string, token: string): Promise<void>;
 }

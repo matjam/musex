@@ -1,4 +1,13 @@
-import type { Album, Artist, Library, Playlist, PlaylistTrack, SearchResults, Server, Track } from "../models/index";
+import type {
+  Album,
+  Artist,
+  Library,
+  Playlist,
+  PlaylistTrack,
+  SearchResults,
+  Server,
+  Track,
+} from "../models/index";
 import type { PlaybackEngine } from "../ports/playback-engine";
 import type { Pin, PlexGateway } from "../ports/plex-gateway";
 import { PlexAuthError } from "../ports/plex-gateway";
@@ -83,11 +92,20 @@ export class FakePlexGateway implements PlexGateway {
       .map((entry) => entry.playlist);
   }
 
-  async listPlaylistTracks(playlistId: string, _serverId: string, _token: string): Promise<PlaylistTrack[]> {
+  async listPlaylistTracks(
+    playlistId: string,
+    _serverId: string,
+    _token: string,
+  ): Promise<PlaylistTrack[]> {
     return this.playlists.get(playlistId)?.items ?? [];
   }
 
-  async createPlaylist(library: Library, title: string, trackIds: string[], _token: string): Promise<Playlist> {
+  async createPlaylist(
+    library: Library,
+    title: string,
+    trackIds: string[],
+    _token: string,
+  ): Promise<Playlist> {
     const plId = `pl-${++this.playlistIdCounter}`;
     const allTracks = [...this.tracks.values()].flat();
     const items: PlaylistTrack[] = trackIds
@@ -107,7 +125,12 @@ export class FakePlexGateway implements PlexGateway {
     return playlist;
   }
 
-  async addToPlaylist(playlistId: string, _serverId: string, trackIds: string[], _token: string): Promise<void> {
+  async addToPlaylist(
+    playlistId: string,
+    _serverId: string,
+    trackIds: string[],
+    _token: string,
+  ): Promise<void> {
     const entry = this.playlists.get(playlistId);
     if (!entry) return;
     const allTracks = [...this.tracks.values()].flat();
@@ -123,14 +146,24 @@ export class FakePlexGateway implements PlexGateway {
     entry.playlist = { ...entry.playlist, trackCount: entry.items.length };
   }
 
-  async removeFromPlaylist(playlistId: string, _serverId: string, playlistItemIds: string[], _token: string): Promise<void> {
+  async removeFromPlaylist(
+    playlistId: string,
+    _serverId: string,
+    playlistItemIds: string[],
+    _token: string,
+  ): Promise<void> {
     const entry = this.playlists.get(playlistId);
     if (!entry) return;
     entry.items = entry.items.filter((item) => !playlistItemIds.includes(item.playlistItemId));
     entry.playlist = { ...entry.playlist, trackCount: entry.items.length };
   }
 
-  async renamePlaylist(playlistId: string, _serverId: string, title: string, _token: string): Promise<void> {
+  async renamePlaylist(
+    playlistId: string,
+    _serverId: string,
+    title: string,
+    _token: string,
+  ): Promise<void> {
     const entry = this.playlists.get(playlistId);
     if (!entry) return;
     entry.playlist = { ...entry.playlist, title };

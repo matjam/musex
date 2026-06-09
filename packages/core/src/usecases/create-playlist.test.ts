@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Library, PlexGateway, Playlist } from "../index";
+import type { Library, Playlist, PlexGateway } from "../index";
 import { createPlaylist } from "./create-playlist";
 
 const library: Library = {
-  id: "1", serverId: "s1", serverName: "Kraken", title: "Music", type: "music",
+  id: "1",
+  serverId: "s1",
+  serverName: "Kraken",
+  title: "Music",
+  type: "music",
 };
 const made: Playlist = { id: "p1", serverId: "s1", title: "Road Trip", trackCount: 1 };
 

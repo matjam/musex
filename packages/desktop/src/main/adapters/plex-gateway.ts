@@ -8,6 +8,7 @@ import type {
 import {
   MyPlexAccount,
   Album as PlexAlbumCls,
+  Playlist as PlexPlaylistCls,
   Track as PlexTrackCls,
   X_PLEX_IDENTIFIER,
 } from "@ctrl/plex";
@@ -22,6 +23,8 @@ import type {
   Artist,
   Library,
   Pin,
+  Playlist,
+  PlaylistTrack,
   PlexGateway,
   SearchResults,
   Server,
@@ -174,6 +177,103 @@ export class PlexapiGateway implements PlexGateway {
     }
   }
 
+  async listPlaylists(library: Library, token: string): Promise<Playlist[]> {
+    try {
+      const section = await this.musicSection(library, token);
+      const all = await section.playlists();
+      return all.map((p) => toPlaylistSafe(p, library.serverId));
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async listPlaylistTracks(
+    playlistId: string,
+    serverId: string,
+    token: string,
+  ): Promise<PlaylistTrack[]> {
+    try {
+      const playlist = await this.findPlaylist(serverId, playlistId, token);
+      const items = await playlist.items<PlexTrack>();
+      return items.map((t) => ({
+        track: toTrackSafe(t, serverId),
+        playlistItemId: String(t.playlistItemID ?? ""),
+      }));
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async createPlaylist(
+    library: Library,
+    title: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<Playlist> {
+    try {
+      const server = await this.connect(library.serverId, token);
+      const items = await this.fetchTracksByIds(library.serverId, trackIds, token);
+      const created = await PlexPlaylistCls.create(server, title, { items });
+      return toPlaylistSafe(created, library.serverId);
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async addToPlaylist(
+    playlistId: string,
+    serverId: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<void> {
+    try {
+      const playlist = await this.findPlaylist(serverId, playlistId, token);
+      const tracks = await this.fetchTracksByIds(serverId, trackIds, token);
+      if (tracks.length > 0) await playlist.addItems(tracks);
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async removeFromPlaylist(
+    playlistId: string,
+    serverId: string,
+    playlistItemIds: string[],
+    token: string,
+  ): Promise<void> {
+    try {
+      const playlist = await this.findPlaylist(serverId, playlistId, token);
+      const items = await playlist.items<PlexTrack>();
+      const targets = items.filter((t) => playlistItemIds.includes(String(t.playlistItemID ?? "")));
+      if (targets.length > 0) await playlist.removeItems(targets);
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async renamePlaylist(
+    playlistId: string,
+    serverId: string,
+    title: string,
+    token: string,
+  ): Promise<void> {
+    try {
+      const server = await this.connect(serverId, token);
+      await PlexPlaylistCls.update(server, playlistId, { title });
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async deletePlaylist(playlistId: string, serverId: string, token: string): Promise<void> {
+    try {
+      const playlist = await this.findPlaylist(serverId, playlistId, token);
+      await playlist.delete();
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
   /** Return the working connection URL and token for a server, using the cached
    *  connection (cheap after the first browse call for that server). */
   async endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }> {
@@ -206,6 +306,36 @@ export class PlexapiGateway implements PlexGateway {
     const lib = await plexServer.library();
     return lib.sectionByID<MusicSection>(Number(library.id));
   }
+
+  /** Fetch hydrated Track instances for the given ratingKeys (for add/create). */
+  private async fetchTracksByIds(
+    serverId: string,
+    ids: string[],
+    token: string,
+  ): Promise<PlexTrack[]> {
+    if (ids.length === 0) return [];
+    const server = await this.connect(serverId, token);
+    return fetchItems(server, `/library/metadata/${ids.join(",")}`, undefined, PlexTrackCls);
+  }
+
+  /** Find a hydrated Playlist instance by ratingKey by listing all audio playlists
+   *  on the server (Plex playlists are server-global, not section-scoped). */
+  private async findPlaylist(
+    serverId: string,
+    playlistId: string,
+    token: string,
+  ): Promise<PlexPlaylistCls> {
+    const server = await this.connect(serverId, token);
+    const all = await fetchItems(
+      server,
+      "/playlists?type=15&playlistType=audio",
+      undefined,
+      PlexPlaylistCls,
+    );
+    const found = all.find((p) => String(p.ratingKey) === playlistId);
+    if (!found) throw new Error(`Playlist ${playlistId} not found`);
+    return found;
+  }
 }
 
 // --- thin adapters from @ctrl/plex concrete types to the mapper's raw interfaces ---
@@ -235,6 +365,18 @@ function toAlbumSafe(al: PlexAlbum, serverId: string): Album {
     },
     serverId,
   );
+}
+
+function toPlaylistSafe(p: PlexPlaylistCls, serverId: string): Playlist {
+  return {
+    id: String(p.ratingKey ?? ""),
+    serverId,
+    title: p.title ?? "",
+    trackCount: Number(p.leafCount ?? 0),
+    durationMs: typeof p.duration === "number" ? p.duration : undefined,
+    // composite is the playlist cover image (mosaic of track art); Playlist has no .thumb
+    thumb: p.composite || undefined,
+  };
 }
 
 function toTrackSafe(t: PlexTrack, serverId: string): Track {
