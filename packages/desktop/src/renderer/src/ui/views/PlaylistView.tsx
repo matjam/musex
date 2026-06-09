@@ -1,5 +1,6 @@
 import type { Playlist, PlaylistTrack } from "@musex/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { usePlaylists } from "../../state/playlists";
@@ -162,7 +163,11 @@ export function PlaylistView({ playlist }: Props) {
   const load = useCallback(() => {
     setFetch({ status: "loading" });
     window.musex
-      .listPlaylistTracks(playlist.id, playlist.serverId)
+      .listPlaylistTracks(
+        playlist.id,
+        playlist.serverId,
+        listValidator(live.updatedAt, live.trackCount),
+      )
       .then((items) => setFetch({ status: "ok", items }))
       .catch((err: unknown) =>
         setFetch({
@@ -170,7 +175,7 @@ export function PlaylistView({ playlist }: Props) {
           message: err instanceof Error ? err.message : "Failed to load tracks",
         }),
       );
-  }, [playlist.id, playlist.serverId]);
+  }, [playlist.id, playlist.serverId, live.updatedAt, live.trackCount]);
 
   useEffect(() => {
     load();

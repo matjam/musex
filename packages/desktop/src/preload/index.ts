@@ -8,9 +8,11 @@ const api: MusexApi = {
   restoreSession: () => ipcRenderer.invoke(IPC.restoreSession),
   discoverLibraries: () => ipcRenderer.invoke(IPC.discoverLibraries),
   selectLibrary: (libraryId) => ipcRenderer.invoke(IPC.selectLibrary, libraryId),
-  listArtists: (libraryId) => ipcRenderer.invoke(IPC.listArtists, libraryId),
-  listAlbums: (libraryId, artistId) => ipcRenderer.invoke(IPC.listAlbums, libraryId, artistId),
-  listTracks: (libraryId, albumId) => ipcRenderer.invoke(IPC.listTracks, libraryId, albumId),
+  listArtists: (libraryId, validator) => ipcRenderer.invoke(IPC.listArtists, libraryId, validator),
+  listAlbums: (libraryId, artistId, validator) =>
+    ipcRenderer.invoke(IPC.listAlbums, libraryId, artistId, validator),
+  listTracks: (libraryId, albumId, validator) =>
+    ipcRenderer.invoke(IPC.listTracks, libraryId, albumId, validator),
   search: (libraryId, query) => ipcRenderer.invoke(IPC.search, libraryId, query),
   resolveStream: (track) => ipcRenderer.invoke(IPC.resolveStream, track),
   getVolume: () => ipcRenderer.invoke(IPC.getVolume),
@@ -21,8 +23,8 @@ const api: MusexApi = {
   getCacheStats: () => ipcRenderer.invoke(IPC.getCacheStats),
   clearCache: () => ipcRenderer.invoke(IPC.clearCache),
   listPlaylists: (libraryId) => ipcRenderer.invoke(IPC.listPlaylists, libraryId),
-  listPlaylistTracks: (playlistId, serverId) =>
-    ipcRenderer.invoke(IPC.listPlaylistTracks, playlistId, serverId),
+  listPlaylistTracks: (playlistId, serverId, validator) =>
+    ipcRenderer.invoke(IPC.listPlaylistTracks, playlistId, serverId, validator),
   createPlaylist: (libraryId, title, trackIds) =>
     ipcRenderer.invoke(IPC.createPlaylist, libraryId, title, trackIds),
   addToPlaylist: (playlistId, serverId, trackIds) =>

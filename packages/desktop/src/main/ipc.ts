@@ -42,24 +42,30 @@ export function registerIpc(rt: Runtime): void {
   // ensureProxyEndpoint reuses the gateway's cached connection, so it's ~free.
   // Art URLs are baked here (full http://127.0.0.1:PORT/… URLs) so the renderer
   // can use them directly without knowing anything about the proxy or token.
-  ipcMain.handle(IPC.listArtists, async (_e, libraryId: string) => {
+  ipcMain.handle(IPC.listArtists, async (_e, libraryId: string, validator?: string) => {
     const lib = rt.findLibrary(libraryId);
     await rt.ensureProxyEndpoint(lib.serverId);
-    const artists = await rt.gateway.listArtists(lib, rt.requireToken());
+    const artists = await rt.gateway.listArtists(lib, rt.requireToken(), validator);
     return artists.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) }));
   });
-  ipcMain.handle(IPC.listAlbums, async (_e, libraryId: string, artistId: string) => {
-    const lib = rt.findLibrary(libraryId);
-    await rt.ensureProxyEndpoint(lib.serverId);
-    const albums = await rt.gateway.listAlbums(lib, artistId, rt.requireToken());
-    return albums.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) }));
-  });
-  ipcMain.handle(IPC.listTracks, async (_e, libraryId: string, albumId: string) => {
-    const lib = rt.findLibrary(libraryId);
-    await rt.ensureProxyEndpoint(lib.serverId);
-    const tracks = await rt.gateway.listTracks(lib, albumId, rt.requireToken());
-    return tracks.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) }));
-  });
+  ipcMain.handle(
+    IPC.listAlbums,
+    async (_e, libraryId: string, artistId: string, validator?: string) => {
+      const lib = rt.findLibrary(libraryId);
+      await rt.ensureProxyEndpoint(lib.serverId);
+      const albums = await rt.gateway.listAlbums(lib, artistId, rt.requireToken(), validator);
+      return albums.map((a) => ({ ...a, thumb: rt.proxy.artUrl(a.serverId, a.thumb) }));
+    },
+  );
+  ipcMain.handle(
+    IPC.listTracks,
+    async (_e, libraryId: string, albumId: string, validator?: string) => {
+      const lib = rt.findLibrary(libraryId);
+      await rt.ensureProxyEndpoint(lib.serverId);
+      const tracks = await rt.gateway.listTracks(lib, albumId, rt.requireToken(), validator);
+      return tracks.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) }));
+    },
+  );
   ipcMain.handle(IPC.search, async (_e, libraryId: string, query: string) => {
     const lib = rt.findLibrary(libraryId);
     await rt.ensureProxyEndpoint(lib.serverId);
@@ -105,14 +111,22 @@ export function registerIpc(rt: Runtime): void {
     const playlists = await rt.gateway.listPlaylists(lib, rt.requireToken());
     return playlists.map((p) => ({ ...p, thumb: rt.proxy.artUrl(p.serverId, p.thumb) }));
   });
-  ipcMain.handle(IPC.listPlaylistTracks, async (_e, playlistId: string, serverId: string) => {
-    await rt.ensureProxyEndpoint(serverId);
-    const items = await rt.gateway.listPlaylistTracks(playlistId, serverId, rt.requireToken());
-    return items.map((it) => ({
-      ...it,
-      track: { ...it.track, thumb: rt.proxy.artUrl(it.track.serverId, it.track.thumb) },
-    }));
-  });
+  ipcMain.handle(
+    IPC.listPlaylistTracks,
+    async (_e, playlistId: string, serverId: string, validator?: string) => {
+      await rt.ensureProxyEndpoint(serverId);
+      const items = await rt.gateway.listPlaylistTracks(
+        playlistId,
+        serverId,
+        rt.requireToken(),
+        validator,
+      );
+      return items.map((it) => ({
+        ...it,
+        track: { ...it.track, thumb: rt.proxy.artUrl(it.track.serverId, it.track.thumb) },
+      }));
+    },
+  );
   ipcMain.handle(
     IPC.createPlaylist,
     async (_e, libraryId: string, title: string, trackIds: string[]) => {

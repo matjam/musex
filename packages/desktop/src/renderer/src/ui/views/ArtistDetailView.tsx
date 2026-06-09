@@ -1,5 +1,6 @@
 import type { Album, Artist } from "@musex/core";
 import { useEffect, useState } from "react";
+import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { AlbumArt } from "../AlbumArt";
 
@@ -21,7 +22,7 @@ export function ArtistDetailView({ artist }: Props) {
     const id = library.id;
     setFetch({ status: "loading" });
     window.musex
-      .listAlbums(id, artist.id)
+      .listAlbums(id, artist.id, listValidator(artist.updatedAt))
       .then((albums) => setFetch({ status: "ok", albums }))
       .catch((err: unknown) =>
         setFetch({
@@ -29,7 +30,7 @@ export function ArtistDetailView({ artist }: Props) {
           message: err instanceof Error ? err.message : "Failed to load albums",
         }),
       );
-  }, [library, artist.id]);
+  }, [library, artist.id, artist.updatedAt]);
 
   return (
     <div className="browse-section">

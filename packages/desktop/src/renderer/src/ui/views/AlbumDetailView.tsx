@@ -1,5 +1,6 @@
 import type { Album, Track } from "@musex/core";
 import { useEffect, useState } from "react";
+import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { AlbumArt } from "../AlbumArt";
@@ -29,7 +30,7 @@ export function AlbumDetailView({ album }: Props) {
     const libraryId = library.id;
     setFetch({ status: "loading" });
     window.musex
-      .listTracks(libraryId, album.id)
+      .listTracks(libraryId, album.id, listValidator(album.updatedAt))
       .then((tracks) => setFetch({ status: "ok", tracks }))
       .catch((err: unknown) =>
         setFetch({
@@ -37,7 +38,7 @@ export function AlbumDetailView({ album }: Props) {
           message: err instanceof Error ? err.message : "Failed to load tracks",
         }),
       );
-  }, [library, album.id]);
+  }, [library, album.id, album.updatedAt]);
 
   // Determine the currently-playing track id (if any)
   const playingTrackId =

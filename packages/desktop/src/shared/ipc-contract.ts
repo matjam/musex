@@ -53,9 +53,9 @@ export interface MusexApi {
   restoreSession(): Promise<RestoreSessionResult>;
   discoverLibraries(): Promise<DiscoverResult>;
   selectLibrary(libraryId: string): Promise<void>;
-  listArtists(libraryId: string): Promise<Artist[]>;
-  listAlbums(libraryId: string, artistId: string): Promise<Album[]>;
-  listTracks(libraryId: string, albumId: string): Promise<Track[]>;
+  listArtists(libraryId: string, validator?: string): Promise<Artist[]>;
+  listAlbums(libraryId: string, artistId: string, validator?: string): Promise<Album[]>;
+  listTracks(libraryId: string, albumId: string, validator?: string): Promise<Track[]>;
   search(libraryId: string, query: string): Promise<SearchResults>;
   resolveStream(track: Track): Promise<StreamRef>;
   getVolume(): Promise<number>;
@@ -66,7 +66,11 @@ export interface MusexApi {
   getCacheStats(): Promise<CacheStats>;
   clearCache(): Promise<ClearCacheResult>;
   listPlaylists(libraryId: string): Promise<Playlist[]>;
-  listPlaylistTracks(playlistId: string, serverId: string): Promise<PlaylistTrack[]>;
+  listPlaylistTracks(
+    playlistId: string,
+    serverId: string,
+    validator?: string,
+  ): Promise<PlaylistTrack[]>;
   createPlaylist(libraryId: string, title: string, trackIds: string[]): Promise<Playlist>;
   addToPlaylist(playlistId: string, serverId: string, trackIds: string[]): Promise<void>;
   removeFromPlaylist(
