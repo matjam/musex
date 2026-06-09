@@ -11,6 +11,12 @@ function scrub(s: string): string {
   return s.replace(/[0-9a-f]{32,}/gi, "<redacted>");
 }
 
+/** If a freshly-loaded direct track produces no audio progress within this
+ *  window, the play watchdog re-issues the load (recovering from silent HTML5
+ *  stalls). */
+const PLAY_WATCHDOG_MS = 3000;
+const MAX_PLAY_RETRIES = 2;
+
 export class WebPlaybackEngine implements PlaybackEngine {
   private gapless: Gapless5 | null = null;
   private audio: HTMLAudioElement | null = null;
@@ -23,22 +29,38 @@ export class WebPlaybackEngine implements PlaybackEngine {
   private errorCb: (e: Error) => void = () => {};
   private volume = 1;
 
+  // Play watchdog state (direct tracks only).
+  private currentRef: StreamRef | null = null;
+  /** True once the current track has actually produced audio progress. */
+  private progressed = false;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
+  private retries = 0;
+
   // --- core PlaybackEngine ---
 
   async load(ref: StreamRef): Promise<void> {
     console.log("[musex-debug] engine.load", ref.kind, scrub(ref.url));
+    this.currentRef = ref;
+    this.retries = 0;
     if (ref.kind === "direct") {
       this.teardownHls();
-      const g = this.ensureGapless();
-      g.removeAllTracks();
-      g.addTrack(ref.url);
-      g.gotoTrack(0, true); // play from start
       this.mode = "direct";
+      this.playDirect(ref.url);
+      this.armWatchdog();
     } else {
+      this.clearWatchdog();
       this.teardownGaplessPlayback();
       await this.loadHls(ref.url);
       this.mode = "hls";
     }
+  }
+
+  /** (Re)load a direct track into gapless and play from the start. */
+  private playDirect(url: string): void {
+    const g = this.ensureGapless();
+    g.removeAllTracks();
+    g.addTrack(url);
+    g.gotoTrack(0, true);
   }
 
   async preload(ref: StreamRef): Promise<void> {
@@ -62,6 +84,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
     else this.gapless?.play();
   }
   pause(): void {
+    this.clearWatchdog(); // intentional non-progress — don't let the watchdog retry
     if (this.mode === "hls") this.audio?.pause();
     else this.gapless?.pause();
   }
@@ -109,7 +132,14 @@ export class WebPlaybackEngine implements PlaybackEngine {
       volume: this.volume,
     });
     // ontimeupdate receives (current_track_time_ms, current_track_index) — we only need the first
-    g.ontimeupdate = (ms: number, _index: number) => this.positionCb(ms / 1000);
+    g.ontimeupdate = (ms: number, _index: number) => {
+      // Real audio progress -> the track actually started; cancel the watchdog.
+      if (ms > 200) {
+        this.progressed = true;
+        this.clearWatchdog();
+      }
+      this.positionCb(ms / 1000);
+    };
     // onnext fires on gapless auto-advance into the preloaded track -> tell the session
     // receives (from_track, to_track) — we don't need either
     g.onnext = (from: string, to: string) => {
@@ -127,6 +157,40 @@ export class WebPlaybackEngine implements PlaybackEngine {
     };
     this.gapless = g;
     return g;
+  }
+
+  // --- play watchdog: recover from a silent HTML5 stall ---
+  // Occasionally an HTML5 audio load stalls and never starts, with no 'error'
+  // event. If a freshly-loaded direct track produces no audio progress within
+  // the window, re-issue the load — which re-requests through the proxy (served
+  // from the disk cache if present, else downloaded). Give up after a few tries
+  // and surface an error so the session leaves the stuck state.
+
+  private armWatchdog(): void {
+    this.clearWatchdog();
+    this.progressed = false;
+    this.watchdog = setTimeout(() => this.onWatchdog(), PLAY_WATCHDOG_MS);
+  }
+
+  private clearWatchdog(): void {
+    if (this.watchdog !== null) {
+      clearTimeout(this.watchdog);
+      this.watchdog = null;
+    }
+  }
+
+  private onWatchdog(): void {
+    this.watchdog = null;
+    if (this.progressed || this.mode !== "direct" || !this.currentRef) return;
+    if (this.retries >= MAX_PLAY_RETRIES) {
+      console.log("[musex-debug] watchdog gave up", scrub(this.currentRef.url));
+      this.errorCb(new Error("Track failed to start playing"));
+      return;
+    }
+    this.retries += 1;
+    console.log("[musex-debug] watchdog retry", this.retries, scrub(this.currentRef.url));
+    this.playDirect(this.currentRef.url); // re-request via the proxy (cache or download)
+    this.armWatchdog();
   }
 
   // --- hls.js wiring ---
