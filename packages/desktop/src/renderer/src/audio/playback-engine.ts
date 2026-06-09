@@ -96,10 +96,14 @@ export class WebPlaybackEngine implements PlaybackEngine {
   private ensureGapless(): Gapless5 {
     if (this.gapless) return this.gapless;
     const g = new Gapless5({
-      // HTML5 audio gives instant progressive start within the user-activation
-      // window now that the proxy streams progressively (no buffering). Web Audio
-      // handles gapless crossfades. loadLimit caps concurrency to current + next.
-      useWebAudio: true,
+      // HTML5-only: progressive playback starts as soon as the stream begins
+      // buffering (instant start), is browser-managed and reliable, and benefits
+      // from the prefetch/disk cache. The Web Audio path was disabled because it
+      // fully downloads + decodes each file before playing — slow over the network
+      // and destabilizing when a load stalls. Trade-off: transitions are
+      // near-gapless (a tiny gap is possible) rather than sample-accurate.
+      // loadLimit caps concurrency to current + next.
+      useWebAudio: false,
       useHTML5Audio: true,
       loadLimit: 2,
       volume: this.volume,
