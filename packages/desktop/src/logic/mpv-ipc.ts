@@ -43,6 +43,11 @@ export function cmdObserve(id: number, observeId: number, prop: string): MpvComm
   return { command: ["observe_property", observeId, prop], request_id: id };
 }
 
+/** Ask mpv to exit (fire-and-forget — the process may die before replying). */
+export function cmdQuit(id: number): MpvCommand {
+  return { command: ["quit"], request_id: id };
+}
+
 export function encodeLine(c: MpvCommand): string {
   return `${JSON.stringify(c)}\n`;
 }

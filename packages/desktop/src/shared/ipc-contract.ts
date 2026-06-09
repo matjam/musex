@@ -46,6 +46,15 @@ export const IPC = {
   savePlaybackQueue: "musex:playback:saveQueue", // (tracks: Track[]) -> void
   savePlaybackCursor: "musex:playback:saveCursor", // (cursor: PlaybackCursorDto) -> void
   loadPlayback: "musex:playback:load", // -> LoadPlaybackResult
+  // mpv playback engine (main-process audio). NOTE: namespaced playbackEngine:*
+  // because musex:playback:* is taken by queue/cursor persistence above.
+  playbackLoad: "musex:playbackEngine:load", // ({ url, startSec? }) -> void (resolves on file-loaded)
+  playbackPreload: "musex:playbackEngine:preload", // (url) -> void
+  playbackPlay: "musex:playbackEngine:play", // -> void
+  playbackPause: "musex:playbackEngine:pause", // -> void
+  playbackSeek: "musex:playbackEngine:seek", // (sec) -> void
+  playbackSetVolume: "musex:playbackEngine:setVolume", // (v 0..1) -> void
+  playbackEvent: "musex:playbackEngine:event", // push: main -> renderer PlaybackEngineEvent
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -63,6 +72,15 @@ export type PlaybackCursorDto = {
   repeat: RepeatMode;
 };
 export type LoadPlaybackResult = { queue: Queue; positionSec: number } | null;
+
+/** Engine events pushed main → renderer. Structurally identical to
+ *  `logic/mpv-ipc.ts`'s EngineEvent — duplicated deliberately so preload and
+ *  renderer never import from main-process logic. */
+export type PlaybackEngineEvent =
+  | { type: "position"; sec: number }
+  | { type: "advanced" }
+  | { type: "ended" }
+  | { type: "error"; message: string };
 
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
@@ -116,4 +134,12 @@ export interface MusexApi {
   savePlaybackQueue(tracks: Track[]): Promise<void>;
   savePlaybackCursor(cursor: PlaybackCursorDto): Promise<void>;
   loadPlayback(): Promise<LoadPlaybackResult>;
+  playbackLoad(args: { url: string; startSec?: number }): Promise<void>;
+  playbackPreload(url: string): Promise<void>;
+  playbackPlay(): Promise<void>;
+  playbackPause(): Promise<void>;
+  playbackSeek(sec: number): Promise<void>;
+  playbackSetVolume(v: number): Promise<void>;
+  /** Subscribe to engine events; returns an unsubscribe function. */
+  onPlaybackEvent(cb: (e: PlaybackEngineEvent) => void): () => void;
 }

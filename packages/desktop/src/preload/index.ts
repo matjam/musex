@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { MusexApi } from "../shared/ipc-contract.js";
+import type { MusexApi, PlaybackEngineEvent } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 
 const api: MusexApi = {
@@ -47,6 +47,17 @@ const api: MusexApi = {
   savePlaybackQueue: (tracks) => ipcRenderer.invoke(IPC.savePlaybackQueue, tracks),
   savePlaybackCursor: (cursor) => ipcRenderer.invoke(IPC.savePlaybackCursor, cursor),
   loadPlayback: () => ipcRenderer.invoke(IPC.loadPlayback),
+  playbackLoad: (args) => ipcRenderer.invoke(IPC.playbackLoad, args),
+  playbackPreload: (url) => ipcRenderer.invoke(IPC.playbackPreload, url),
+  playbackPlay: () => ipcRenderer.invoke(IPC.playbackPlay),
+  playbackPause: () => ipcRenderer.invoke(IPC.playbackPause),
+  playbackSeek: (sec) => ipcRenderer.invoke(IPC.playbackSeek, sec),
+  playbackSetVolume: (v) => ipcRenderer.invoke(IPC.playbackSetVolume, v),
+  onPlaybackEvent: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, evt: PlaybackEngineEvent) => cb(evt);
+    ipcRenderer.on(IPC.playbackEvent, listener);
+    return () => ipcRenderer.removeListener(IPC.playbackEvent, listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("musex", api);

@@ -1,12 +1,13 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow } from "electron";
+import { IPC } from "../shared/ipc-contract.js";
 import { registerIpc } from "./ipc.js";
 import { Runtime } from "./runtime.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -28,6 +29,7 @@ function createWindow(): void {
   } else {
     void win.loadFile(join(__dirname, "../renderer/index.html"));
   }
+  return win;
 }
 
 app.whenReady().then(async () => {
@@ -35,9 +37,21 @@ app.whenReady().then(async () => {
   await runtime.init();
   await runtime.restore();
   registerIpc(runtime);
-  createWindow();
+
+  // Engine events flow to whichever window is current; guard against a
+  // closed-but-not-yet-GCed window (macOS keeps the app alive windowless).
+  const wireEngineEvents = (win: BrowserWindow): void => {
+    runtime.mpv.setSink((e) => {
+      if (!win.isDestroyed()) win.webContents.send(IPC.playbackEvent, e);
+    });
+  };
+
+  wireEngineEvents(createWindow());
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) wireEngineEvents(createWindow());
+  });
+  app.on("will-quit", () => {
+    void runtime.mpv.dispose();
   });
 });
 

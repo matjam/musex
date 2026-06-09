@@ -4,6 +4,8 @@ import { app, shell } from "electron";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
 import { ListCacheStore } from "./adapters/list-cache-store.js";
 import { MediaCache } from "./adapters/media-cache.js";
+import { MpvController } from "./adapters/mpv-controller.js";
+import { resolveMpvPaths } from "./adapters/mpv-paths.js";
 import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
@@ -23,6 +25,10 @@ export class Runtime {
   readonly proxy = new StreamProxy();
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
   readonly artCache = new MediaCache(path.join(app.getPath("userData"), "art-cache"));
+  /** Constructed in init() — resolveMpvPaths needs `app` ready and throws if
+   *  mpv isn't vendored. Not start()ed here: the controller spawns mpv lazily
+   *  on the first load, keeping app startup fast. */
+  mpv!: MpvController;
   token: string | null = null;
   libraries: Library[] = [];
 
@@ -30,6 +36,7 @@ export class Runtime {
   private readonly registeredServers = new Set<string>();
 
   async init(): Promise<void> {
+    this.mpv = new MpvController(resolveMpvPaths());
     await this.cache.init();
     await this.listCache.init();
     this.proxy.configureCache(this.cache, () => ({
