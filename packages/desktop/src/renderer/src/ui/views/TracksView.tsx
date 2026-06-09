@@ -1,4 +1,5 @@
 import type { LibrarySort, Track } from "@musex/core";
+import { Play, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -18,7 +19,7 @@ type FetchState =
 
 export function TracksView() {
   const { library } = useApp();
-  const { state, playTrackNext } = usePlayer();
+  const { state, playTracks, playTracksShuffled, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
   const [sort, setSort] = useState<LibrarySort>("title");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
@@ -56,7 +57,29 @@ export function TracksView() {
       <div className="tracks-view-header">
         <div className="browse-header">
           <h3 className="browse-title">Tracks</h3>
-          <SortSelector value={sort} onChange={setSort} />
+          <div className="tracks-header-actions">
+            {fetch.status === "ok" && fetch.tracks.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="play-btn"
+                  title="Play all"
+                  onClick={() => playTracks(fetch.tracks, 0)}
+                >
+                  <Play size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="shuffle-btn"
+                  title="Shuffle all"
+                  onClick={() => playTracksShuffled(fetch.tracks)}
+                >
+                  <Shuffle size={16} />
+                </button>
+              </>
+            )}
+            <SortSelector value={sort} onChange={setSort} />
+          </div>
         </div>
         {fetch.status === "ok" && (
           <div className="browse-sub">

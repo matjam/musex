@@ -1852,3 +1852,11 @@ img.queue-row-art {
 .home-row {
   margin-bottom: 26px;
 }
+
+/* ---- Tracks view header actions (play/shuffle + sort) ---- */
+
+.tracks-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}

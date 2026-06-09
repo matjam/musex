@@ -1,4 +1,5 @@
 import type { Playlist } from "@musex/core";
+import { MoreHorizontal, Play, Shuffle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -148,7 +149,7 @@ interface Props {
 
 export function PlaylistView({ playlist }: Props) {
   const { dispatch } = useApp();
-  const { state, playTracks, playTrackNext } = usePlayer();
+  const { state, playTracks, playTracksShuffled, playTrackNext } = usePlayer();
   const { playlists, rename, destroy } = usePlaylists();
   const { selectedTrack, select } = useSelection();
   const live = playlists.find((p) => p.id === playlist.id) ?? playlist;
@@ -208,14 +209,24 @@ export function PlaylistView({ playlist }: Props) {
           </div>
           <div className="album-actions">
             {(fetch.status === "ok" || fetch.status === "paging") && tracks.length > 0 && (
-              <button
-                type="button"
-                className="play-btn"
-                title="Play playlist"
-                onClick={() => playTracks(tracks, 0)}
-              >
-                ▶
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="play-btn"
+                  title="Play playlist"
+                  onClick={() => playTracks(tracks, 0)}
+                >
+                  <Play size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="shuffle-btn"
+                  title="Shuffle playlist"
+                  onClick={() => playTracksShuffled(tracks)}
+                >
+                  <Shuffle size={16} />
+                </button>
+              </>
             )}
             <button
               type="button"
@@ -226,7 +237,7 @@ export function PlaylistView({ playlist }: Props) {
                 setActionsPos({ x: e.clientX, y: e.clientY });
               }}
             >
-              ⋯
+              <MoreHorizontal size={18} />
             </button>
           </div>
         </div>
