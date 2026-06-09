@@ -1079,6 +1079,12 @@ img.np-art {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
+/* Open the submenu to the left when there's no room on the right. */
+.ctx-submenu--left {
+  left: auto;
+  right: 100%;
+}
+
 /* ---- Sidebar playlist rail ---- */
 
 .playlist-rail {

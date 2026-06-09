@@ -1,6 +1,9 @@
 import type { Playlist } from "@musex/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePlaylists } from "../state/playlists";
+
+const VIEWPORT_MARGIN = 8;
+const SUBMENU_WIDTH = 200;
 
 export interface TrackMenuTarget {
   x: number;
@@ -23,6 +26,26 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
   const { playlists, addTo, remove } = usePlaylists();
   const [submenu, setSubmenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // Start at the click point; clamp into the viewport before paint (below).
+  const [pos, setPos] = useState({ left: target.x, top: target.y });
+  // Open the submenu leftward when there isn't room for it on the right.
+  const [submenuLeft, setSubmenuLeft] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = target.x;
+    let top = target.y;
+    if (left + rect.width > vw - VIEWPORT_MARGIN) left = vw - rect.width - VIEWPORT_MARGIN;
+    if (top + rect.height > vh - VIEWPORT_MARGIN) top = vh - rect.height - VIEWPORT_MARGIN;
+    left = Math.max(VIEWPORT_MARGIN, left);
+    top = Math.max(VIEWPORT_MARGIN, top);
+    setPos({ left, top });
+    setSubmenuLeft(left + rect.width + SUBMENU_WIDTH > vw - VIEWPORT_MARGIN);
+  }, [target.x, target.y]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -57,7 +80,7 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
       ref={ref}
       className="ctx-menu"
       role="menu"
-      style={{ left: target.x, top: target.y }}
+      style={{ left: pos.left, top: pos.top }}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
@@ -70,7 +93,7 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
         <span>Add to playlist</span>
         <span className="ctx-arrow">▸</span>
         {submenu && (
-          <div className="ctx-submenu">
+          <div className={`ctx-submenu${submenuLeft ? " ctx-submenu--left" : ""}`}>
             <button
               type="button"
               className="ctx-item ctx-accent"
