@@ -67,6 +67,7 @@ describe("plex-mapping", () => {
         duration: 254000,
         parentRatingKey: "20",
         parentTitle: "In Rainbows",
+        grandparentRatingKey: "10",
         grandparentTitle: "Radiohead",
         media: [
           {
@@ -83,6 +84,7 @@ describe("plex-mapping", () => {
       id: "30",
       serverId: "srv-1",
       albumId: "20",
+      artistId: "10",
       albumTitle: "In Rainbows",
       artistName: "Radiohead",
       title: "Nude",

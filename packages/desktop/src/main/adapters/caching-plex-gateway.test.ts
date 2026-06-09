@@ -11,6 +11,7 @@ const track = (id: string): Track => ({
   id,
   serverId: "s1",
   albumId: "al1",
+  artistId: "ar1",
   artistName: "A",
   title: id,
   durationMs: 1000,

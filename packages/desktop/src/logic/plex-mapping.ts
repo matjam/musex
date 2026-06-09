@@ -32,6 +32,7 @@ interface RawTrack {
   duration?: number;
   parentRatingKey?: string;
   parentTitle?: string;
+  grandparentRatingKey?: string | number;
   grandparentTitle?: string;
   thumb?: string;
   media?: RawMedia[];
@@ -91,6 +92,7 @@ export function toTrack(raw: RawTrack, serverId: string): Track {
     id: raw.ratingKey,
     serverId,
     albumId: raw.parentRatingKey ?? "",
+    artistId: raw.grandparentRatingKey != null ? String(raw.grandparentRatingKey) : "",
     albumTitle: raw.parentTitle,
     artistName: raw.grandparentTitle ?? "",
     title: raw.title,

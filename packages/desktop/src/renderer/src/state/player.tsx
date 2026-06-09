@@ -21,6 +21,8 @@ import { WebPlaybackEngine } from "../audio/playback-engine";
 interface PlayerApi {
   state: PlaybackState;
   playTracks(tracks: Track[], startIndex: number): void;
+  /** Play one track now (inserted after current), preserving shuffle/repeat. */
+  playTrackNext(track: Track): void;
   togglePlay(): void;
   next(): void;
   previous(): void;
@@ -140,6 +142,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const api: PlayerApi = {
     state,
     playTracks: (tracks, startIndex) => void session.loadQueue(buildQueue(tracks, startIndex)),
+    playTrackNext: (track) => void session.playTrackNext(track),
     togglePlay: () => (state.status === "playing" ? session.pause() : session.play()),
     next: () => void session.next(),
     previous: () => void session.previous(),

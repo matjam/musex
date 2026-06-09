@@ -688,3 +688,36 @@ describe("PlaybackSession — shuffle + removeAt interaction", () => {
     expect(q.tracks.map((t) => t.id)).toEqual(["a", "c", "d"]);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// playTrackNext (double-click to play)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("PlaybackSession — playTrackNext", () => {
+  it("starts a fresh queue when nothing is loaded", async () => {
+    const { engine, session } = setup();
+    await session.playTrackNext(makeTrack("x"));
+    const q = session.getState().queue;
+    if (!q) throw new Error("queue is null");
+    expect(q.tracks.map((t) => t.id)).toEqual(["x"]);
+    expect(engine.loaded.at(-1)?.url).toBe("fake://stream/x");
+    expect(session.getState().status).toBe("playing");
+  });
+
+  it("inserts after current and plays it, preserving shuffle/repeat", async () => {
+    const { engine, session } = setup(reverseShuffleRest);
+    const tracks = [makeTrack("a"), makeTrack("b"), makeTrack("c")];
+    await session.loadQueue({ tracks, index: 0, shuffle: false, repeat: "all" });
+    session.setShuffle(true); // shuffle on, repeat "all"
+
+    await session.playTrackNext(makeTrack("x"));
+
+    const q = session.getState().queue;
+    if (!q) throw new Error("queue is null");
+    expect(q.shuffle).toBe(true); // not reset
+    expect(q.repeat).toBe("all"); // not reset
+    expect(q.tracks[q.index]?.id).toBe("x"); // x is now playing
+    expect(q.tracks[q.index - 1]?.id).toBe("a"); // inserted right after the old current
+    expect(engine.loaded.at(-1)?.url).toBe("fake://stream/x");
+  });
+});

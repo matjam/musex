@@ -224,6 +224,27 @@ export class PlaybackSession {
     }
   }
 
+  /** Play `track` immediately, inserted right after the current track, WITHOUT
+   *  resetting shuffle/repeat (double-click-to-play). Starts a fresh single-track
+   *  queue if nothing is loaded. */
+  async playTrackNext(track: Track): Promise<void> {
+    const queue = this.state.queue;
+    if (!queue || queue.tracks.length === 0) {
+      await this.loadQueue(buildQueue([track], 0));
+      return;
+    }
+    const insertAt = queue.index + 1;
+    const newTracks = [...queue.tracks.slice(0, insertAt), track, ...queue.tracks.slice(insertAt)];
+    if (this.unshuffled !== null) {
+      const currentTrack = queue.tracks[queue.index];
+      const at = currentTrack ? this.unshuffled.indexOf(currentTrack) + 1 : this.unshuffled.length;
+      this.unshuffled = [...this.unshuffled.slice(0, at), track, ...this.unshuffled.slice(at)];
+    }
+    this.preloadedIndex = null;
+    this.patch({ queue: { ...queue, tracks: newTracks } });
+    await this.playIndex(insertAt);
+  }
+
   removeAt(i: number): void {
     const queue = this.state.queue;
     if (!queue) return;

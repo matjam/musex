@@ -295,6 +295,7 @@ export function makeTrack(id: string, overrides: Partial<Track> = {}): Track {
     id,
     serverId: "srv-1",
     albumId: "alb-1",
+    artistId: "art-1",
     artistName: "Test Artist",
     title: `Track ${id}`,
     durationMs: 180_000,
