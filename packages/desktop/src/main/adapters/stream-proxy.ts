@@ -16,6 +16,9 @@ import {
 import { chooseStreamKind } from "../../logic/stream-kind.js";
 import type { MediaCache } from "./media-cache.js";
 
+const PREFETCH_DEPTH = 10;
+const PREFETCH_CONCURRENCY = 2;
+
 /** Per-server connection info needed to fulfil a proxied stream request. */
 export interface ServerEndpoint {
   baseUrl: string; // e.g. http://192.168.1.10:32400
@@ -51,6 +54,8 @@ export class StreamProxy {
 
   private artCache: MediaCache | null = null;
   private artMaxBytes = 0;
+
+  private readonly prefetchInflight = new Map<string, () => void>(); // key -> cancel
 
   /** Attach the always-on artwork cache (independent of the audio cache config). */
   setArtCache(cache: MediaCache, maxBytes: number): void {
@@ -255,6 +260,113 @@ export class StreamProxy {
       finishCache(false);
     });
     upstreamReq.end();
+  }
+
+  private cacheFromUpstream(
+    serverId: string,
+    plexPath: string,
+    key: string,
+    maxBytes: number,
+    onDone: () => void,
+  ): () => void {
+    const endpoint = this.endpoints.get(serverId);
+    if (!endpoint || !this.cache) {
+      onDone();
+      return () => {};
+    }
+    const upstream = new URL(endpoint.baseUrl);
+    upstream.pathname = plexPath;
+    upstream.searchParams.set("X-Plex-Token", endpoint.token);
+    const client = upstream.protocol === "https:" ? https : http;
+    const writer = this.cache.beginWrite(key, maxBytes);
+    let open = true;
+    let finished = false;
+    const finalize = (commit: boolean) => {
+      if (open) {
+        open = false;
+        (commit ? writer.commit() : writer.abort()).catch((e) =>
+          console.error("[musex prefetch] finalize error:", e),
+        );
+      }
+      if (!finished) {
+        finished = true;
+        onDone();
+      }
+    };
+    const req = client.request(upstream, { method: "GET" }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume(); // drain
+        finalize(false);
+        return;
+      }
+      const expected = Number(res.headers["content-length"] ?? "");
+      let written = 0;
+      res.on("data", (chunk: Buffer) => {
+        written += chunk.length;
+        if (open && !writer.stream.destroyed) writer.stream.write(chunk);
+      });
+      res.on("end", () => {
+        const lengthOk = !Number.isFinite(expected) || expected <= 0 || written === expected;
+        finalize(res.complete && lengthOk);
+      });
+      res.on("error", () => finalize(false));
+    });
+    req.on("error", () => finalize(false));
+    req.end();
+    return () => {
+      req.destroy();
+      finalize(false);
+    };
+  }
+
+  /** Warm the on-disk cache for the upcoming direct-play tracks (cacheable paths).
+   *  Cancels in-flight prefetches no longer wanted; starts up to the concurrency
+   *  limit; skips already-cached / in-flight. No-op when caching is disabled. */
+  prefetch(upcoming: { serverId: string; plexPath: string }[]): void {
+    const cfg = this.readCacheConfig?.();
+    if (!cfg?.enabled || !this.cache) {
+      this.cancelAllPrefetch();
+      return;
+    }
+    const wanted = upcoming
+      .filter((u) => isCacheablePath(u.plexPath))
+      .slice(0, PREFETCH_DEPTH)
+      .map((u) => ({ ...u, key: cacheKey(u.serverId, u.plexPath) }));
+    const wantedKeys = new Set(wanted.map((w) => w.key));
+    // Cancel in-flight prefetches that are no longer wanted.
+    for (const [k, cancel] of this.prefetchInflight) {
+      if (!wantedKeys.has(k)) {
+        cancel();
+        this.prefetchInflight.delete(k);
+      }
+    }
+    void this.pumpPrefetch(wanted, cfg.maxBytes);
+  }
+
+  private async pumpPrefetch(
+    wanted: { serverId: string; plexPath: string; key: string }[],
+    maxBytes: number,
+  ): Promise<void> {
+    for (const w of wanted) {
+      if (this.prefetchInflight.size >= PREFETCH_CONCURRENCY) return;
+      if (this.prefetchInflight.has(w.key)) continue;
+      if (!this.cache) return;
+      if (await this.cache.pathIfPresent(w.key)) continue; // already cached
+      // Re-check capacity after the await (it may have filled).
+      if (this.prefetchInflight.size >= PREFETCH_CONCURRENCY || this.prefetchInflight.has(w.key)) {
+        continue;
+      }
+      const cancel = this.cacheFromUpstream(w.serverId, w.plexPath, w.key, maxBytes, () => {
+        this.prefetchInflight.delete(w.key);
+        void this.pumpPrefetch(wanted, maxBytes); // start the next one
+      });
+      this.prefetchInflight.set(w.key, cancel);
+    }
+  }
+
+  private cancelAllPrefetch(): void {
+    for (const cancel of this.prefetchInflight.values()) cancel();
+    this.prefetchInflight.clear();
   }
 
   /** Read the first n bytes of a file (for image magic-byte sniffing). */
