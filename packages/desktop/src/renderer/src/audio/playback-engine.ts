@@ -63,17 +63,17 @@ export class WebPlaybackEngine implements PlaybackEngine {
   // --- core PlaybackEngine ---
 
   async load(ref: StreamRef): Promise<void> {
+    // Stop audio on BOTH elements before starting the new track, so a racing
+    // gapless swap or a stale preload can never leave a second stream playing.
+    this.current.pause();
+    this.clearNext();
+    this.pendingSeek = null;
     if (ref.kind === "direct") {
       this.teardownHls();
       this.mode = "direct";
-      this.pendingSeek = null;
-      this.clearNext();
       this.current.src = ref.url;
     } else {
       this.mode = "hls";
-      this.pendingSeek = null;
-      this.current.pause();
-      this.clearNext();
       await this.loadHls(ref.url);
     }
   }

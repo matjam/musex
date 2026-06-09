@@ -1,5 +1,6 @@
 import {
   buildQueue,
+  carryRepeat,
   PlaybackSession,
   type PlaybackState,
   type RepeatMode,
@@ -143,8 +144,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const api: PlayerApi = {
     state,
-    playTracks: (tracks, startIndex) => void session.loadQueue(buildQueue(tracks, startIndex)),
-    playTracksShuffled: (tracks) => void session.loadQueueShuffled(tracks),
+    playTracks: (tracks, startIndex) => {
+      // Carry the current repeat into the new collection (but not repeat-one).
+      const repeat = carryRepeat(session.getState().queue?.repeat ?? "none");
+      void session.loadQueue({ ...buildQueue(tracks, startIndex), repeat });
+    },
+    playTracksShuffled: (tracks) =>
+      void session.loadQueueShuffled(
+        tracks,
+        carryRepeat(session.getState().queue?.repeat ?? "none"),
+      ),
     playTrackNext: (track) => void session.playTrackNext(track),
     togglePlay: () => (state.status === "playing" ? session.pause() : session.play()),
     next: () => void session.next(),

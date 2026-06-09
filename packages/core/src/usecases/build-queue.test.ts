@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeTrack } from "../testing/fakes";
-import { buildQueue } from "./build-queue";
+import { buildQueue, carryRepeat } from "./build-queue";
 
 describe("buildQueue", () => {
   it("builds a queue starting at the given index", () => {
@@ -27,5 +27,13 @@ describe("buildQueue", () => {
 
   it("clamps to 0 for an empty track list", () => {
     expect(buildQueue([], 3).index).toBe(0);
+  });
+});
+
+describe("carryRepeat", () => {
+  it("keeps 'all' and 'none', but drops 'one' to 'none'", () => {
+    expect(carryRepeat("all")).toBe("all");
+    expect(carryRepeat("none")).toBe("none");
+    expect(carryRepeat("one")).toBe("none");
   });
 });

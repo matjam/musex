@@ -78,14 +78,14 @@ export class PlaybackSession {
   }
 
   /** Replace the queue with `tracks` shuffled and play from the top (shuffle on).
-   *  Used by "shuffle play" on an album/artist. */
-  async loadQueueShuffled(tracks: Track[]): Promise<void> {
+   *  `repeat` defaults to "none" — callers pass the mode to start with. */
+  async loadQueueShuffled(tracks: Track[], repeat: RepeatMode = "none"): Promise<void> {
     if (tracks.length === 0) return;
     this.unshuffled = [...tracks];
     const shuffled = this.shuffleRest(tracks) as Track[];
     this.preloadedIndex = null;
     this.patch({
-      queue: { tracks: shuffled, index: 0, shuffle: true, repeat: "none" },
+      queue: { tracks: shuffled, index: 0, shuffle: true, repeat },
       error: null,
     });
     await this.playIndex(0);

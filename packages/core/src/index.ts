@@ -23,7 +23,7 @@ export type { Pin, PlexGateway } from "./ports/plex-gateway";
 export { PlexAuthError } from "./ports/plex-gateway";
 export type { StreamKind, StreamRef, StreamResolver } from "./ports/stream-resolver";
 export type { TokenStore } from "./ports/token-store";
-export { buildQueue } from "./usecases/build-queue";
+export { buildQueue, carryRepeat } from "./usecases/build-queue";
 export { createPlaylist } from "./usecases/create-playlist";
 export type { LibraryDiscovery } from "./usecases/discover-libraries";
 export { discoverMusicLibraries } from "./usecases/discover-libraries";
