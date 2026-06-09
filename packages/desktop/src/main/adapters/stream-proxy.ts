@@ -195,6 +195,18 @@ export class StreamProxy {
           ? this.cache.beginWrite(key, cfg?.maxBytes ?? 0)
           : null;
 
+    // Cache writing is decoupled from the client response: the client pipe
+    // governs upstream backpressure, while cache writes are best-effort — a slow
+    // disk can never stall playback. finishCache is idempotent.
+    let cacheOpen = writer !== null;
+    const finishCache = (commit: boolean): void => {
+      if (!writer || !cacheOpen) return;
+      cacheOpen = false;
+      (commit ? writer.commit() : writer.abort()).catch((e) =>
+        console.error("[musex cache] finalize error:", e),
+      );
+    };
+
     const upstreamReq = client.request(upstream, { method: "GET", headers }, (upstreamRes) => {
       const h: http.OutgoingHttpHeaders = {};
       for (const k of ["content-type", "content-length", "content-range", "accept-ranges"]) {
@@ -206,36 +218,30 @@ export class StreamProxy {
       if (writer && upstreamRes.statusCode === 200) {
         const expected = Number(upstreamRes.headers["content-length"] ?? "");
         let written = 0;
+        // The client pipe drives upstream backpressure; the cache copy is a
+        // decoupled, guarded best-effort write — so a slow disk never stalls
+        // playback, and a late chunk after an abort can't write to a destroyed
+        // stream (the prior ERR_STREAM_DESTROYED).
+        upstreamRes.pipe(res);
         upstreamRes.on("data", (chunk: Buffer) => {
           written += chunk.length;
+          if (cacheOpen && writer && !writer.stream.destroyed) writer.stream.write(chunk);
         });
-        upstreamRes.pipe(res);
-        // { end: false } so the writer (commit) owns the single end() and can
-        // flush before publishing; we never end the cache file from the pipe.
-        upstreamRes.pipe(writer.stream, { end: false });
         upstreamRes.on("end", () => {
-          // Commit only when the upstream message was fully received
-          // (upstreamRes.complete covers the no-Content-Length/chunked case) AND,
-          // when a length is known, the byte count matches. Otherwise discard.
+          // Commit only a fully-received body (upstreamRes.complete covers the
+          // no-Content-Length/chunked case) with a matching byte count; else discard.
           const lengthOk = !Number.isFinite(expected) || expected <= 0 || written === expected;
-          if (upstreamRes.complete && lengthOk) {
-            writer.commit().catch((err) => console.error("[musex cache] commit error:", err));
-          } else {
-            writer.abort().catch((err) => console.error("[musex cache] abort error:", err));
-          }
+          finishCache(upstreamRes.complete && lengthOk);
         });
-        upstreamRes.on("error", () =>
-          writer.abort().catch((err) => console.error("[musex cache] abort error:", err)),
-        );
+        upstreamRes.on("error", () => finishCache(false));
       } else {
-        // Unexpected status (e.g. 206) -> don't cache.
-        if (writer) writer.abort().catch((err) => console.error("[musex cache] abort error:", err));
+        finishCache(false); // unexpected status (e.g. 206) -> don't cache
         upstreamRes.pipe(res);
       }
     });
     upstreamReq.on("error", (err) => {
       console.error(`[musex stream proxy] ${plexPath} failed:`, err);
-      if (writer) writer.abort().catch((e) => console.error("[musex cache] abort error:", e));
+      finishCache(false);
       if (!res.headersSent) res.writeHead(502);
       res.end();
     });
@@ -246,7 +252,7 @@ export class StreamProxy {
     req.on("close", () => {
       if (res.writableFinished) return;
       upstreamReq.destroy();
-      if (writer) writer.abort().catch((e) => console.error("[musex cache] abort error:", e));
+      finishCache(false);
     });
     upstreamReq.end();
   }
