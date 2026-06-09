@@ -1177,3 +1177,29 @@ img.np-art {
   opacity: 0.5;
   cursor: default;
 }
+
+/* ---- Playlist detail header actions ---- */
+
+.playlist-actions-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: inherit;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.1s;
+}
+
+.playlist-actions-btn:hover {
+  opacity: 1;
+}
+
+.ctx-danger {
+  color: var(--red);
+}

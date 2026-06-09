@@ -15,9 +15,11 @@ interface Props {
   target: TrackMenuTarget;
   onClose: () => void;
   onNewPlaylist: (trackId: string) => void; // opens the NewPlaylistDialog seeded with this track
+  /** Called after a successful remove-from-playlist so the parent can re-fetch. */
+  onChanged?: () => void;
 }
 
-export function TrackContextMenu({ target, onClose, onNewPlaylist }: Props) {
+export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: Props) {
   const { playlists, addTo, remove } = usePlaylists();
   const [submenu, setSubmenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -46,6 +48,7 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist }: Props) {
     await remove(target.playlistContext.playlistId, target.serverId, [
       target.playlistContext.playlistItemId,
     ]);
+    onChanged?.();
     onClose();
   }
 

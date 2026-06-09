@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { AlbumArt } from "../AlbumArt";
+import { NewPlaylistDialog } from "../NewPlaylistDialog";
+import type { TrackMenuTarget } from "../TrackContextMenu";
+import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
 
 const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
@@ -14,6 +17,8 @@ export function SearchView() {
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
+  const [newSeed, setNewSeed] = useState<string[] | null>(null);
 
   // Focus the input on mount.
   useEffect(() => {
@@ -132,10 +137,32 @@ export function SearchView() {
                 showSubtitle
                 isPlaying={track.id === playingTrackId}
                 onPlay={() => playTracks(results.tracks, index)}
+                onMenu={(pos) =>
+                  setMenu({
+                    ...pos,
+                    trackId: track.id,
+                    serverId: track.serverId,
+                  })
+                }
               />
             ))}
           </div>
         </div>
+      )}
+
+      {menu !== null && (
+        <TrackContextMenu
+          target={menu}
+          onClose={() => setMenu(null)}
+          onNewPlaylist={(id) => {
+            setNewSeed([id]);
+            setMenu(null);
+          }}
+        />
+      )}
+
+      {newSeed !== null && (
+        <NewPlaylistDialog seedTrackIds={newSeed} onClose={() => setNewSeed(null)} />
       )}
     </div>
   );

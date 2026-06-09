@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { AlbumArt } from "../AlbumArt";
+import { NewPlaylistDialog } from "../NewPlaylistDialog";
+import type { TrackMenuTarget } from "../TrackContextMenu";
+import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
 
 type FetchState =
@@ -18,6 +21,8 @@ export function AlbumDetailView({ album }: Props) {
   const { library, dispatch } = useApp();
   const { state, playTracks } = usePlayer();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
+  const [newSeed, setNewSeed] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (!library) return;
@@ -106,9 +111,31 @@ export function AlbumDetailView({ album }: Props) {
               leading={track.trackNumber ?? index + 1}
               isPlaying={track.id === playingTrackId}
               onPlay={() => playTracks(tracks, index)}
+              onMenu={(pos) =>
+                setMenu({
+                  ...pos,
+                  trackId: track.id,
+                  serverId: track.serverId,
+                })
+              }
             />
           ))}
         </div>
+      )}
+
+      {menu !== null && (
+        <TrackContextMenu
+          target={menu}
+          onClose={() => setMenu(null)}
+          onNewPlaylist={(id) => {
+            setNewSeed([id]);
+            setMenu(null);
+          }}
+        />
+      )}
+
+      {newSeed !== null && (
+        <NewPlaylistDialog seedTrackIds={newSeed} onClose={() => setNewSeed(null)} />
       )}
     </div>
   );
