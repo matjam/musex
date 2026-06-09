@@ -933,3 +933,19 @@ img.np-art {
   border-color: var(--red);
   color: var(--red);
 }
+
+/* TrackRow: optional two-line main (title + subtitle) for search results */
+.track-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.track-rowsub {
+  font-size: 11px;
+  opacity: 0.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

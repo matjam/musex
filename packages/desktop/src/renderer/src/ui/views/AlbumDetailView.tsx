@@ -2,8 +2,8 @@ import type { Album, Track } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
-import { formatDuration } from "../../util/format";
 import { AlbumArt } from "../AlbumArt";
+import { TrackRow } from "../TrackRow";
 
 type FetchState =
   | { status: "loading" }
@@ -16,7 +16,7 @@ interface Props {
 
 export function AlbumDetailView({ album }: Props) {
   const { library, dispatch } = useApp();
-  const { state, playAlbum } = usePlayer();
+  const { state, playTracks } = usePlayer();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export function AlbumDetailView({ album }: Props) {
                 type="button"
                 className="play-btn"
                 title="Play album"
-                onClick={() => playAlbum(tracks, 0)}
+                onClick={() => playTracks(tracks, 0)}
               >
                 ▶
               </button>
@@ -99,23 +99,15 @@ export function AlbumDetailView({ album }: Props) {
 
       {fetch.status === "ok" && tracks.length > 0 && (
         <div className="track-list">
-          {tracks.map((track, index) => {
-            const isPlaying = track.id === playingTrackId;
-            return (
-              <button
-                type="button"
-                key={track.id}
-                className={`track-row${isPlaying ? " playing" : ""}`}
-                onClick={() => playAlbum(tracks, index)}
-              >
-                <span className="track-num">
-                  {isPlaying ? "▶" : (track.trackNumber ?? index + 1)}
-                </span>
-                <span className="track-title">{track.title}</span>
-                <span className="track-duration">{formatDuration(track.durationMs)}</span>
-              </button>
-            );
-          })}
+          {tracks.map((track, index) => (
+            <TrackRow
+              key={track.id}
+              track={track}
+              leading={track.trackNumber ?? index + 1}
+              isPlaying={track.id === playingTrackId}
+              onPlay={() => playTracks(tracks, index)}
+            />
+          ))}
         </div>
       )}
     </div>

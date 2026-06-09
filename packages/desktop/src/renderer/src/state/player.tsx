@@ -14,7 +14,7 @@ import { WebPlaybackEngine } from "../audio/playback-engine";
 
 interface PlayerApi {
   state: PlaybackState;
-  playAlbum(tracks: Track[], startIndex: number): void;
+  playTracks(tracks: Track[], startIndex: number): void;
   togglePlay(): void;
   next(): void;
   previous(): void;
@@ -53,7 +53,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const api: PlayerApi = {
     state,
-    playAlbum: (tracks, startIndex) => void session.loadQueue(buildQueue(tracks, startIndex)),
+    playTracks: (tracks, startIndex) => void session.loadQueue(buildQueue(tracks, startIndex)),
     togglePlay: () => (state.status === "playing" ? session.pause() : session.play()),
     next: () => void session.next(),
     previous: () => void session.previous(),
