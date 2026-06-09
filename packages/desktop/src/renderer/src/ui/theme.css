@@ -401,8 +401,16 @@ body {
   overflow: auto;
 }
 
+.browse-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
 .browse-title {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 22px;
 }
 

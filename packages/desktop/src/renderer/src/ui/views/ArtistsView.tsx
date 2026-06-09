@@ -1,5 +1,6 @@
 import type { Artist } from "@musex/core";
 import { useEffect, useState } from "react";
+import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { AlbumArt } from "../AlbumArt";
 
@@ -15,16 +16,24 @@ export function ArtistsView() {
   useEffect(() => {
     if (!library) return;
     const id = library.id;
+    const validator = listValidator(library.updatedAt);
+    let cancelled = false;
     setFetch({ status: "loading" });
     window.musex
-      .listArtists(id)
-      .then((artists) => setFetch({ status: "ok", artists }))
-      .catch((err: unknown) =>
-        setFetch({
-          status: "error",
-          message: err instanceof Error ? err.message : "Failed to load artists",
-        }),
-      );
+      .listArtists(id, validator)
+      .then((artists) => {
+        if (!cancelled) setFetch({ status: "ok", artists });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setFetch({
+            status: "error",
+            message: err instanceof Error ? err.message : "Failed to load artists",
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [library]);
 
   if (fetch.status === "loading") {

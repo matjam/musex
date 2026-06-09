@@ -2,6 +2,7 @@ import { Disc3, Home, ListMusic, Mic2, Music, Search, Settings } from "lucide-re
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { AlbumDetailView } from "./views/AlbumDetailView";
+import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
 import { PlaylistView } from "./views/PlaylistView";
@@ -30,9 +31,7 @@ export function Shell() {
       case "album":
         return <AlbumDetailView album={view.album} />;
       case "albums":
-        // Albums as a flat all-library grid is deferred (would require a slow
-        // flatten-all-albums fetch). Redirect to Artists instead.
-        return <ArtistsView />;
+        return <AlbumsView />;
       case "settings":
         return <SettingsView />;
       case "search":
@@ -66,8 +65,8 @@ export function Shell() {
 
         <button
           type="button"
-          className={`nav-item${albumsActive ? " active" : ""} dim`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
+          className={`nav-item${albumsActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
         >
           <Disc3 size={16} />
           Albums
