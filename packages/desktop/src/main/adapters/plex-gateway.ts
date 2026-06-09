@@ -17,7 +17,16 @@ import {
 // NOTE: pass the item Class so results are HYDRATED instances (with .media/.parts etc.);
 // without a Cls, fetchItem(s) returns raw PlexItemData and methods like .albums() are absent.
 import { fetchItems } from "@ctrl/plex/dist/src/baseFunctionality.js";
-import type { Album, Artist, Library, Pin, PlexGateway, Server, Track } from "@musex/core";
+import type {
+  Album,
+  Artist,
+  Library,
+  Pin,
+  PlexGateway,
+  SearchResults,
+  Server,
+  Track,
+} from "@musex/core";
 import { PlexAuthError } from "@musex/core";
 import { toAlbum, toArtist, toTrack } from "../../logic/plex-mapping.js";
 
@@ -141,6 +150,25 @@ export class PlexapiGateway implements PlexGateway {
         PlexTrackCls,
       );
       return tracks.map((t) => toTrackSafe(t, library.serverId));
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async search(library: Library, query: string, token: string): Promise<SearchResults> {
+    try {
+      const section = await this.musicSection(library, token);
+      // Per-type search, capped for responsiveness; run concurrently.
+      const [artists, albums, tracks] = await Promise.all([
+        section.searchArtists({ title: query, maxresults: 8 }),
+        section.searchAlbums({ title: query, maxresults: 8 }),
+        section.searchTracks({ title: query, maxresults: 30 }),
+      ]);
+      return {
+        artists: artists.map((a) => toArtistSafe(a, library.serverId)),
+        albums: albums.map((al) => toAlbumSafe(al, library.serverId)),
+        tracks: tracks.map((t) => toTrackSafe(t, library.serverId)),
+      };
     } catch (err) {
       asPlexAuthError(err);
     }

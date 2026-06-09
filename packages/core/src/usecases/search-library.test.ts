@@ -10,7 +10,10 @@ const library: Library = {
   type: "music",
 };
 
-function gatewayReturning(results: SearchResults): { gateway: PlexGateway; search: ReturnType<typeof vi.fn> } {
+function gatewayReturning(results: SearchResults): {
+  gateway: PlexGateway;
+  search: ReturnType<typeof vi.fn>;
+} {
   const search = vi.fn(async () => results);
   // Only `search` is exercised here; cast the partial as the full port.
   const gateway = { search } as unknown as PlexGateway;
