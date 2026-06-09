@@ -20,14 +20,17 @@ export type ProgressiveListState =
  *     by racing the full-list call against a short leader timeout. If the timeout fires
  *     first we switch to progressive paging via listPlaylistTracksPage, rendering each
  *     page as it arrives.
- *  3. Once ALL pages are assembled, we call listPlaylistTracks(validator) once more.
- *     Because main's CachingPlexGateway will now have the full list in cache (it was
- *     populated by our background paged assembly written into the store directly), this
- *     final call completes instantly and writes the canonical full-list cache entry.
- *     Re-opening the playlist thereafter is a single instant cache hit — no re-paging.
+ *  3. Cache population for fast re-opens is handled by the Phase-1 listPlaylistTracks
+ *     call itself: on a cold miss, CachingPlexGateway fetches the full list from the
+ *     real gateway and writes it to the validator-keyed cache. That call runs
+ *     concurrently with paging; its result isn't displayed once paging has started,
+ *     but its completion is what populates the cache. No second call is made, and
+ *     listPlaylistTracksPage is intentionally NOT cached. Re-opening the playlist
+ *     thereafter is a single instant cache hit — no re-paging. (If the Phase-1 call
+ *     errors, the paged result still displays; the next open simply re-pages once more.)
  *
  * If the full-list call resolves before the leader timeout (cache hit), progressive
- * paging is never started and the extra calls are avoided entirely.
+ * paging is never started.
  */
 export function useProgressiveList(
   playlistId: string,
@@ -119,15 +122,20 @@ export function useProgressiveList(
           assembled.push(...page.items);
           start += PAGE_SIZE;
 
+          // Done when we've reached the reported total OR a page returned nothing
+          // (guards against a stale/over-reported totalSize, which would otherwise
+          // loop forever fetching empty pages and hammer the Plex server).
+          const done = assembled.length >= total || page.items.length === 0;
+
           // Render each page as it arrives.
           setState({
-            status: assembled.length >= total ? "ok" : "paging",
+            status: done ? "ok" : "paging",
             items: [...assembled],
             loaded: assembled.length,
             total,
           } as ProgressiveListState);
 
-          if (assembled.length >= total) break;
+          if (done) break;
         }
 
         // All pages loaded. The full-list fetch launched in Phase 1 is still
@@ -153,6 +161,9 @@ export function useProgressiveList(
 
     return () => {
       cancelled = true;
+      // Advance the session so any in-flight runPaging loop trips its
+      // `s !== sessionRef.current` guard and stops setState-ing after unmount.
+      sessionRef.current++;
       clearTimeout(leaderTimeout);
     };
   }, [playlistId, serverId, validator]);
