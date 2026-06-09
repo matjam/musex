@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
+import { useSelection } from "../../state/selection";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import { SortSelector } from "../SortSelector";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -17,7 +18,8 @@ type FetchState =
 
 export function TracksView() {
   const { library } = useApp();
-  const { state, playTracks } = usePlayer();
+  const { state, playTrackNext } = usePlayer();
+  const { selectedTrack, select } = useSelection();
   const [sort, setSort] = useState<LibrarySort>("title");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
@@ -85,7 +87,9 @@ export function TracksView() {
                 leading={null}
                 showSubtitle
                 isPlaying={track.id === playingTrackId}
-                onPlay={() => playTracks(fetch.tracks, index)}
+                selected={track.id === selectedTrack?.id}
+                onSelect={() => select(track)}
+                onActivate={() => playTrackNext(track)}
                 onMenu={(pos) =>
                   setMenu({
                     ...pos,

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AppProvider, useApp } from "./state/app";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
+import { SelectionProvider } from "./state/selection";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
 import { Shell } from "./ui/Shell";
@@ -26,12 +27,14 @@ function Inner() {
   if (auth === "signed-in") {
     return (
       <PlaylistsProvider>
-        <div className="app-root">
-          <TopBar />
-          <Shell />
-          <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
-          <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
-        </div>
+        <SelectionProvider>
+          <div className="app-root">
+            <TopBar />
+            <Shell />
+            <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
+            <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
+          </div>
+        </SelectionProvider>
       </PlaylistsProvider>
     );
   }

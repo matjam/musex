@@ -2,6 +2,7 @@ import type { SearchResults } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
+import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -14,7 +15,8 @@ const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
 export function SearchView() {
   // The query lives in app state (driven by the top-bar search box).
   const { library, dispatch, searchQuery: query } = useApp();
-  const { state, playTracks } = usePlayer();
+  const { state, playTrackNext } = usePlayer();
+  const { selectedTrack, select } = useSelection();
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
@@ -122,7 +124,9 @@ export function SearchView() {
                   leading={null}
                   showSubtitle
                   isPlaying={track.id === playingTrackId}
-                  onPlay={() => playTracks(results.tracks, index)}
+                  selected={track.id === selectedTrack?.id}
+                  onSelect={() => select(track)}
+                  onActivate={() => playTrackNext(track)}
                   onMenu={(pos) =>
                     setMenu({
                       ...pos,

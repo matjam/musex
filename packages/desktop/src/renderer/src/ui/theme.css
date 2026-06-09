@@ -1646,3 +1646,129 @@ img.queue-row-art {
   opacity: 0.4;
   text-align: center;
 }
+
+/* ---- Track detail panel (right side) ---- */
+
+.detail-panel {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detail-head-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.5;
+}
+
+.detail-close {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  display: flex;
+  padding: 2px;
+}
+
+.detail-close:hover {
+  opacity: 1;
+}
+
+.detail-art {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  background: var(--panel-2);
+  object-fit: cover;
+}
+
+.detail-title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 4px;
+}
+
+.detail-link {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.detail-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.detail-link.dim {
+  opacity: 0.6;
+  font-size: 12px;
+}
+
+.detail-link:disabled {
+  cursor: default;
+}
+
+.detail-play {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 20px;
+  background: var(--green);
+  color: var(--bg);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.detail-play:hover {
+  filter: brightness(1.08);
+}
+
+.detail-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.detail-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.detail-meta-row span:first-child {
+  opacity: 0.5;
+}
+
+/* selected (highlighted) track row */
+.track-row.selected {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.track-eq {
+  color: var(--green);
+}

@@ -4,6 +4,7 @@ import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { usePlaylists } from "../../state/playlists";
+import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
 import { useProgressiveList } from "../hooks/useProgressiveList";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
@@ -147,8 +148,9 @@ interface Props {
 
 export function PlaylistView({ playlist }: Props) {
   const { dispatch } = useApp();
-  const { state, playTracks } = usePlayer();
+  const { state, playTracks, playTrackNext } = usePlayer();
   const { playlists, rename, destroy } = usePlaylists();
+  const { selectedTrack, select } = useSelection();
   const live = playlists.find((p) => p.id === playlist.id) ?? playlist;
 
   // useProgressiveList: on cache HIT → instant "ok"; on MISS → pages in progressively.
@@ -251,7 +253,9 @@ export function PlaylistView({ playlist }: Props) {
                 track={pt.track}
                 leading={i + 1}
                 isPlaying={pt.track.id === playingTrackId}
-                onPlay={() => playTracks(tracks, i)}
+                selected={pt.track.id === selectedTrack?.id}
+                onSelect={() => select(pt.track)}
+                onActivate={() => playTrackNext(pt.track)}
                 onMenu={(pos) =>
                   setMenu({
                     ...pos,

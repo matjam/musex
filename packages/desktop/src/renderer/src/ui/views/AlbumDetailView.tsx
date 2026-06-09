@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
+import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -22,7 +23,8 @@ interface Props {
 
 export function AlbumDetailView({ album }: Props) {
   const { library, dispatch } = useApp();
-  const { state, playTracks, enqueueNext, enqueueEnd } = usePlayer();
+  const { state, playTracks, playTrackNext, enqueueNext, enqueueEnd } = usePlayer();
+  const { selectedTrack, select } = useSelection();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
@@ -129,7 +131,9 @@ export function AlbumDetailView({ album }: Props) {
                 track={track}
                 leading={track.trackNumber ?? index + 1}
                 isPlaying={track.id === playingTrackId}
-                onPlay={() => playTracks(tracks, index)}
+                selected={track.id === selectedTrack?.id}
+                onSelect={() => select(track)}
+                onActivate={() => playTrackNext(track)}
                 onMenu={(pos) =>
                   setMenu({
                     ...pos,
