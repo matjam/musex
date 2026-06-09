@@ -59,3 +59,9 @@ export interface Queue {
   tracks: Track[];
   index: number;
 }
+
+export interface SearchResults {
+  artists: Artist[];
+  albums: Album[];
+  tracks: Track[];
+}

@@ -6,6 +6,7 @@ export type {
   Library,
   MediaInfo,
   Queue,
+  SearchResults,
   Server,
   Track,
 } from "./models/index";
@@ -19,6 +20,7 @@ export { PlexAuthError } from "./ports/plex-gateway";
 export type { StreamKind, StreamRef, StreamResolver } from "./ports/stream-resolver";
 export type { TokenStore } from "./ports/token-store";
 export { buildQueue } from "./usecases/build-queue";
+export { searchLibrary } from "./usecases/search-library";
 export type { LibraryDiscovery } from "./usecases/discover-libraries";
 export { discoverMusicLibraries } from "./usecases/discover-libraries";
 export type { SignInDeps, SignInOptions, SignInResult } from "./usecases/sign-in";

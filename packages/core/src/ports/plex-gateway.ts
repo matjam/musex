@@ -1,4 +1,4 @@
-import type { Album, Artist, Library, Server, Track } from "../models/index";
+import type { Album, Artist, Library, SearchResults, Server, Track } from "../models/index";
 
 export interface Pin {
   id: string;
@@ -16,6 +16,7 @@ export interface PlexGateway {
   listArtists(library: Library, token: string): Promise<Artist[]>;
   listAlbums(library: Library, artistId: string, token: string): Promise<Album[]>;
   listTracks(library: Library, albumId: string, token: string): Promise<Track[]>;
+  search(library: Library, query: string, token: string): Promise<SearchResults>;
 }
 
 /** Thrown by a PlexGateway implementation when the Plex token is rejected (HTTP 401).

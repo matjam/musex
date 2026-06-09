@@ -1,4 +1,4 @@
-import type { Album, Artist, Library, Server, Track } from "../models/index";
+import type { Album, Artist, Library, SearchResults, Server, Track } from "../models/index";
 import type { PlaybackEngine } from "../ports/playback-engine";
 import type { Pin, PlexGateway } from "../ports/plex-gateway";
 import { PlexAuthError } from "../ports/plex-gateway";
@@ -62,6 +62,17 @@ export class FakePlexGateway implements PlexGateway {
   }
   async listTracks(_library: Library, albumId: string, _token: string): Promise<Track[]> {
     return this.tracks.get(albumId) ?? [];
+  }
+  async search(library: Library, query: string, _token: string): Promise<SearchResults> {
+    const q = query.toLowerCase();
+    const libraryArtists = this.artists.get(library.id) ?? [];
+    const allAlbums = [...this.albums.values()].flat();
+    const allTracks = [...this.tracks.values()].flat();
+    return {
+      artists: libraryArtists.filter((a) => a.name.toLowerCase().includes(q)),
+      albums: allAlbums.filter((a) => a.title.toLowerCase().includes(q)),
+      tracks: allTracks.filter((t) => t.title.toLowerCase().includes(q)),
+    };
   }
 }
 
