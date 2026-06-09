@@ -507,6 +507,25 @@ img.grid-card-art {
   opacity: 1;
 }
 
+/* ---- Tracks view ---- */
+
+.tracks-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tracks-view-header {
+  flex-shrink: 0;
+  padding: 20px 24px 0;
+}
+
+.tracks-view .track-list {
+  flex: 1;
+  overflow: auto;
+}
+
 /* ---- Album detail ---- */
 
 .album-detail {

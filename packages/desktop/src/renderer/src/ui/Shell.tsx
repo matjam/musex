@@ -8,6 +8,7 @@ import { ArtistsView } from "./views/ArtistsView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
+import { TracksView } from "./views/TracksView";
 
 export function Shell() {
   const { library, view, dispatch } = useApp();
@@ -19,6 +20,7 @@ export function Shell() {
   // artist/album drill-downs keep the Artists nav highlighted.
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
+  const tracksActive = view.name === "tracks";
   const settingsActive = view.name === "settings";
   const searchActive = view.name === "search";
 
@@ -36,6 +38,8 @@ export function Shell() {
         return <SettingsView />;
       case "search":
         return <SearchView />;
+      case "tracks":
+        return <TracksView />;
       case "playlist":
         return <PlaylistView playlist={view.playlist} />;
     }
@@ -81,10 +85,14 @@ export function Shell() {
           Artists
         </button>
 
-        <div className="nav-item dim">
+        <button
+          type="button"
+          className={`nav-item${tracksActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "tracks" } })}
+        >
           <Music size={16} />
           Tracks
-        </div>
+        </button>
 
         <div className="playlist-rail">
           <div className="playlist-rail-head">

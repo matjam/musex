@@ -5,6 +5,7 @@ type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";
 export type View =
   | { name: "albums" }
   | { name: "artists" }
+  | { name: "tracks" }
   | { name: "album"; album: Album }
   | { name: "artist"; artist: Artist }
   | { name: "settings" }
