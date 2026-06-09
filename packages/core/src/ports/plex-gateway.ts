@@ -2,6 +2,7 @@ import type {
   Album,
   Artist,
   Library,
+  LibrarySort,
   Playlist,
   PlaylistTrack,
   SearchResults,
@@ -48,6 +49,14 @@ export interface PlexGateway {
   ): Promise<void>;
   renamePlaylist(playlistId: string, serverId: string, title: string, token: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string, token: string): Promise<void>;
+  listAllAlbums(library: Library, sort: LibrarySort, token: string): Promise<Album[]>;
+  listAllTracksPage(
+    library: Library,
+    sort: LibrarySort,
+    start: number,
+    size: number,
+    token: string,
+  ): Promise<{ items: Track[]; total: number }>;
 }
 
 /** Thrown by a PlexGateway implementation when the Plex token is rejected (HTTP 401).

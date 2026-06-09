@@ -4,6 +4,7 @@ export type {
   Artist,
   Connection,
   Library,
+  LibrarySort,
   MediaInfo,
   Playlist,
   PlaylistTrack,

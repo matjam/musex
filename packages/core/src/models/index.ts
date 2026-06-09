@@ -16,7 +16,10 @@ export interface Library {
   serverName: string;
   title: string;
   type: "music";
+  updatedAt?: number; // epoch ms — section scannedAt/updatedAt, for library-wide cache validation
 }
+
+export type LibrarySort = "title" | "artist" | "added";
 
 export interface Artist {
   id: string;

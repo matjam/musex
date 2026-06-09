@@ -2,6 +2,7 @@ import type {
   Album,
   Artist,
   Library,
+  LibrarySort,
   Playlist,
   PlaylistTrack,
   SearchResults,
@@ -26,6 +27,34 @@ export class FakeTokenStore implements TokenStore {
   }
   async clear(): Promise<void> {
     this.token = null;
+  }
+}
+
+/** Sort albums for FakePlexGateway.
+ *  "artist" falls back to "title" because Album has no artistName field —
+ *  the real gateway sorts by the artist relation on the Plex side. */
+function sortAlbums(albums: Album[], sort: LibrarySort): Album[] {
+  const copy = [...albums];
+  switch (sort) {
+    case "title":
+    case "artist": // Album has no artistName; fall back to title (noted)
+      return copy.sort((a, b) => a.title.localeCompare(b.title));
+    case "added":
+      return copy.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  }
+}
+
+/** Sort tracks for FakePlexGateway. */
+function sortTracks(tracks: Track[], sort: LibrarySort): Track[] {
+  const copy = [...tracks];
+  switch (sort) {
+    case "title":
+      return copy.sort((a, b) => a.title.localeCompare(b.title));
+    case "artist":
+      return copy.sort((a, b) => a.artistName.localeCompare(b.artistName));
+    case "added":
+      // Track has no updatedAt; treat all as equally unset (stable order preserved)
+      return copy;
   }
 }
 
@@ -171,6 +200,22 @@ export class FakePlexGateway implements PlexGateway {
 
   async deletePlaylist(playlistId: string, _serverId: string, _token: string): Promise<void> {
     this.playlists.delete(playlistId);
+  }
+
+  async listAllAlbums(_library: Library, sort: LibrarySort, _token: string): Promise<Album[]> {
+    const all = [...this.albums.values()].flat();
+    return sortAlbums(all, sort);
+  }
+
+  async listAllTracksPage(
+    _library: Library,
+    sort: LibrarySort,
+    start: number,
+    size: number,
+    _token: string,
+  ): Promise<{ items: Track[]; total: number }> {
+    const all = sortTracks([...this.tracks.values()].flat(), sort);
+    return { items: all.slice(start, start + size), total: all.length };
   }
 }
 
