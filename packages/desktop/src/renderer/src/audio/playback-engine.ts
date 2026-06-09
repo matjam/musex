@@ -89,7 +89,17 @@ export class WebPlaybackEngine implements PlaybackEngine {
   }
 
   play(): void {
-    void this.current.play();
+    this.playCurrent();
+  }
+
+  /** Start the current element, ignoring the benign AbortError that fires when a
+   *  pending play() is interrupted by a quick pause()/load() during rapid track
+   *  changes. Real failures are surfaced via onError. */
+  private playCurrent(): void {
+    void this.current.play().catch((e: unknown) => {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      this.errorCb(e instanceof Error ? e : new Error(String(e)));
+    });
   }
 
   pause(): void {
@@ -141,7 +151,7 @@ export class WebPlaybackEngine implements PlaybackEngine {
       this.nextReady = false;
       this.clearNext(); // reset the just-finished element (now the look-ahead buffer)
       this.current.volume = this.volume;
-      void this.current.play();
+      this.playCurrent();
       this.advancedCb(); // session advances its index + preloads the new next
     } else {
       this.endedCb();
