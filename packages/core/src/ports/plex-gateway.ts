@@ -50,6 +50,7 @@ export interface PlexGateway {
   renamePlaylist(playlistId: string, serverId: string, title: string, token: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string, token: string): Promise<void>;
   listAllAlbums(library: Library, sort: LibrarySort, token: string): Promise<Album[]>;
+  listAllTracks(library: Library, sort: LibrarySort, token: string): Promise<Track[]>;
   listAllTracksPage(
     library: Library,
     sort: LibrarySort,

@@ -207,6 +207,11 @@ export class FakePlexGateway implements PlexGateway {
     return sortAlbums(all, sort);
   }
 
+  async listAllTracks(_library: Library, sort: LibrarySort, _token: string): Promise<Track[]> {
+    const all = [...this.tracks.values()].flat();
+    return sortTracks(all, sort);
+  }
+
   async listAllTracksPage(
     _library: Library,
     sort: LibrarySort,

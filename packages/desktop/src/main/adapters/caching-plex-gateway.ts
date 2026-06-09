@@ -91,6 +91,17 @@ export class CachingPlexGateway implements PlexGateway {
     );
   }
 
+  async listAllTracks(
+    library: Library,
+    sort: LibrarySort,
+    token: string,
+    validator?: string,
+  ): Promise<Track[]> {
+    return this.cached(`alltracks:${library.id}:${sort}`, validator, () =>
+      this.inner.listAllTracks(library, sort, token),
+    );
+  }
+
   /** Pass-through: paged results are not individually cached. The renderer
    *  assembles pages and populates a full-list cache via a separate call. */
   listAllTracksPage(

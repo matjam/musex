@@ -33,6 +33,7 @@ export const IPC = {
   listPlaylistTracks: "musex:listPlaylistTracks", // (playlistId, serverId) -> PlaylistTrack[]
   listPlaylistTracksPage: "musex:listPlaylistTracksPage", // (playlistId, serverId, start, size) -> { items: PlaylistTrack[]; total: number }
   listAllAlbums: "musex:listAllAlbums", // (libraryId, sort, validator?) -> Album[]
+  listAllTracks: "musex:listAllTracks", // (libraryId, sort, validator?) -> Track[]
   listAllTracksPage: "musex:listAllTracksPage", // (libraryId, sort, start, size) -> { items: Track[]; total: number }
   createPlaylist: "musex:createPlaylist", // (libraryId, title, trackIds) -> Playlist
   addToPlaylist: "musex:addToPlaylist", // (playlistId, serverId, trackIds) -> void
@@ -82,6 +83,7 @@ export interface MusexApi {
     size: number,
   ): Promise<{ items: PlaylistTrack[]; total: number }>;
   listAllAlbums(libraryId: string, sort: LibrarySort, validator?: string): Promise<Album[]>;
+  listAllTracks(libraryId: string, sort: LibrarySort, validator?: string): Promise<Track[]>;
   listAllTracksPage(
     libraryId: string,
     sort: LibrarySort,

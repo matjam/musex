@@ -163,6 +163,15 @@ export function registerIpc(rt: Runtime): void {
     },
   );
   ipcMain.handle(
+    IPC.listAllTracks,
+    async (_e, libraryId: string, sort: LibrarySort, validator?: string) => {
+      const lib = rt.findLibrary(libraryId);
+      await rt.ensureProxyEndpoint(lib.serverId);
+      const tracks = await rt.gateway.listAllTracks(lib, sort, rt.requireToken(), validator);
+      return tracks.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) }));
+    },
+  );
+  ipcMain.handle(
     IPC.listAllTracksPage,
     async (_e, libraryId: string, sort: LibrarySort, start: number, size: number) => {
       const lib = rt.findLibrary(libraryId);

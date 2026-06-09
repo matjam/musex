@@ -139,6 +139,16 @@ export class PlexapiGateway implements PlexGateway {
     }
   }
 
+  async listAllTracks(library: Library, sort: LibrarySort, token: string): Promise<Track[]> {
+    try {
+      const section = await this.musicSection(library, token);
+      const tracks = await section.searchTracks({ sort: plexSort(sort) });
+      return tracks.map((t) => toTrackSafe(t, library.serverId));
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
   async listAllTracksPage(
     library: Library,
     sort: LibrarySort,
