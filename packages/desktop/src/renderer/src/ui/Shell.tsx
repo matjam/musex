@@ -1,12 +1,18 @@
+import { useState } from "react";
 import { useApp } from "../state/app";
+import { usePlaylists } from "../state/playlists";
+import { NewPlaylistDialog } from "./NewPlaylistDialog";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
+import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
 
 export function Shell() {
   const { library, view, dispatch } = useApp();
+  const { playlists } = usePlaylists();
+  const [newPlaylistSeed, setNewPlaylistSeed] = useState<string[] | null>(null);
 
   const serverLabel = library ? `${library.serverName} · ${library.title}` : "No library";
 
@@ -33,6 +39,8 @@ export function Shell() {
         return <SettingsView />;
       case "search":
         return <SearchView />;
+      case "playlist":
+        return <PlaylistView playlist={view.playlist} />;
     }
   }
 
@@ -81,6 +89,32 @@ export function Shell() {
           Tracks
         </div>
 
+        <div className="playlist-rail">
+          <div className="playlist-rail-head">
+            <span>Playlists</span>
+            <button
+              type="button"
+              className="playlist-rail-add"
+              title="New playlist"
+              onClick={() => setNewPlaylistSeed([])}
+            >
+              +
+            </button>
+          </div>
+          {playlists.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`nav-item${view.name === "playlist" && view.playlist.id === p.id ? " active" : ""}`}
+              onClick={() =>
+                dispatch({ type: "navigate", view: { name: "playlist", playlist: p } })
+              }
+            >
+              {p.title}
+            </button>
+          ))}
+        </div>
+
         <div className="nav-section">App</div>
 
         <button
@@ -99,6 +133,13 @@ export function Shell() {
       </nav>
 
       <main className="content-area">{renderContent()}</main>
+
+      {newPlaylistSeed !== null && (
+        <NewPlaylistDialog
+          seedTrackIds={newPlaylistSeed}
+          onClose={() => setNewPlaylistSeed(null)}
+        />
+      )}
     </div>
   );
 }

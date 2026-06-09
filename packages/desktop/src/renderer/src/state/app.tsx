@@ -1,4 +1,4 @@
-import type { Album, Artist, Library } from "@musex/core";
+import type { Album, Artist, Library, Playlist } from "@musex/core";
 import { createContext, type ReactNode, useContext, useEffect, useReducer } from "react";
 
 type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";
@@ -8,7 +8,8 @@ export type View =
   | { name: "album"; album: Album }
   | { name: "artist"; artist: Artist }
   | { name: "settings" }
-  | { name: "search" };
+  | { name: "search" }
+  | { name: "playlist"; playlist: Playlist };
 
 interface AppState {
   auth: AuthState;
