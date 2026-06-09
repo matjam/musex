@@ -22,6 +22,7 @@ import type {
   Album,
   Artist,
   Library,
+  LibrarySort,
   Pin,
   Playlist,
   PlaylistTrack,
@@ -31,6 +32,7 @@ import type {
   Track,
 } from "@musex/core";
 import { PlexAuthError } from "@musex/core";
+import { plexSort } from "../../logic/library-sort.js";
 import { toAlbum, toArtist, toTrack } from "../../logic/plex-mapping.js";
 
 /** Translate @ctrl/plex ofetch HTTP errors into PlexAuthError where appropriate.
@@ -110,6 +112,7 @@ export class PlexapiGateway implements PlexGateway {
           serverName: server.name,
           title: s.title,
           type: "music" as const,
+          updatedAt: s.updatedAt.getTime(),
         }));
     } catch (err) {
       asPlexAuthError(err);
@@ -121,6 +124,52 @@ export class PlexapiGateway implements PlexGateway {
       const section = await this.musicSection(library, token);
       const artists = await section.searchArtists();
       return artists.map((a) => toArtistSafe(a, library.serverId));
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async listAllAlbums(library: Library, sort: LibrarySort, token: string): Promise<Album[]> {
+    try {
+      const section = await this.musicSection(library, token);
+      const albums = await section.searchAlbums({ sort: plexSort(sort) });
+      return albums.map((a) => toAlbumSafe(a, library.serverId));
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async listAllTracksPage(
+    library: Library,
+    sort: LibrarySort,
+    start: number,
+    size: number,
+    token: string,
+  ): Promise<{ items: Track[]; total: number }> {
+    try {
+      const server = await this.connect(library.serverId, token);
+      // type=10 is "track" (confirmed from @ctrl/plex SEARCHTYPES).
+      // Pagination mirrors listPlaylistTracksPage: bake container params into the
+      // path string and call server.query() directly (fetchItems options are
+      // client-side filtering, not URL params).
+      const path =
+        `/library/sections/${library.id}/all` +
+        `?type=10&sort=${plexSort(sort)}` +
+        `&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${size}`;
+      const response = (await server.query({ path })) as {
+        MediaContainer: {
+          totalSize?: number;
+          size?: number;
+          Metadata?: Record<string, unknown>[];
+        };
+      };
+      const total = response.MediaContainer.totalSize ?? 0;
+      const rawItems = response.MediaContainer.Metadata ?? [];
+      const items: Track[] = rawItems.map((raw) => {
+        const t = new PlexTrackCls(server, raw, undefined, undefined);
+        return toTrackSafe(t as PlexTrack, library.serverId);
+      });
+      return { items, total };
     } catch (err) {
       asPlexAuthError(err);
     }

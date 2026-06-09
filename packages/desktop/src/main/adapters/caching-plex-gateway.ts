@@ -2,6 +2,7 @@ import type {
   Album,
   Artist,
   Library,
+  LibrarySort,
   Pin,
   Playlist,
   PlaylistTrack,
@@ -27,6 +28,13 @@ export class CachingPlexGateway implements PlexGateway {
         size: number,
         token: string,
       ): Promise<{ items: PlaylistTrack[]; total: number }>;
+      listAllTracksPage(
+        library: Library,
+        sort: LibrarySort,
+        start: number,
+        size: number,
+        token: string,
+      ): Promise<{ items: Track[]; total: number }>;
     },
     private readonly cache: ListCacheStore,
   ) {}
@@ -70,6 +78,29 @@ export class CachingPlexGateway implements PlexGateway {
     return this.cached(`pltracks:${playlistId}`, validator, () =>
       this.inner.listPlaylistTracks(playlistId, serverId, token),
     );
+  }
+
+  async listAllAlbums(
+    library: Library,
+    sort: LibrarySort,
+    token: string,
+    validator?: string,
+  ): Promise<Album[]> {
+    return this.cached(`allalbums:${library.id}:${sort}`, validator, () =>
+      this.inner.listAllAlbums(library, sort, token),
+    );
+  }
+
+  /** Pass-through: paged results are not individually cached. The renderer
+   *  assembles pages and populates a full-list cache via a separate call. */
+  listAllTracksPage(
+    library: Library,
+    sort: LibrarySort,
+    start: number,
+    size: number,
+    token: string,
+  ): Promise<{ items: Track[]; total: number }> {
+    return this.inner.listAllTracksPage(library, sort, start, size, token);
   }
 
   private async cached<T>(
