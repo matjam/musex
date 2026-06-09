@@ -56,6 +56,7 @@ Verified 2026-06-08:
 - **Local bar = CI bar:** run tests + lint + typecheck + format-check before every push.
 - No silently swallowed errors (empty `catch {}` is a bug). 401 from Plex → drop to signed-out and re-auth, don't loop.
 - **Icons: always `lucide-react` (the project icon package). No emoji in the UI** — transport controls, nav, buttons, etc. all use lucide icons for a consistent look. If a spec/mockup shows an emoji glyph it's shorthand; implement it with the matching lucide icon.
+- **Native/binary runtime dependencies are ALWAYS bundled — never assume a system/homebrew install.** Anything the app needs at runtime (e.g. mpv/libmpv) must be provisioned by a repo build step — pinned version, checksum-verified, committed script, output in `vendor/` (gitignored) — and packaged into the app (electron-builder `extraResources`). **Dev mode uses the same vendored artifact** as the packaged app, so dev and prod can't diverge. Why: the app must run on a fresh machine with no setup; "brew install X for dev" was explicitly rejected (2026-06-09).
 
 ## Delivery
 
