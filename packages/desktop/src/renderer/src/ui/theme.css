@@ -688,10 +688,6 @@ img.album-header-art {
   flex-shrink: 0;
 }
 
-.now-playing-bar--empty {
-  height: 68px;
-}
-
 /* Left: art + meta */
 .np-left {
   display: flex;
@@ -787,6 +783,18 @@ img.np-art {
 
 .np-playpause:hover {
   opacity: 0.85;
+}
+
+.np-btn:disabled,
+.np-playpause:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.np-seek-bar[aria-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* Seek row */

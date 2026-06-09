@@ -23,15 +23,8 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
   const { state, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat } =
     usePlayer();
 
-  // Nothing playing — render an empty placeholder bar to preserve layout
-  if (state.queue === null) {
-    return <div className="now-playing-bar now-playing-bar--empty" />;
-  }
-
-  const track = state.queue.tracks[state.queue.index];
-  if (track === undefined) {
-    return <div className="now-playing-bar now-playing-bar--empty" />;
-  }
+  const track = state.queue ? state.queue.tracks[state.queue.index] : undefined;
+  const hasTrack = track !== undefined;
 
   const positionMs = state.positionSec * 1000;
   const durationMs = state.durationSec * 1000;
@@ -57,20 +50,23 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
   }
 
   const isPlaying = state.status === "playing";
-  const metaSub =
-    track.albumTitle != null ? `${track.artistName} · ${track.albumTitle}` : track.artistName;
-
-  const shuffle = state.queue.shuffle;
-  const repeat = state.queue.repeat;
+  const shuffle = state.queue?.shuffle ?? false;
+  const repeat = state.queue?.repeat ?? "none";
   const repeatActive = repeat === "all" || repeat === "one";
+  const metaSub =
+    track === undefined
+      ? ""
+      : track.albumTitle != null
+        ? `${track.artistName} · ${track.albumTitle}`
+        : track.artistName;
 
   return (
     <div className="now-playing-bar">
       {/* Left: art + track meta */}
       <div className="np-left">
-        <AlbumArt thumb={track.thumb} className="np-art" />
+        <AlbumArt thumb={track?.thumb} className="np-art" />
         <div className="np-meta">
-          <div className="np-title">{track.title}</div>
+          <div className="np-title">{track?.title ?? ""}</div>
           <div className="np-sub">{metaSub}</div>
         </div>
       </div>
@@ -83,10 +79,17 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
             className={`np-btn${shuffle ? " active" : ""}`}
             title="Shuffle"
             onClick={toggleShuffle}
+            disabled={!hasTrack}
           >
             <Shuffle size={16} />
           </button>
-          <button type="button" className="np-btn" title="Previous" onClick={previous}>
+          <button
+            type="button"
+            className="np-btn"
+            title="Previous"
+            onClick={previous}
+            disabled={!hasTrack}
+          >
             <SkipBack size={16} />
           </button>
           <button
@@ -94,10 +97,11 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
             className="np-playpause"
             title={isPlaying ? "Pause" : "Play"}
             onClick={togglePlay}
+            disabled={!hasTrack}
           >
             {isPlaying ? <Pause size={16} /> : <Play size={16} />}
           </button>
-          <button type="button" className="np-btn" title="Next" onClick={next}>
+          <button type="button" className="np-btn" title="Next" onClick={next} disabled={!hasTrack}>
             <SkipForward size={16} />
           </button>
           <button
@@ -107,6 +111,7 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
               repeat === "none" ? "Repeat: off" : repeat === "all" ? "Repeat: all" : "Repeat: one"
             }
             onClick={cycleRepeat}
+            disabled={!hasTrack}
           >
             {repeat === "one" ? <Repeat1 size={16} /> : <Repeat size={16} />}
           </button>
@@ -121,7 +126,8 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
             aria-valuenow={Math.round(state.positionSec)}
             aria-valuemin={0}
             aria-valuemax={Math.round(state.durationSec)}
-            tabIndex={0}
+            aria-disabled={!hasTrack || undefined}
+            tabIndex={hasTrack ? 0 : -1}
             onClick={handleSeekClick}
             onKeyDown={handleSeekKey}
           >
@@ -138,6 +144,7 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
           className="np-btn"
           title="Queue"
           onClick={onToggleQueue ?? (() => undefined)}
+          disabled={!hasTrack}
         >
           <ListMusic size={16} />
         </button>
