@@ -16,8 +16,8 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
+import { IpcPlaybackEngine } from "../audio/ipc-playback-engine";
 import { IpcStreamResolver } from "../audio/ipc-stream-resolver";
-import { WebPlaybackEngine } from "../audio/playback-engine";
 
 interface PlayerApi {
   state: PlaybackState;
@@ -45,7 +45,7 @@ const Ctx = createContext<PlayerApi | null>(null);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const session = useMemo(
-    () => new PlaybackSession(new WebPlaybackEngine(), new IpcStreamResolver()),
+    () => new PlaybackSession(new IpcPlaybackEngine(), new IpcStreamResolver()),
     [],
   );
   const stateRef = useRef(session.getState());
