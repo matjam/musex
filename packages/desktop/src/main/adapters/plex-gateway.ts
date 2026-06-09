@@ -433,26 +433,19 @@ export class PlexapiGateway implements PlexGateway {
     if (cachedUrl) {
       const server = new PlexServer(cachedUrl, token, CONNECT_TIMEOUT_MS);
       try {
-        const tq = Date.now();
-        await server.query({ path: "/" });
-        console.log("[musex-startup] cached-url connect", Date.now() - tq, "ms ->", cachedUrl);
+        await server.query({ path: "/" }); // cheap, timeout-bounded reachability check
         this.serverCache.set(serverId, server);
         return server;
       } catch {
-        console.log("[musex-startup] cached-url stale, rediscovering ->", cachedUrl);
-        this.urlCache?.delete(serverId);
+        this.urlCache?.delete(serverId); // stale (e.g. network changed) -> rediscover
       }
     }
 
     const account = this.account(token);
-    const tr = Date.now();
     const resources = await account.resources();
-    console.log("[musex-startup] account.resources()", Date.now() - tr, "ms");
     const resource = resources.find((r) => r.clientIdentifier === serverId);
     if (!resource) throw new Error(`Plex server ${serverId} not found for this account`);
-    const tc = Date.now();
     const plexServer = await resource.connect(null, CONNECT_TIMEOUT_MS);
-    console.log("[musex-startup] resource.connect()", Date.now() - tc, "ms ->", plexServer.baseurl);
     this.urlCache?.set(serverId, plexServer.baseurl);
     this.serverCache.set(serverId, plexServer);
     return plexServer;

@@ -73,9 +73,7 @@ export class Runtime {
    *  Uses the cached gateway connection — no extra network round-trip after first browse. */
   async ensureProxyEndpoint(serverId: string): Promise<void> {
     if (this.registeredServers.has(serverId)) return;
-    const t = Date.now();
     const ep = await this.gateway.endpoint(serverId, this.requireToken());
-    console.log("[musex-startup] ensureProxyEndpoint", serverId, Date.now() - t, "ms");
     this.proxy.registerServer(serverId, ep);
     this.registeredServers.add(serverId);
   }

@@ -31,16 +31,11 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  const t0 = Date.now();
   const runtime = new Runtime();
   await runtime.init();
-  console.log("[musex-startup] runtime.init", Date.now() - t0, "ms");
-  const t1 = Date.now();
   await runtime.restore();
-  console.log("[musex-startup] runtime.restore (token load)", Date.now() - t1, "ms");
   registerIpc(runtime);
   createWindow();
-  console.log("[musex-startup] window created", Date.now() - t0, "ms total boot");
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

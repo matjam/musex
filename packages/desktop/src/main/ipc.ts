@@ -13,32 +13,21 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.signInPoll, () => rt.signInPoll());
 
   ipcMain.handle(IPC.restoreSession, async () => {
-    const t0 = Date.now();
-    if (!rt.token) {
-      console.log("[musex-startup] restoreSession: no token (instant)", Date.now() - t0, "ms");
-      return { library: null };
-    }
+    if (!rt.token) return { library: null };
     const lib = persistence.getLibrary();
     if (lib) {
       rt.libraries = [lib];
-      console.log(
-        "[musex-startup] restoreSession: persisted library (instant)",
-        Date.now() - t0,
-        "ms",
-      );
       return { library: lib }; // instant — no network
     }
-    // Signed in but no library chosen yet: discover once.
-    console.log("[musex-startup] restoreSession: NO persisted library -> discovering (network)...");
+    // Signed in but no library chosen yet: discover once, then persist the chosen
+    // library so the next launch returns instantly (no network on the splash).
     try {
       const result = await discoverMusicLibraries(rt.gateway, rt.token);
       rt.libraries = result.libraries;
       const first = result.libraries[0] ?? null;
-      if (first) persistence.setLibrary(first); // self-heal: next launch skips discovery
-      console.log("[musex-startup] restoreSession: discover done", Date.now() - t0, "ms");
+      if (first) persistence.setLibrary(first);
       return { library: first };
-    } catch (e) {
-      console.log("[musex-startup] restoreSession: discover FAILED", Date.now() - t0, "ms", e);
+    } catch {
       return { library: null };
     }
   });
