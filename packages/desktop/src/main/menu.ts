@@ -1,6 +1,8 @@
 import { app, Menu, type MenuItemConstructorOptions, shell } from "electron";
 
 export interface AppMenuDeps {
+  /** Open the custom About window (version + dependency attribution). */
+  showAbout: () => void;
   /** Navigate the current window to Settings → Keyboard Shortcuts. */
   showShortcuts: () => void;
   /** Reveal the app's logs/data folder in Finder. */
@@ -29,7 +31,9 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
     {
       role: "appMenu",
       submenu: [
-        { role: "about" },
+        // Custom About (renderer modal) instead of the native panel: it holds
+        // the scrollable dependency-attribution list the native one can't.
+        { label: "About musex", click: () => deps.showAbout() },
         {
           label: "Check for Updates…",
           click: () => deps.checkForUpdates(),

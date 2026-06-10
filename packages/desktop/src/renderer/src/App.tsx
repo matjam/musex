@@ -4,6 +4,7 @@ import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
+import { AboutModal } from "./ui/AboutModal";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
@@ -18,14 +19,19 @@ function Inner() {
   const { auth, dispatch } = useApp();
   const [queueOpen, setQueueOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
-  // App-menu pushes (Help → Keyboard Shortcuts opens the modal, like ⌘/).
+  // App-menu pushes (musex → About, Help → Keyboard Shortcuts like ⌘/).
   useEffect(() => {
     return window.musex.onNavigateTo((p) => {
-      if (p.section === "shortcuts") setShortcutsOpen(true);
+      if (p.view === "about") setAboutOpen(true);
+      else if (p.section === "shortcuts") setShortcutsOpen(true);
       else dispatch({ type: "navigate", view: { name: "settings" } });
     });
   }, [dispatch]);
+
+  // Rendered in every auth state so the menu's About works pre-sign-in too.
+  const about = aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />;
 
   if (auth === "restoring") {
     return (
@@ -34,6 +40,7 @@ function Inner() {
           mus<span>ex</span>
         </div>
         <div className="signin-tagline">Restoring session…</div>
+        {about}
       </div>
     );
   }
@@ -53,13 +60,19 @@ function Inner() {
               <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
               <Toasts />
               {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+              {about}
             </div>
           </RatingsProvider>
         </SelectionProvider>
       </PlaylistsProvider>
     );
   }
-  return <SignIn />;
+  return (
+    <>
+      <SignIn />
+      {about}
+    </>
+  );
 }
 
 export function App() {

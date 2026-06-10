@@ -58,6 +58,10 @@ app.whenReady().then(async () => {
     // window after macOS re-activate).
     Menu.setApplicationMenu(
       buildAppMenu({
+        showAbout: () => {
+          const payload: NavigateToPayload = { view: "about" };
+          if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);
+        },
         showShortcuts: () => {
           const payload: NavigateToPayload = { view: "settings", section: "shortcuts" };
           if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);

@@ -188,7 +188,7 @@ export interface PluginInfo {
 }
 /** Main → renderer navigation push (application menu items). Deliberately a
  *  narrow union — widen as more menu entries need to deep-link into the UI. */
-export type NavigateToPayload = { view: "settings"; section?: "shortcuts" };
+export type NavigateToPayload = { view: "settings"; section?: "shortcuts" } | { view: "about" };
 
 export type PluginNotification = {
   pluginId: string;
