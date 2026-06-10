@@ -104,6 +104,16 @@ ids, stream URLs, or tokens ever cross the plugin boundary.**
 - `ctx.ui.contributeTrackDetail(provider)` — `getDetail(track)` returns
   `{title, rows: [{label, value}]} | null`; rendered as an extra section in the
   track slide-out panel.
+- `ctx.ui.registerSimilarProvider({id, similarArtists?, similarTracks?})` —
+  powers the Similar side panel ("Similar Artists" on artist pages, "Similar
+  Songs" in the track panel). Return `SimilarItem[]` (`{name, artistName?,
+  imageUrl?, externalUrl?}`); the host matches items against the library
+  (owned artists navigate; owned tracks become playable tiles) and proxies/
+  caches external images. Same 8s timeout + isolation as sections.
+- `ctx.registerTrackRecommender({id, recommend})` — feeds radio: given seeds +
+  excludes, return `RecommendedTrack[]` (`{artistName, title?}`; no title =
+  artist-level). The host resolves suggestions against the library and appends
+  real tracks to the queue.
 
 ### Settings — declarative, host-rendered
 
