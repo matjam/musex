@@ -48,20 +48,14 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-/** Scroll the Settings "Keyboard Shortcuts" section into view. Call right
- *  after navigating to settings — the rAF lets the view commit first. Shared
- *  by the ⌘/ handler here and the app-menu navigateTo push (App.tsx). */
-export function revealShortcutsSection(): void {
-  requestAnimationFrame(() =>
-    document.getElementById("settings-shortcuts")?.scrollIntoView({ behavior: "smooth" }),
-  );
-}
-
 /** App-wide keyboard shortcuts (Spotify mac bindings where they exist, musex
  *  ones for the rest — see SHORTCUT_GROUPS). Matching uses `e.code` whenever
  *  Alt is involved because macOS substitutes symbols for Alt+letter/digit
  *  (Alt+S → "ß", Alt+Shift+0 → "º"), which breaks `e.key` matching. */
-export function useKeyboardShortcuts(toggleQueue: () => void): void {
+export function useKeyboardShortcuts(
+  toggleQueue: () => void,
+  toggleShortcutsHelp: () => void,
+): void {
   const player = usePlayer();
   const { library, dispatch } = useApp();
   const { rate } = useRatings();
@@ -110,8 +104,7 @@ export function useKeyboardShortcuts(toggleQueue: () => void): void {
         }
         if (e.code === "Slash") {
           handled();
-          dispatch({ type: "navigate", view: { name: "settings" } });
-          revealShortcutsSection();
+          toggleShortcutsHelp();
           return;
         }
         if (typing) return; // ⌘+arrows must keep their text-editing meaning
