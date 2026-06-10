@@ -9,6 +9,7 @@ import {
   Mic2,
   Music,
   Settings,
+  Sparkles,
   Star,
   Tags,
   Wand2,
@@ -28,6 +29,8 @@ import { ExternalArtistView } from "./views/ExternalArtistView";
 import { GenresView } from "./views/GenresView";
 import { GenreView } from "./views/GenreView";
 import { HomeView } from "./views/HomeView";
+import { MixesView } from "./views/MixesView";
+import { MixView } from "./views/MixView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
@@ -53,6 +56,8 @@ export function Shell() {
   // artist/album drill-downs keep the Artists nav highlighted.
   const homeActive = view.name === "home";
   const discoverActive = view.name === "discover";
+  // The per-mix drill-down keeps the Mixes nav highlighted.
+  const mixesActive = view.name === "mixes" || view.name === "mix";
   const downloadsActive = view.name === "downloads";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
@@ -83,6 +88,10 @@ export function Shell() {
         return <GenresView />;
       case "genre":
         return <GenreView genre={view.genre} />;
+      case "mixes":
+        return <MixesView />;
+      case "mix":
+        return <MixView mixId={view.mixId} />;
       case "tracks":
         return <TracksView />;
       case "playlist":
@@ -117,6 +126,15 @@ export function Shell() {
         >
           <Compass size={16} />
           Discover
+        </button>
+
+        <button
+          type="button"
+          className={`nav-item${mixesActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "mixes" } })}
+        >
+          <Sparkles size={16} />
+          Mixes
         </button>
 
         <button

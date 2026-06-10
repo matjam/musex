@@ -54,6 +54,14 @@ describe("plex-mapping", () => {
       toArtist({ ratingKey: "10", title: "X", genres: [{ tag: "" }] }, "srv-1").genres,
     ).toBeUndefined();
   });
+  it("maps artist moods to tag strings, omitting when absent", () => {
+    const a = toArtist(
+      { ratingKey: "10", title: "Radiohead", moods: [{ tag: "Melancholy" }, { tag: null }] },
+      "srv-1",
+    );
+    expect(a.moods).toEqual(["Melancholy"]);
+    expect(toArtist({ ratingKey: "11", title: "X" }, "srv-1").moods).toBeUndefined();
+  });
   it("maps an album with year + parent artist id", () => {
     const al = toAlbum(
       { ratingKey: "20", title: "In Rainbows", year: 2007, thumb: "/a.jpg", parentRatingKey: "10" },
@@ -106,6 +114,19 @@ describe("plex-mapping", () => {
     expect(toAlbum({ ratingKey: "20", title: "X" }, "srv-1").genres).toBeUndefined();
     expect(toAlbum({ ratingKey: "20", title: "X", genres: [] }, "srv-1").genres).toBeUndefined();
     expect(toAlbum({ ratingKey: "20", title: "X", genres: null }, "srv-1").genres).toBeUndefined();
+  });
+  it("maps album moods to tag strings, omitting when absent or empty", () => {
+    const al = toAlbum(
+      {
+        ratingKey: "20",
+        title: "In Rainbows",
+        moods: [{ tag: "Brooding" }, { tag: "" }, { tag: "Dreamy" }],
+      },
+      "srv-1",
+    );
+    expect(al.moods).toEqual(["Brooding", "Dreamy"]);
+    expect(toAlbum({ ratingKey: "21", title: "X" }, "srv-1").moods).toBeUndefined();
+    expect(toAlbum({ ratingKey: "22", title: "X", moods: [] }, "srv-1").moods).toBeUndefined();
   });
   it("maps a track with media/part and denormalized titles", () => {
     const t = toTrack(
@@ -174,6 +195,31 @@ describe("plex-mapping", () => {
     );
     expect(t.thumb).toBe("/library/metadata/32/thumb/99");
     expect(t.userRating).toBeUndefined(); // no raw userRating -> stays undefined
+  });
+  it("maps track genres and moods to tag strings, omitting when absent", () => {
+    const media = [
+      {
+        audioCodec: "flac",
+        container: "flac",
+        parts: [{ id: 1, key: "/library/parts/1/f.flac", container: "flac" }],
+      },
+    ];
+    const tagged = toTrack(
+      {
+        ratingKey: "33",
+        title: "Nude",
+        duration: 1,
+        media,
+        genres: [{ tag: "Art Rock" }, { tag: null }],
+        moods: [{ tag: "Mellow" }, { tag: "" }, { tag: "Calm" }],
+      },
+      "srv-1",
+    );
+    expect(tagged.genres).toEqual(["Art Rock"]);
+    expect(tagged.moods).toEqual(["Mellow", "Calm"]);
+    const bare = toTrack({ ratingKey: "34", title: "x", duration: 1, media }, "srv-1");
+    expect(bare.genres).toBeUndefined();
+    expect(bare.moods).toBeUndefined();
   });
   it("throws if a track has no playable media part (not silently dropped)", () => {
     expect(() =>

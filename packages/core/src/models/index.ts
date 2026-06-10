@@ -29,6 +29,7 @@ export interface Artist {
   updatedAt?: number; // epoch ms, for cache validation
   userRating?: number; // Plex user rating, 0–10 (one star = 2 points)
   genres?: string[]; // from Plex Genre tags; omitted when untagged
+  moods?: string[]; // from Plex Mood tags; omitted when untagged
 }
 
 export interface Album {
@@ -41,6 +42,7 @@ export interface Album {
   updatedAt?: number; // epoch ms, for cache validation
   userRating?: number; // Plex user rating, 0–10 (one star = 2 points)
   genres?: string[]; // from Plex Genre tags; album-level is the join key for genre playlists
+  moods?: string[]; // from Plex Mood tags; omitted when untagged
 }
 
 export interface MediaInfo {
@@ -63,6 +65,8 @@ export interface Track {
   trackNumber?: number;
   thumb?: string;
   userRating?: number; // Plex user rating, 0–10 (one star = 2 points)
+  genres?: string[]; // from Plex Genre tags; omitted when untagged
+  moods?: string[]; // from Plex Mood tags; tracks are the best-tagged level for moods
   media: MediaInfo;
 }
 

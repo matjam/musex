@@ -2418,6 +2418,16 @@ img.queue-row-art {
   opacity: 0.5;
 }
 
+/* ---- Mixes ---- */
+
+/* Mix cards reuse the genre-card family; the description wraps. */
+.mix-card-desc {
+  margin-top: 4px;
+  font-size: 11.5px;
+  opacity: 0.6;
+  line-height: 1.45;
+}
+
 /* Artist header: .album-actions sits inline in the flex row, so the
    margin-top (designed for the album header's stacked meta column) would
    push the buttons below the centered title/stars baseline. */

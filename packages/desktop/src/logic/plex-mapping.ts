@@ -7,6 +7,7 @@ interface RawArtist {
   updatedAt?: number;
   userRating?: number; // 0–10
   genres?: { tag?: string | null }[] | null; // Plex Genre tags
+  moods?: { tag?: string | null }[] | null; // Plex Mood tags
 }
 interface RawAlbum {
   ratingKey: string;
@@ -17,6 +18,7 @@ interface RawAlbum {
   updatedAt?: number;
   userRating?: number; // 0–10
   genres?: { tag?: string | null }[] | null; // Plex Genre tags
+  moods?: { tag?: string | null }[] | null; // Plex Mood tags
 }
 interface RawPart {
   id: string | number;
@@ -40,6 +42,8 @@ interface RawTrack {
   grandparentTitle?: string;
   thumb?: string;
   userRating?: number; // 0–10
+  genres?: { tag?: string | null }[] | null; // Plex Genre tags
+  moods?: { tag?: string | null }[] | null; // Plex Mood tags
   media?: RawMedia[];
 }
 
@@ -58,10 +62,10 @@ export function thumbPath(thumb: string | undefined): string | undefined {
   }
 }
 
-/** Plex Genre tags -> non-empty string[] (or undefined when none survive filtering). */
-function genreTags(genres: { tag?: string | null }[] | null | undefined): string[] | undefined {
-  const tags = (genres ?? []).map((g) => g.tag).filter((t): t is string => Boolean(t));
-  return tags.length > 0 ? tags : undefined;
+/** Plex MediaTag list (Genre/Mood) -> non-empty string[] (or undefined when none survive filtering). */
+function tagNames(tags: { tag?: string | null }[] | null | undefined): string[] | undefined {
+  const names = (tags ?? []).map((g) => g.tag).filter((t): t is string => Boolean(t));
+  return names.length > 0 ? names : undefined;
 }
 
 export function toArtist(raw: RawArtist, serverId: string): Artist {
@@ -72,7 +76,8 @@ export function toArtist(raw: RawArtist, serverId: string): Artist {
     thumb: thumbPath(raw.thumb),
     updatedAt: raw.updatedAt,
     userRating: raw.userRating,
-    genres: genreTags(raw.genres),
+    genres: tagNames(raw.genres),
+    moods: tagNames(raw.moods),
   };
 }
 
@@ -86,7 +91,8 @@ export function toAlbum(raw: RawAlbum, serverId: string): Album {
     thumb: thumbPath(raw.thumb),
     updatedAt: raw.updatedAt,
     userRating: raw.userRating,
-    genres: genreTags(raw.genres),
+    genres: tagNames(raw.genres),
+    moods: tagNames(raw.moods),
   };
 }
 
@@ -115,6 +121,8 @@ export function toTrack(raw: RawTrack, serverId: string): Track {
     durationMs: raw.duration ?? 0,
     thumb: thumbPath(raw.thumb),
     userRating: raw.userRating,
+    genres: tagNames(raw.genres),
+    moods: tagNames(raw.moods),
     media: info,
   };
 }

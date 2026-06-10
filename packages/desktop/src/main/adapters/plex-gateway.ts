@@ -539,8 +539,9 @@ function toArtistSafe(a: PlexArtist, serverId: string): Artist {
       thumb: a.thumb,
       updatedAt: a.updatedAt ? a.updatedAt.getTime() : undefined,
       userRating: a.userRating,
-      // Genre extends MediaTag; .tag is the genre name (verified in media.d.ts).
+      // Genre/Mood extend MediaTag; .tag is the tag name (verified in media.d.ts).
       genres: a.genres?.map((g) => ({ tag: g.tag })),
+      moods: a.moods?.map((m) => ({ tag: m.tag })),
     },
     serverId,
   );
@@ -556,8 +557,9 @@ function toAlbumSafe(al: PlexAlbum, serverId: string): Album {
       parentRatingKey: al.parentRatingKey !== undefined ? String(al.parentRatingKey) : undefined,
       updatedAt: al.updatedAt ? al.updatedAt.getTime() : undefined,
       userRating: al.userRating,
-      // Genre extends MediaTag; .tag is the genre name (verified in media.d.ts).
+      // Genre/Mood extend MediaTag; .tag is the tag name (verified in media.d.ts).
       genres: al.genres?.map((g) => ({ tag: g.tag })),
+      moods: al.moods?.map((m) => ({ tag: m.tag })),
     },
     serverId,
   );
@@ -590,6 +592,10 @@ function toTrackSafe(t: PlexTrack, serverId: string): Track {
       grandparentTitle: t.grandparentTitle,
       thumb: t.thumb,
       userRating: t.userRating,
+      // Genre/Mood extend MediaTag; .tag is the tag name. moods lives on the
+      // Audio base class, genres directly on Track (verified in audio.d.ts).
+      genres: t.genres?.map((g) => ({ tag: g.tag })),
+      moods: t.moods?.map((m) => ({ tag: m.tag })),
       // MediaPart.key (from PlexObject.key) is the Plex server-relative path.
       // Media.id is number; MediaPart.id is number.
       media: t.media?.map((m) => ({
