@@ -12,6 +12,7 @@ import type {
   StreamRef,
   Track,
 } from "@musex/core";
+import type { SettingField, SettingsActionResult } from "@musex/plugin-api";
 
 export const IPC = {
   signInStart: "musex:signIn:start", // -> { code: string; authUrl: string }
@@ -55,6 +56,14 @@ export const IPC = {
   playbackSeek: "musex:playbackEngine:seek", // (sec) -> void
   playbackSetVolume: "musex:playbackEngine:setVolume", // (v 0..1) -> void
   playbackEvent: "musex:playbackEngine:event", // push: main -> renderer PlaybackEngineEvent
+  // Plugin host (Settings → Plugins UI + toasts)
+  pluginsList: "musex:plugins:list", // -> PluginInfo[]
+  pluginsSetEnabled: "musex:plugins:setEnabled", // (id, enabled) -> void
+  pluginsReload: "musex:plugins:reload", // -> void
+  pluginsGetSettings: "musex:plugins:getSettings", // (id) -> PluginSettings
+  pluginsSetSetting: "musex:plugins:setSetting", // (id, key, value) -> void
+  pluginsSettingsAction: "musex:plugins:settingsAction", // (id, key) -> SettingsActionResult
+  pluginsNotify: "musex:plugins:notify", // push: main -> renderer PluginNotification
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -81,6 +90,27 @@ export type PlaybackEngineEvent =
   | { type: "advanced" }
   | { type: "ended" }
   | { type: "error"; message: string };
+
+// Plugin host surface. Settings vocabulary types come straight from the
+// plugin API package; the contract only adds the IPC-specific shapes.
+export type { SettingField, SettingsActionResult } from "@musex/plugin-api";
+
+export type PluginStatus = "active" | "error" | "disabled" | "incompatible";
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  status: PluginStatus;
+  error?: string;
+}
+export type PluginNotification = {
+  pluginId: string;
+  message: string;
+  level: "info" | "error";
+};
+/** Values keyed by setting key. Password fields carry `{ set: boolean }`
+ *  (presence only) — the secret itself NEVER crosses to the renderer. */
+export type PluginSettings = { schema: SettingField[]; values: Record<string, unknown> };
 
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
@@ -142,4 +172,12 @@ export interface MusexApi {
   playbackSetVolume(v: number): Promise<void>;
   /** Subscribe to engine events; returns an unsubscribe function. */
   onPlaybackEvent(cb: (e: PlaybackEngineEvent) => void): () => void;
+  pluginsList(): Promise<PluginInfo[]>;
+  pluginsSetEnabled(id: string, enabled: boolean): Promise<void>;
+  pluginsReload(): Promise<void>;
+  pluginsGetSettings(id: string): Promise<PluginSettings>;
+  pluginsSetSetting(id: string, key: string, value: unknown): Promise<void>;
+  pluginsSettingsAction(id: string, key: string): Promise<SettingsActionResult>;
+  /** Subscribe to plugin toast notifications; returns an unsubscribe function. */
+  onPluginNotify(cb: (n: PluginNotification) => void): () => void;
 }

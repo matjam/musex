@@ -284,6 +284,29 @@ export function registerIpc(rt: Runtime): void {
     return rt.mpv.setVolume(v);
   });
 
+  // Plugin host — Settings → Plugins UI.
+  ipcMain.handle(IPC.pluginsList, () => rt.plugins.list());
+  ipcMain.handle(IPC.pluginsSetEnabled, (_e, id: string, enabled: boolean) => {
+    if (typeof id !== "string" || !id) throw new Error("invalid plugin id");
+    if (typeof enabled !== "boolean") throw new Error("invalid enabled flag");
+    return rt.plugins.setEnabled(id, enabled);
+  });
+  ipcMain.handle(IPC.pluginsReload, () => rt.plugins.reloadAll());
+  ipcMain.handle(IPC.pluginsGetSettings, (_e, id: string) => {
+    if (typeof id !== "string" || !id) throw new Error("invalid plugin id");
+    return rt.plugins.getSettings(id);
+  });
+  ipcMain.handle(IPC.pluginsSetSetting, (_e, id: string, key: string, value: unknown) => {
+    if (typeof id !== "string" || !id) throw new Error("invalid plugin id");
+    if (typeof key !== "string" || !key) throw new Error("invalid setting key");
+    return rt.plugins.setSetting(id, key, value);
+  });
+  ipcMain.handle(IPC.pluginsSettingsAction, (_e, id: string, key: string) => {
+    if (typeof id !== "string" || !id) throw new Error("invalid plugin id");
+    if (typeof key !== "string" || !key) throw new Error("invalid action key");
+    return rt.plugins.runSettingsAction(id, key);
+  });
+
   ipcMain.handle(IPC.prefetch, async (_e, tracks: Track[]) => {
     const upcoming: { serverId: string; plexPath: string }[] = [];
     for (const t of tracks) {

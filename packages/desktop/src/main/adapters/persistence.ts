@@ -12,6 +12,9 @@ export interface PersistedState {
   // skip @ctrl/plex's slow connection probe on startup — we connect straight to
   // the cached URL and only rediscover if it's unreachable.
   serverUrls: Record<string, string>;
+  // Plugins the user switched off (enabled is the default, so we store the
+  // exceptions — an unknown/new plugin id is enabled without a write).
+  disabledPlugins: string[];
 }
 
 /** Default local-cache cap: 5 GiB. */
@@ -25,6 +28,7 @@ const store = new Store<PersistedState>({
     cacheEnabled: false,
     cacheMaxBytes: DEFAULT_CACHE_MAX_BYTES,
     serverUrls: {},
+    disabledPlugins: [],
   },
 });
 
@@ -104,5 +108,14 @@ export const persistence = {
     const all = { ...store.get("serverUrls") };
     delete all[serverId];
     store.set("serverUrls", all);
+  },
+  isPluginEnabled(id: string): boolean {
+    return !store.get("disabledPlugins").includes(id);
+  },
+  setPluginEnabled(id: string, enabled: boolean): void {
+    const set = new Set(store.get("disabledPlugins"));
+    if (enabled) set.delete(id);
+    else set.add(id);
+    store.set("disabledPlugins", [...set]);
   },
 };

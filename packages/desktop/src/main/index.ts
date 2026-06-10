@@ -38,11 +38,15 @@ app.whenReady().then(async () => {
   await runtime.restore();
   registerIpc(runtime);
 
-  // Engine events flow to whichever window is current; guard against a
-  // closed-but-not-yet-GCed window (macOS keeps the app alive windowless).
+  // Engine events + plugin notifications flow to whichever window is current;
+  // guard against a closed-but-not-yet-GCed window (macOS keeps the app alive
+  // windowless).
   const wireEngineEvents = (win: BrowserWindow): void => {
     runtime.mpv.setSink((e) => {
       if (!win.isDestroyed()) win.webContents.send(IPC.playbackEvent, e);
+    });
+    runtime.setPluginNotifySink((p) => {
+      if (!win.isDestroyed()) win.webContents.send(IPC.pluginsNotify, p);
     });
   };
 

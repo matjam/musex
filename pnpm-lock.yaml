@@ -34,6 +34,9 @@ importers:
       '@musex/core':
         specifier: workspace:*
         version: link:../core
+      '@musex/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
       '@tanstack/react-virtual':
         specifier: ^3.14.2
         version: 3.14.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -68,6 +71,12 @@ importers:
       react-dom:
         specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
+
+  packages/plugin-api:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.0.0
+        version: 25.9.2
 
 packages:
 

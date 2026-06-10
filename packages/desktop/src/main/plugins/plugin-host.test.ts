@@ -1,0 +1,236 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { PluginNotification } from "../../shared/ipc-contract";
+import { PluginHost, type PluginHostDeps } from "./plugin-host";
+
+let root: string;
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "musex-plugin-host-"));
+  delete (globalThis as Record<string, unknown>).__activations;
+});
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+const GOOD_ENTRY = `export function activate(ctx) {
+  ctx.registerSettings([
+    { kind: "toggle", key: "x", label: "X" },
+    { kind: "text", key: "apiKey", label: "API key" },
+    { kind: "password", key: "secret", label: "Secret" },
+    { kind: "action", key: "connect", label: "Connect" },
+  ]);
+  ctx.onSettingsAction("connect", async () => ({ ok: true, message: "connected" }));
+  ctx.events.on("trackStarted", () => {});
+  ctx.ui.contributeTrackAction({ id: "a", label: "A", onInvoke: async () => {} });
+  globalThis.__activations = (globalThis.__activations ?? 0) + 1;
+}
+export function deactivate() {
+  globalThis.__deactivated = true;
+}
+`;
+
+async function writePlugin(
+  id: string,
+  entry: string,
+  manifest?: Record<string, unknown>,
+  opts?: { dist?: boolean },
+): Promise<void> {
+  const dir = opts?.dist ? join(root, "scan", id, "dist") : join(root, "scan", id);
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "plugin.json"),
+    JSON.stringify(
+      manifest ?? { id, name: id, version: "1.0.0", apiVersion: 1, entry: "index.mjs" },
+    ),
+  );
+  await writeFile(join(dir, "index.mjs"), entry);
+}
+
+function makeHost(overrides: Partial<PluginHostDeps> = {}) {
+  const disabled = new Set<string>();
+  const notifications: PluginNotification[] = [];
+  const opened: string[] = [];
+  const host = new PluginHost({
+    scanDirs: [join(root, "scan")],
+    dataDir: join(root, "data"),
+    secretsDir: join(root, "secrets"),
+    encrypt: async (s) => s,
+    decrypt: async (s) => s,
+    isEnabled: (id) => !disabled.has(id),
+    setEnabled: (id, v) => {
+      if (v) disabled.delete(id);
+      else disabled.add(id);
+    },
+    notifySink: (p) => notifications.push(p),
+    openExternal: (url) => opened.push(url),
+    library: {
+      search: async () => ({ artists: [], albums: [], tracks: [] }),
+      recentlyPlayed: async () => [],
+    },
+    ...overrides,
+  });
+  return { host, disabled, notifications, opened };
+}
+
+function activations(): number {
+  return ((globalThis as Record<string, unknown>).__activations as number | undefined) ?? 0;
+}
+
+describe("PluginHost", () => {
+  it("loads, activates, and exposes the registered settings schema", async () => {
+    await writePlugin("good", GOOD_ENTRY);
+    const { host } = makeHost();
+    await host.loadAll();
+
+    expect(host.list()).toEqual([{ id: "good", name: "good", version: "1.0.0", status: "active" }]);
+    expect(activations()).toBe(1);
+
+    const settings = await host.getSettings("good");
+    expect(settings.schema.map((f) => f.key)).toEqual(["x", "apiKey", "secret", "connect"]);
+    // password presence flag, no value for actions
+    expect(settings.values).toEqual({ x: null, apiKey: null, secret: { set: false } });
+
+    // registrations landed in the registry for Tasks 2/4
+    expect(host.registry.eventSubscribers).toHaveLength(1);
+    expect(host.registry.trackActions).toHaveLength(1);
+  });
+
+  it("finds plugins under the dev <sub>/dist/ layout", async () => {
+    await writePlugin("devkit", GOOD_ENTRY, undefined, { dist: true });
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.list()[0]?.status).toBe("active");
+  });
+
+  it("isolates a throwing plugin: it errors, others stay active", async () => {
+    await writePlugin("bad", `export function activate() { throw new Error("boom"); }`);
+    await writePlugin("good", GOOD_ENTRY);
+    const { host } = makeHost();
+    await host.loadAll();
+
+    const byId = new Map(host.list().map((p) => [p.id, p]));
+    expect(byId.get("bad")).toMatchObject({ status: "error", error: "boom" });
+    expect(byId.get("good")?.status).toBe("active");
+  });
+
+  it("marks an entry without activate() as errored", async () => {
+    await writePlugin("noop", `export const nothing = 1;`);
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.list()[0]).toMatchObject({ status: "error" });
+    expect(host.list()[0]?.error).toContain("activate");
+  });
+
+  it("lists an apiVersion mismatch as incompatible without importing it", async () => {
+    await writePlugin("future", `globalThis.__futureImported = true;`, {
+      id: "future",
+      name: "Future",
+      version: "9.0.0",
+      apiVersion: 2,
+      entry: "index.mjs",
+    });
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.list()[0]).toMatchObject({
+      id: "future",
+      status: "incompatible",
+      error: "incompatible: requires API v2, host is v1",
+    });
+    expect((globalThis as Record<string, unknown>).__futureImported).toBeUndefined();
+  });
+
+  it("does not import disabled plugins, and setEnabled toggles activation", async () => {
+    await writePlugin("good", GOOD_ENTRY);
+    const { host, disabled } = makeHost();
+    disabled.add("good");
+    await host.loadAll();
+    expect(host.list()[0]?.status).toBe("disabled");
+    expect(activations()).toBe(0);
+
+    await host.setEnabled("good", true);
+    expect(host.list()[0]?.status).toBe("active");
+    expect(activations()).toBe(1);
+    expect(disabled.has("good")).toBe(false);
+
+    await host.setEnabled("good", false);
+    expect(host.list()[0]?.status).toBe("disabled");
+    expect(disabled.has("good")).toBe(true);
+    // registrations were disposed
+    expect(host.registry.eventSubscribers).toHaveLength(0);
+    expect(host.registry.trackActions).toHaveLength(0);
+    expect((globalThis as Record<string, unknown>).__deactivated).toBe(true);
+  });
+
+  it("reloadAll re-imports fresh module instances and re-activates", async () => {
+    await writePlugin("good", GOOD_ENTRY);
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(activations()).toBe(1);
+
+    await host.reloadAll();
+    expect(activations()).toBe(2); // fresh import (generation-busted URL) ran again
+    expect(host.list()[0]?.status).toBe("active");
+    expect(host.registry.eventSubscribers).toHaveLength(1); // old disposed, new registered
+  });
+
+  it("round-trips settings: storage for text/toggle, secrets for password", async () => {
+    await writePlugin("good", GOOD_ENTRY);
+    const { host } = makeHost();
+    await host.loadAll();
+
+    await host.setSetting("good", "apiKey", "abc123");
+    await host.setSetting("good", "x", true);
+    await host.setSetting("good", "secret", "hunter2");
+    const settings = await host.getSettings("good");
+    expect(settings.values).toEqual({ x: true, apiKey: "abc123", secret: { set: true } });
+
+    await host.setSetting("good", "secret", null); // delete
+    const after = await host.getSettings("good");
+    expect(after.values.secret).toEqual({ set: false });
+
+    await expect(host.setSetting("good", "nope", 1)).rejects.toThrow(/no setting/);
+  });
+
+  it("runs settings actions and surfaces handler errors as { ok: false }", async () => {
+    await writePlugin("good", GOOD_ENTRY);
+    const { host } = makeHost();
+    await host.loadAll();
+
+    expect(await host.runSettingsAction("good", "connect")).toEqual({
+      ok: true,
+      message: "connected",
+    });
+    expect(await host.runSettingsAction("good", "missing")).toMatchObject({ ok: false });
+  });
+
+  it("routes ctx.ui.notify to the sink with the plugin id", async () => {
+    await writePlugin("noisy", `export function activate(ctx) { ctx.ui.notify("hello", "info"); }`);
+    const { host, notifications } = makeHost();
+    await host.loadAll();
+    expect(notifications).toEqual([{ pluginId: "noisy", message: "hello", level: "info" }]);
+  });
+
+  it("keeps the first plugin when two directories declare the same id", async () => {
+    await writePlugin("a-dupe", GOOD_ENTRY, {
+      id: "dupe",
+      name: "first",
+      version: "1.0.0",
+      apiVersion: 1,
+      entry: "index.mjs",
+    });
+    await writePlugin("b-dupe", GOOD_ENTRY, {
+      id: "dupe",
+      name: "second",
+      version: "1.0.0",
+      apiVersion: 1,
+      entry: "index.mjs",
+    });
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.list()).toHaveLength(1);
+    expect(host.list()[0]?.name).toBe("first"); // readdir order: a-dupe first
+  });
+});

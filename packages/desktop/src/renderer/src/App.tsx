@@ -7,6 +7,7 @@ import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
 import { Shell } from "./ui/Shell";
 import { SignIn } from "./ui/SignIn";
+import { Toasts } from "./ui/Toasts";
 import { TopBar } from "./ui/TopBar";
 import "./ui/theme.css";
 
@@ -33,6 +34,7 @@ function Inner() {
             <Shell />
             <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
             <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
+            <Toasts />
           </div>
         </SelectionProvider>
       </PlaylistsProvider>

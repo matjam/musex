@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { MusexApi, PlaybackEngineEvent } from "../shared/ipc-contract.js";
+import type { MusexApi, PlaybackEngineEvent, PluginNotification } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 
 const api: MusexApi = {
@@ -57,6 +57,17 @@ const api: MusexApi = {
     const listener = (_e: Electron.IpcRendererEvent, evt: PlaybackEngineEvent) => cb(evt);
     ipcRenderer.on(IPC.playbackEvent, listener);
     return () => ipcRenderer.removeListener(IPC.playbackEvent, listener);
+  },
+  pluginsList: () => ipcRenderer.invoke(IPC.pluginsList),
+  pluginsSetEnabled: (id, enabled) => ipcRenderer.invoke(IPC.pluginsSetEnabled, id, enabled),
+  pluginsReload: () => ipcRenderer.invoke(IPC.pluginsReload),
+  pluginsGetSettings: (id) => ipcRenderer.invoke(IPC.pluginsGetSettings, id),
+  pluginsSetSetting: (id, key, value) => ipcRenderer.invoke(IPC.pluginsSetSetting, id, key, value),
+  pluginsSettingsAction: (id, key) => ipcRenderer.invoke(IPC.pluginsSettingsAction, id, key),
+  onPluginNotify: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, n: PluginNotification) => cb(n);
+    ipcRenderer.on(IPC.pluginsNotify, listener);
+    return () => ipcRenderer.removeListener(IPC.pluginsNotify, listener);
   },
 };
 

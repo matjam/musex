@@ -1904,3 +1904,121 @@ img.queue-row-art {
 .link-quiet:disabled {
   cursor: default;
 }
+
+/* ---- Plugins (Settings) ---- */
+
+.plugin-version {
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.5;
+  margin-left: 2px;
+}
+
+.plugin-chip {
+  display: inline-block;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  opacity: 0.85;
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+
+.plugin-chip--active {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.plugin-chip--error,
+.plugin-chip--incompatible {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.plugin-error {
+  color: var(--red);
+  opacity: 0.9;
+}
+
+.plugin-setting-row {
+  padding-left: 14px;
+}
+
+.settings-input.settings-input--text {
+  width: 220px;
+  text-align: left;
+}
+
+.toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.plugin-action-result {
+  font-size: 11.5px;
+  opacity: 0.7;
+  margin-right: 10px;
+}
+
+.plugin-action-result--error {
+  color: var(--red);
+  opacity: 1;
+}
+
+/* ---- Toasts (plugin notifications) ---- */
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 84px; /* above the 68px now-playing bar */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 120;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  max-width: 340px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+.toast--error {
+  border-color: var(--red);
+}
+
+.toast-source {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.5;
+  margin-bottom: 2px;
+}
+
+.toast-msg {
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.toast-x {
+  background: none;
+  border: none;
+  color: var(--text);
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+}
+
+.toast-x:hover {
+  opacity: 1;
+}
