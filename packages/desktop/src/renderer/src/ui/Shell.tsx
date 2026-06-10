@@ -4,23 +4,20 @@ import {
   Compass,
   Disc3,
   Download,
-  Flame,
-  History,
   Home,
   Mic2,
   Music,
-  Sparkles,
-  Star,
   Tags,
-  Wand2,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { MOOD_MIXES } from "../../../logic/mood-mixes";
 import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";
+import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
@@ -31,22 +28,15 @@ import { ExternalArtistView } from "./views/ExternalArtistView";
 import { GenresView } from "./views/GenresView";
 import { GenreView } from "./views/GenreView";
 import { HomeView } from "./views/HomeView";
-import { MixesView } from "./views/MixesView";
 import { MixView } from "./views/MixView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
-import { SettingsView } from "./views/SettingsView";
 import { SimilarView } from "./views/SimilarView";
 import { SmartPlaylistView } from "./views/SmartPlaylistView";
 import { TracksView } from "./views/TracksView";
 
-/** Sidebar entries for the Smart section, in display order. */
-const SMART_NAV: { kind: SmartKind; Icon: typeof Star }[] = [
-  { kind: "for-you", Icon: Wand2 },
-  { kind: "top-rated", Icon: Star },
-  { kind: "heavy-rotation", Icon: Flame },
-  { kind: "rediscover", Icon: History },
-];
+/** Sidebar order for the smart playlists in the Smart Mixes section. */
+const SMART_NAV: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
 
 /** Collapsed state per sidebar section, persisted across launches.
  *  localStorage (not main-process settings) — pure UI state. */
@@ -97,8 +87,6 @@ export function Shell() {
   // artist/album drill-downs keep the Artists nav highlighted.
   const homeActive = view.name === "home";
   const discoverActive = view.name === "discover";
-  // The per-mix drill-down keeps the Mixes nav highlighted.
-  const mixesActive = view.name === "mixes" || view.name === "mix";
   const downloadsActive = view.name === "downloads";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
@@ -120,16 +108,12 @@ export function Shell() {
         return <AlbumDetailView album={view.album} />;
       case "albums":
         return <AlbumsView />;
-      case "settings":
-        return <SettingsView />;
       case "search":
         return <SearchView />;
       case "genres":
         return <GenresView />;
       case "genre":
         return <GenreView genre={view.genre} />;
-      case "mixes":
-        return <MixesView />;
       case "mix":
         return <MixView mixId={view.mixId} />;
       case "tracks":
@@ -166,15 +150,6 @@ export function Shell() {
         >
           <Compass size={16} />
           Discover
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item${mixesActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "mixes" } })}
-        >
-          <Sparkles size={16} />
-          Mixes
         </button>
 
         <button
@@ -224,18 +199,35 @@ export function Shell() {
           </button>
         </SidebarSection>
 
-        <SidebarSection title="Smart" collapsed={smartCollapsed} onToggle={toggleSmart}>
-          {SMART_NAV.map(({ kind, Icon }) => (
-            <button
-              key={kind}
-              type="button"
-              className={`nav-item${view.name === "smart" && view.kind === kind ? " active" : ""}`}
-              onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
-            >
-              <Icon size={16} />
-              {SMART_TITLES[kind]}
-            </button>
-          ))}
+        <SidebarSection title="Smart Mixes" collapsed={smartCollapsed} onToggle={toggleSmart}>
+          {SMART_NAV.map((kind) => {
+            const Icon = SMART_ICONS[kind];
+            return (
+              <button
+                key={kind}
+                type="button"
+                className={`nav-item${view.name === "smart" && view.kind === kind ? " active" : ""}`}
+                onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+              >
+                <Icon size={16} />
+                {SMART_TITLES[kind]}
+              </button>
+            );
+          })}
+          {MOOD_MIXES.map((mix) => {
+            const Icon = MIX_ICONS[mix.id] ?? Music;
+            return (
+              <button
+                key={mix.id}
+                type="button"
+                className={`nav-item${view.name === "mix" && view.mixId === mix.id ? " active" : ""}`}
+                onClick={() => dispatch({ type: "navigate", view: { name: "mix", mixId: mix.id } })}
+              >
+                <Icon size={16} />
+                {mix.title}
+              </button>
+            );
+          })}
         </SidebarSection>
 
         <SidebarSection title="Playlists" collapsed={playlistsCollapsed} onToggle={togglePlaylists}>

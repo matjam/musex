@@ -15,7 +15,7 @@ export interface MoodMix {
 export const MOOD_MIXES: MoodMix[] = [
   {
     id: "driving",
-    title: "Driving Mix",
+    title: "Open Road",
     description: "Open-road rock, motorik grooves and synthwave for the highway.",
     keywords: [
       "rock",
@@ -33,7 +33,7 @@ export const MOOD_MIXES: MoodMix[] = [
   },
   {
     id: "workout",
-    title: "Workout Mix",
+    title: "Sweat It Out",
     description: "High-BPM electronic, metal and hip hop to keep the pace up.",
     keywords: [
       "electronic",
@@ -56,7 +56,7 @@ export const MOOD_MIXES: MoodMix[] = [
   },
   {
     id: "chill",
-    title: "Chill Mix",
+    title: "Wind Down",
     description: "Ambient, downtempo and mellow acoustic sounds for winding down.",
     keywords: [
       "ambient",
@@ -78,7 +78,7 @@ export const MOOD_MIXES: MoodMix[] = [
   },
   {
     id: "coding",
-    title: "Coding Mix",
+    title: "Deep Focus",
     description: "Instrumental, atmospheric and minimal electronic for deep focus.",
     keywords: [
       "ambient",
@@ -98,7 +98,7 @@ export const MOOD_MIXES: MoodMix[] = [
   },
   {
     id: "party",
-    title: "Party Mix",
+    title: "Dance Floor",
     description: "Disco, funk and upbeat dance-floor fillers to get people moving.",
     keywords: ["dance", "disco", "funk", "pop", "house", "edm", "party", "groovy", "upbeat"],
   },

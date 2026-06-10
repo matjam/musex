@@ -55,6 +55,7 @@ function clamp(v: number, lo: number, hi: number): number {
 export function useKeyboardShortcuts(
   toggleQueue: () => void,
   toggleShortcutsHelp: () => void,
+  openSettings: () => void,
 ): void {
   const player = usePlayer();
   const { library, dispatch } = useApp();
@@ -99,7 +100,7 @@ export function useKeyboardShortcuts(
         }
         if (e.code === "Comma") {
           handled();
-          dispatch({ type: "navigate", view: { name: "settings" } });
+          openSettings();
           return;
         }
         if (e.code === "Slash") {

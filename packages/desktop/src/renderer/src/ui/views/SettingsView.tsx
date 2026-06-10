@@ -106,9 +106,6 @@ export function SettingsView() {
 
   return (
     <div className="settings-page">
-      <h2 className="settings-head">Settings</h2>
-      <div className="settings-subhead">Configure musex.</div>
-
       <div className="settings-section">
         <div className="settings-section-title">Local Cache</div>
 

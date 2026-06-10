@@ -9,6 +9,7 @@ import { AboutModal } from "./ui/AboutModal";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { LogsModal } from "./ui/LogsModal";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
+import { SettingsModal } from "./ui/SettingsModal";
 import { Shell } from "./ui/Shell";
 import { ShortcutsModal } from "./ui/ShortcutsModal";
 import { SignIn } from "./ui/SignIn";
@@ -23,22 +24,24 @@ function Inner() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // App-menu pushes (musex → About/Settings, Help → Shortcuts/Show Logs).
+  // App-menu pushes (musex → About/Settings…, Help → Shortcuts/Show Logs).
   useEffect(() => {
     return window.musex.onNavigateTo((p) => {
       if (p.view === "about") setAboutOpen(true);
       else if (p.view === "logs") setLogsOpen(true);
       else if (p.section === "shortcuts") setShortcutsOpen(true);
-      else dispatch({ type: "navigate", view: { name: "settings" } });
+      else setSettingsOpen(true);
     });
-  }, [dispatch]);
+  }, []);
 
-  // Rendered in every auth state so About / Logs work pre-sign-in too.
+  // Rendered in every auth state so the menu items work pre-sign-in too.
   const about = (
     <>
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {logsOpen && <LogsModal onClose={() => setLogsOpen(false)} />}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </>
   );
 
@@ -58,6 +61,7 @@ function Inner() {
             <KeyboardShortcuts
               toggleQueue={() => togglePanel("queue")}
               toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
+              openSettings={() => setSettingsOpen(true)}
             />
             <div className="app-root">
               <TopBar />

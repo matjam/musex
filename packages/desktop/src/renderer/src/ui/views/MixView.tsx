@@ -30,9 +30,10 @@ export function MixView({ mixId }: { mixId: string }) {
 
   const mix = MOOD_MIXES.find((m) => m.id === mixId) ?? null;
 
-  // Unknown mix id (stale persisted view, bad link) — bounce back to the index.
+  // Unknown mix id (stale persisted view, bad link) — bounce home, where the
+  // Smart Mixes now live.
   useEffect(() => {
-    if (mix === null) dispatch({ type: "navigate", view: { name: "mixes" } });
+    if (mix === null) dispatch({ type: "navigate", view: { name: "home" } });
   }, [mix, dispatch]);
 
   useEffect(() => {
@@ -87,9 +88,9 @@ export function MixView({ mixId }: { mixId: string }) {
         <button
           type="button"
           className="breadcrumb-link"
-          onClick={() => dispatch({ type: "navigate", view: { name: "mixes" } })}
+          onClick={() => dispatch({ type: "navigate", view: { name: "home" } })}
         >
-          Mixes
+          Smart Mixes
         </button>
         {" › "}
         <span className="breadcrumb-current">{mix.title}</span>
