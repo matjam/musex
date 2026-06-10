@@ -95,7 +95,13 @@ export class MpvController {
 
     const child = spawn(
       this.paths.binaryPath,
-      [...SPAWN_ARGS, `--input-ipc-server=${this.paths.socketPath}`],
+      [
+        ...SPAWN_ARGS,
+        `--input-ipc-server=${this.paths.socketPath}`,
+        // TEMP DIAGNOSTIC (playback-stall investigation): verbose mpv log —
+        // demuxer/cache/network state will show exactly why playback stops.
+        `--log-file=${this.paths.socketPath}.log`,
+      ],
       { stdio: "ignore" },
     );
     this.child = child;
