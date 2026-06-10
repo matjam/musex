@@ -70,12 +70,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const state = useSyncExternalStore(subscribe, getSnapshot);
 
-  // Prefetch upcoming tracks into the cache whenever the upcoming set changes.
-  // Keyed on upcomingKey (track ids joined) so this does NOT fire on position ticks.
+  // Prefetch into the cache whenever the playing/upcoming set changes.
+  // The CURRENT track goes first (priority: it's what's audibly playing, and
+  // mpv streams with Range requests which the serve path never caches), then
+  // the next PREFETCH_DEPTH tracks. Keyed on upcomingKey so this does NOT fire
+  // on position ticks.
   const PREFETCH_DEPTH = 10;
   const upcoming =
     state.queue != null
-      ? state.queue.tracks.slice(state.queue.index + 1, state.queue.index + 1 + PREFETCH_DEPTH)
+      ? state.queue.tracks.slice(state.queue.index, state.queue.index + 1 + PREFETCH_DEPTH)
       : [];
   const upcomingKey = upcoming.map((t) => t.id).join(",");
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on upcomingKey

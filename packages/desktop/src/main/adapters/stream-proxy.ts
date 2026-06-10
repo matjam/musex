@@ -16,7 +16,10 @@ import {
 import type { MediaCache } from "./media-cache.js";
 
 const PREFETCH_DEPTH = 10;
-const PREFETCH_CONCURRENCY = 2;
+/** Strictly sequential: the wanted list arrives priority-ordered (current track
+ *  first, then lookahead), and one-at-a-time keeps prefetch from competing with
+ *  the live playback stream for the Plex server's attention. */
+const PREFETCH_CONCURRENCY = 1;
 
 /** Per-server connection info needed to fulfil a proxied stream request. */
 export interface ServerEndpoint {
@@ -344,7 +347,7 @@ export class StreamProxy {
     }
     const wanted = upcoming
       .filter((u) => isCacheablePath(u.plexPath))
-      .slice(0, PREFETCH_DEPTH)
+      .slice(0, PREFETCH_DEPTH + 1) // current track + lookahead
       .map((u) => ({ ...u, key: cacheKey(u.serverId, u.plexPath) }));
     const wantedKeys = new Set(wanted.map((w) => w.key));
     // Cancel in-flight prefetches that are no longer wanted.
