@@ -243,6 +243,115 @@ describe("PluginHost", () => {
     expect(notifications).toEqual([{ pluginId: "noisy", message: "hello", level: "info" }]);
   });
 
+  it("getSections fans out per target, isolating throwing and slow providers", async () => {
+    await writePlugin(
+      "sections-a",
+      `export function activate(ctx) {
+        ctx.ui.contributeSections("discover", {
+          id: "a",
+          getSections: async (sctx) => [
+            { title: "Because you listened to " + sctx.recentArtists[0], items: [{ name: "X" }] },
+          ],
+        });
+        ctx.ui.contributeSections("home", {
+          id: "a-home",
+          getSections: async () => [{ title: "Home row", items: [] }],
+        });
+      }`,
+    );
+    await writePlugin(
+      "sections-boom",
+      `export function activate(ctx) {
+        ctx.ui.contributeSections("discover", {
+          id: "boom",
+          getSections: async () => { throw new Error("provider boom"); },
+        });
+      }`,
+    );
+    await writePlugin(
+      "sections-slow",
+      `export function activate(ctx) {
+        ctx.ui.contributeSections("discover", {
+          id: "slow",
+          getSections: () => new Promise(() => {}), // never resolves
+        });
+      }`,
+    );
+    const { host } = makeHost({ providerTimeoutMs: 50 });
+    await host.loadAll();
+
+    const sctx = { recentArtists: ["Lamb"], recentTracks: [] };
+    const discover = await host.getSections("discover", sctx);
+    expect(discover).toEqual([
+      {
+        pluginId: "sections-a",
+        sections: [{ title: "Because you listened to Lamb", items: [{ name: "X" }] }],
+      },
+    ]);
+    const home = await host.getSections("home", sctx);
+    expect(home).toEqual([
+      { pluginId: "sections-a", sections: [{ title: "Home row", items: [] }] },
+    ]);
+  });
+
+  it("lists and invokes track actions; unknown ids and failures throw with context", async () => {
+    await writePlugin(
+      "actions",
+      `export function activate(ctx) {
+        globalThis.__invoked = [];
+        ctx.ui.contributeTrackAction({
+          id: "love", label: "Love", icon: "heart",
+          onInvoke: async (t) => { globalThis.__invoked.push(t.title); },
+        });
+        ctx.ui.contributeTrackAction({
+          id: "explode", label: "Explode",
+          onInvoke: async () => { throw new Error("action boom"); },
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+
+    expect(host.listTrackActions()).toEqual([
+      { pluginId: "actions", id: "love", label: "Love", icon: "heart" },
+      { pluginId: "actions", id: "explode", label: "Explode" },
+    ]);
+
+    const track = { title: "T", artistName: "A", durationMs: 1000 };
+    await host.invokeTrackAction("love", track);
+    expect((globalThis as Record<string, unknown>).__invoked).toEqual(["T"]);
+
+    await expect(host.invokeTrackAction("nope", track)).rejects.toThrow(/unknown track action/);
+    // rethrown with the plugin id so the renderer knows who failed
+    await expect(host.invokeTrackAction("explode", track)).rejects.toThrow(
+      /\[plugin:actions\].*action boom/,
+    );
+  });
+
+  it("getTrackDetails drops nulls and isolates failing providers", async () => {
+    await writePlugin(
+      "detail",
+      `export function activate(ctx) {
+        ctx.ui.contributeTrackDetail({
+          id: "info",
+          getDetail: async (t) => ({ title: "Info", rows: [{ label: "Title", value: t.title }] }),
+        });
+        ctx.ui.contributeTrackDetail({ id: "empty", getDetail: async () => null });
+        ctx.ui.contributeTrackDetail({
+          id: "boom",
+          getDetail: async () => { throw new Error("detail boom"); },
+        });
+      }`,
+    );
+    const { host } = makeHost({ providerTimeoutMs: 50 });
+    await host.loadAll();
+
+    const details = await host.getTrackDetails({ title: "T", artistName: "A", durationMs: 1000 });
+    expect(details).toEqual([
+      { pluginId: "detail", title: "Info", rows: [{ label: "Title", value: "T" }] },
+    ]);
+  });
+
   it("keeps the first plugin when two directories declare the same id", async () => {
     await writePlugin("a-dupe", GOOD_ENTRY, {
       id: "dupe",

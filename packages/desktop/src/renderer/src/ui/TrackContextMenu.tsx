@@ -1,12 +1,32 @@
 import type { Playlist, Track } from "@musex/core";
-import { ChevronRight, Disc3, ListEnd, ListPlus, Mic2 } from "lucide-react";
+import {
+  ChevronRight,
+  Disc3,
+  ExternalLink,
+  Heart,
+  ListEnd,
+  ListPlus,
+  type LucideIcon,
+  Mic2,
+  Puzzle,
+  Star,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { usePlayer } from "../state/player";
+import type { TrackActionDto } from "../../../shared/ipc-contract";
+import { toTrackInfo, usePlayer } from "../state/player";
 import { usePlaylists } from "../state/playlists";
 import { useEntityNav } from "./hooks/useEntityNav";
 
 const VIEWPORT_MARGIN = 8;
 const SUBMENU_WIDTH = 200;
+
+/** Plugins name lucide icons as strings; only this allowlist is resolved —
+ *  arbitrary names fall back to the generic plugin icon. */
+const ACTION_ICONS: Record<string, LucideIcon> = {
+  heart: Heart,
+  star: Star,
+  "external-link": ExternalLink,
+};
 
 export interface TrackMenuTarget {
   x: number;
@@ -32,6 +52,7 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
   const { enqueueNext, enqueueEnd } = usePlayer();
   const { goArtist, goAlbum } = useEntityNav();
   const [submenu, setSubmenu] = useState(false);
+  const [pluginActions, setPluginActions] = useState<TrackActionDto[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   // Start at the click point; clamp into the viewport before paint (below).
   const [pos, setPos] = useState({ left: target.x, top: target.y });
@@ -68,6 +89,29 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
       document.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
+
+  // Plugin-contributed actions, fetched once per menu open (mount = open).
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .trackActionsList()
+      .then((actions) => {
+        if (!cancelled) setPluginActions(actions);
+      })
+      .catch((err) => console.error("[plugins] trackActionsList failed:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function invokePluginAction(action: TrackActionDto) {
+    try {
+      await window.musex.trackActionsInvoke(action.id, toTrackInfo(target.track));
+    } catch (err) {
+      // Plugins surface their own toasts via ctx.ui.notify; just log here.
+      console.error("[plugins] track action failed:", err);
+    }
+  }
 
   async function add(p: Playlist) {
     await addTo(p.id, p.serverId, [target.trackId]);
@@ -137,6 +181,28 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
         <Disc3 size={14} />
         Go to album
       </button>
+      {pluginActions.length > 0 && (
+        <>
+          <div className="ctx-sep" />
+          {pluginActions.map((a) => {
+            const Icon = ACTION_ICONS[a.icon ?? ""] ?? Puzzle;
+            return (
+              <button
+                key={`${a.pluginId}:${a.id}`}
+                type="button"
+                className="ctx-item ctx-item--icon"
+                onClick={() => {
+                  void invokePluginAction(a);
+                  onClose();
+                }}
+              >
+                <Icon size={14} />
+                {a.label}
+              </button>
+            );
+          })}
+        </>
+      )}
       <div className="ctx-sep" />
       <div
         className="ctx-item ctx-haschild"

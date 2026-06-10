@@ -4,6 +4,7 @@ import { createContext, type ReactNode, useContext, useEffect, useReducer } from
 type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";
 export type View =
   | { name: "home" }
+  | { name: "discover" }
   | { name: "albums" }
   | { name: "artists" }
   | { name: "tracks" }

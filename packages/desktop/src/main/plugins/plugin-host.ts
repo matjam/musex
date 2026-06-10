@@ -7,6 +7,8 @@ import type {
   PluginContext,
   PluginEvents,
   PluginManifest,
+  Section,
+  SectionContext,
   SettingField,
   SettingsActionResult,
   TrackInfo,
@@ -22,6 +24,22 @@ import {
 } from "./plugin-store.js";
 
 export const HOST_API_VERSION = 1;
+
+/** Per-provider budget for section/detail fan-outs — a slow plugin must never
+ *  hold the whole view hostage. */
+const PROVIDER_TIMEOUT_MS = 8_000;
+
+/** Reject after `ms` (the underlying promise keeps running; we just stop
+ *  waiting). The timer is cleared on settle so it never holds the process. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 export interface PluginHostDeps {
   /** Dirs whose subdirectories are plugins: `<sub>/plugin.json` or (dev repo
@@ -42,6 +60,8 @@ export interface PluginHostDeps {
     search(query: string): Promise<LibrarySearchResult>;
     recentlyPlayed(limit?: number): Promise<TrackInfo[]>;
   };
+  /** Per-provider fan-out budget override (tests); defaults to 8s. */
+  providerTimeoutMs?: number;
 }
 
 interface PluginModule {
@@ -133,6 +153,75 @@ export class PluginHost {
         console.error(`[plugins] ${sub.pluginId} "${event}" handler threw:`, err);
       }
     }
+  }
+
+  // ── contribution surfaces (sections / track actions / track detail) ──────
+
+  /** Fan out to every section provider registered for `target`, isolating
+   *  failures: a throwing or slow (>timeout) provider is logged and skipped. */
+  async getSections(
+    target: "discover" | "home",
+    ctx: SectionContext,
+  ): Promise<{ pluginId: string; sections: Section[] }[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
+    const providers = this.registry.sectionProviders.filter((p) => p.target === target);
+    const results = await Promise.all(
+      providers.map(async (p) => {
+        try {
+          const sections = await withTimeout(p.provider.getSections(ctx), timeoutMs);
+          return { pluginId: p.pluginId, sections };
+        } catch (err) {
+          console.error(`[plugins] ${p.pluginId} section provider "${p.provider.id}" failed:`, err);
+          return null;
+        }
+      }),
+    );
+    return results.filter((r) => r !== null);
+  }
+
+  listTrackActions(): { pluginId: string; id: string; label: string; icon?: string }[] {
+    return this.registry.trackActions.map((r) => ({
+      pluginId: r.pluginId,
+      id: r.action.id,
+      label: r.action.label,
+      ...(r.action.icon !== undefined ? { icon: r.action.icon } : {}),
+    }));
+  }
+
+  /** Unknown action id → throw; a throwing action is rethrown with the plugin
+   *  id prefixed so the renderer's error surface says who failed. */
+  async invokeTrackAction(actionId: string, track: TrackInfo): Promise<void> {
+    const entry = this.registry.trackActions.find((r) => r.action.id === actionId);
+    if (!entry) throw new Error(`unknown track action "${actionId}"`);
+    try {
+      await entry.action.onInvoke(track);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`[plugin:${entry.pluginId}] track action "${actionId}" failed: ${msg}`);
+    }
+  }
+
+  /** Fan out to every track-detail provider; failures/timeouts are logged and
+   *  skipped, and providers returning null (no data) are dropped. */
+  async getTrackDetails(
+    track: TrackInfo,
+  ): Promise<{ pluginId: string; title: string; rows: { label: string; value: string }[] }[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
+    const results = await Promise.all(
+      this.registry.trackDetailProviders.map(async (p) => {
+        try {
+          const detail = await withTimeout(p.provider.getDetail(track), timeoutMs);
+          return detail === null ? null : { pluginId: p.pluginId, ...detail };
+        } catch (err) {
+          console.error(
+            `[plugins] ${p.pluginId} track-detail provider "${p.provider.id}" failed:`,
+            err,
+          );
+          return null;
+        }
+      }),
+    );
+    return results.filter((r) => r !== null);
   }
 
   async getSettings(id: string): Promise<PluginSettings> {

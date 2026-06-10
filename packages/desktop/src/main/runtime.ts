@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Library, Pin, Track } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { app, safeStorage, shell } from "electron";
+import { isHttpUrl } from "../logic/external-url.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
 import { ListCacheStore } from "./adapters/list-cache-store.js";
@@ -98,7 +99,7 @@ export class Runtime {
       setEnabled: (id, v) => persistence.setPluginEnabled(id, v),
       notifySink: (p) => this.pluginNotifySink?.(p),
       openExternal: (url) => {
-        if (url.startsWith("https://") || url.startsWith("http://")) {
+        if (isHttpUrl(url)) {
           void shell.openExternal(url);
         } else {
           console.error(`[plugins] blocked openExternal for non-http(s) URL: ${url}`);

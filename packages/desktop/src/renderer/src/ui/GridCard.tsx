@@ -8,6 +8,8 @@ interface Props {
   subtitle?: string;
   /** Round the artwork (artists) vs square (albums). */
   round?: boolean;
+  /** Small chip over the artwork corner (e.g. "external" on Discover items). */
+  badge?: string;
   /** Click the card body → open the detail view. */
   onOpen: () => void;
   /** Click the hover play overlay → play the collection. Omit to hide it. */
@@ -15,7 +17,7 @@ interface Props {
 }
 
 /** A browse-grid card (album/artist) with a Spotify-style hover Play button. */
-export function GridCard({ thumb, title, subtitle, round = false, onOpen, onPlay }: Props) {
+export function GridCard({ thumb, title, subtitle, round = false, badge, onOpen, onPlay }: Props) {
   function onKey(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -28,6 +30,7 @@ export function GridCard({ thumb, title, subtitle, round = false, onOpen, onPlay
     <div className="grid-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={onKey}>
       <div className="grid-card-artwrap">
         <AlbumArt thumb={thumb} className={`grid-card-art${round ? " artist-art" : ""}`} />
+        {badge && <span className="grid-card-badge">{badge}</span>}
         {onPlay && (
           <button
             type="button"

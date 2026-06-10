@@ -18,9 +18,11 @@ export function isLastfmError(e: unknown, code: number): boolean {
 }
 
 /**
- * Minimal last.fm REST client. Every call is signed (`api_sig`), POSTed
- * form-encoded with `format=json` appended AFTER signing (the signature
- * excludes `format`). No retries anywhere — by design (scrobble guidance).
+ * Minimal last.fm REST client. Calls are signed (`api_sig`) by default and
+ * POSTed form-encoded with `format=json` appended AFTER signing (the signature
+ * excludes `format`). Read methods (artist.getSimilar, track.getInfo, …) need
+ * only `api_key` — pass `{ signed: false }` to skip the signature. No retries
+ * anywhere — by design (scrobble guidance).
  */
 export class LastfmClient {
   constructor(private readonly deps: { apiKey: string; secret: string; fetchFn: typeof fetch }) {}
@@ -28,16 +30,19 @@ export class LastfmClient {
   async call<T>(
     method: string,
     params: Record<string, string>,
-    opts?: { sk?: string },
+    opts?: { sk?: string; signed?: boolean },
   ): Promise<T> {
-    const signedParams: Record<string, string> = {
+    const baseParams: Record<string, string> = {
       method,
       api_key: this.deps.apiKey,
       ...params,
       ...(opts?.sk !== undefined ? { sk: opts.sk } : {}),
     };
-    const apiSig = sign(signedParams, this.deps.secret);
-    const body = new URLSearchParams({ ...signedParams, api_sig: apiSig, format: "json" });
+    const body = new URLSearchParams(
+      opts?.signed === false
+        ? { ...baseParams, format: "json" }
+        : { ...baseParams, api_sig: sign(baseParams, this.deps.secret), format: "json" },
+    );
     const res = await this.deps.fetchFn(API_URL, { method: "POST", body });
     let json: unknown;
     try {

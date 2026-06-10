@@ -1,6 +1,8 @@
 import { Play, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { TrackDetailDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
-import { usePlayer } from "../state/player";
+import { toTrackInfo, usePlayer } from "../state/player";
 import { useSelection } from "../state/selection";
 import { formatDuration } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
@@ -11,6 +13,25 @@ export function TrackDetailPanel() {
   const { selectedTrack: track, clear } = useSelection();
   const { dispatch } = useApp();
   const { playTrackNext } = usePlayer();
+  const [pluginDetails, setPluginDetails] = useState<TrackDetailDto[]>([]);
+
+  // Plugin-contributed detail sections; refetched per selection. The cancelled
+  // flag guards against a stale (slower) response landing after the selection
+  // already changed.
+  useEffect(() => {
+    setPluginDetails([]);
+    if (!track) return;
+    let cancelled = false;
+    window.musex
+      .trackDetailGet(toTrackInfo(track))
+      .then((details) => {
+        if (!cancelled) setPluginDetails(details);
+      })
+      .catch((err) => console.error("[plugins] trackDetailGet failed:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [track]);
 
   if (!track) return null;
 
@@ -98,6 +119,18 @@ export function TrackDetailPanel() {
           </div>
         )}
       </div>
+
+      {pluginDetails.map((d) => (
+        <div key={`${d.pluginId}:${d.title}`} className="detail-meta detail-plugin">
+          <div className="detail-plugin-title">{d.title}</div>
+          {d.rows.map((r) => (
+            <div key={r.label} className="detail-meta-row">
+              <span>{r.label}</span>
+              <span>{r.value}</span>
+            </div>
+          ))}
+        </div>
+      ))}
     </aside>
   );
 }

@@ -5,15 +5,36 @@
  * @musex/plugin-api types (compile-time only) + node:crypto. Never imports
  * electron or any @musex runtime code.
  */
-import type { PluginContext, PluginEvents, TrackInfo } from "@musex/plugin-api";
+import type { PluginContext, PluginEvents, Section, TrackInfo } from "@musex/plugin-api";
 import { isLastfmError, LastfmClient } from "./client.js";
 
 const AUTH_URL = "https://www.last.fm/api/auth/";
 const AUTH_POLL_INTERVAL_MS = 5_000;
 const AUTH_POLL_TIMEOUT_MS = 120_000;
+/** Discover: seed sections from this many recent artists, N similar each. */
+const SIMILAR_SEED_ARTISTS = 3;
+const SIMILAR_LIMIT = 10;
+const TOP_TAGS = 3;
 
 type TokenResponse = { token: string };
 type SessionResponse = { session: { name: string; key: string } };
+type SimilarResponse = {
+  similarartists?: { artist?: { name: string; url?: string }[] };
+};
+type TrackInfoResponse = {
+  track?: {
+    playcount?: string;
+    listeners?: string;
+    userplaycount?: string;
+    toptags?: { tag?: { name?: string }[] };
+  };
+};
+
+/** last.fm returns counts as decimal strings; render with locale separators. */
+function count(v: string): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString() : v;
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -152,6 +173,80 @@ export async function activate(ctx: PluginContext): Promise<void> {
         ctx.ui.notify(`Loved "${track.title}" on Last.fm`);
       } catch (err) {
         ctx.ui.notify(`Last.fm love failed: ${errText(err)}`, "error");
+      }
+    },
+  });
+
+  // ── Discover: similar-artist sections ─────────────────────────────────────
+  ctx.ui.contributeSections("discover", {
+    id: "lastfm-similar",
+    getSections: async (sectionCtx) => {
+      const s = await session();
+      if (!s) return []; // needs API key + connected account
+      const sections: Section[] = [];
+      for (const artistName of sectionCtx.recentArtists.slice(0, SIMILAR_SEED_ARTISTS)) {
+        try {
+          const res = await s.client.call<SimilarResponse>(
+            "artist.getSimilar",
+            { artist: artistName, limit: String(SIMILAR_LIMIT), autocorrect: "1" },
+            { signed: false }, // read method — api_key only
+          );
+          const raw = res.similarartists?.artist;
+          const items = (Array.isArray(raw) ? raw : [])
+            .filter((a) => typeof a.name === "string" && a.name.length > 0)
+            .map((a) => ({
+              name: a.name,
+              ...(typeof a.url === "string" ? { externalUrl: a.url } : {}),
+            }));
+          if (items.length > 0) {
+            sections.push({ title: `Because you listened to ${artistName}`, items });
+          }
+        } catch (err) {
+          ctx.log(`artist.getSimilar failed for "${artistName}":`, errText(err));
+        }
+      }
+      return sections;
+    },
+  });
+
+  // ── Track detail: scrobble stats + tags ───────────────────────────────────
+  ctx.ui.contributeTrackDetail({
+    id: "lastfm-info",
+    getDetail: async (track) => {
+      const c = await client();
+      if (!c) return null; // needs API key (+secret) at minimum
+      const username = await ctx.storage.get<string>("username");
+      try {
+        const res = await c.call<TrackInfoResponse>(
+          "track.getInfo",
+          {
+            artist: track.artistName,
+            track: track.title,
+            autocorrect: "1",
+            // Connected account → last.fm includes userplaycount.
+            ...(username ? { username } : {}),
+          },
+          { signed: false }, // read method — api_key only
+        );
+        const t = res.track;
+        if (!t) return null;
+        const rows: { label: string; value: string }[] = [];
+        if (t.playcount !== undefined) rows.push({ label: "Scrobbles", value: count(t.playcount) });
+        if (t.listeners !== undefined) rows.push({ label: "Listeners", value: count(t.listeners) });
+        if (t.userplaycount !== undefined) {
+          rows.push({ label: "Your scrobbles", value: count(t.userplaycount) });
+        }
+        const rawTags = t.toptags?.tag;
+        const tags = (Array.isArray(rawTags) ? rawTags : [])
+          .map((x) => x.name)
+          .filter((n): n is string => typeof n === "string" && n.length > 0)
+          .slice(0, TOP_TAGS);
+        if (tags.length > 0) rows.push({ label: "Tags", value: tags.join(", ") });
+        if (rows.length === 0) return null;
+        return { title: "Last.fm", rows };
+      } catch (err) {
+        ctx.log("track.getInfo failed:", errText(err));
+        return null;
       }
     },
   });

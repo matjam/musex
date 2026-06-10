@@ -1,4 +1,4 @@
-import { Disc3, Home, ListMusic, Mic2, Music, Settings } from "lucide-react";
+import { Compass, Disc3, Home, ListMusic, Mic2, Music, Settings } from "lucide-react";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { TrackDetailPanel } from "./TrackDetailPanel";
@@ -6,6 +6,7 @@ import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
+import { DiscoverView } from "./views/DiscoverView";
 import { HomeView } from "./views/HomeView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
@@ -21,6 +22,7 @@ export function Shell() {
   // Determine which nav item is visually active.
   // artist/album drill-downs keep the Artists nav highlighted.
   const homeActive = view.name === "home";
+  const discoverActive = view.name === "discover";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   const tracksActive = view.name === "tracks";
@@ -30,6 +32,8 @@ export function Shell() {
     switch (view.name) {
       case "home":
         return <HomeView />;
+      case "discover":
+        return <DiscoverView />;
       case "artists":
         return <ArtistsView />;
       case "artist":
@@ -59,6 +63,15 @@ export function Shell() {
         >
           <Home size={16} />
           Home
+        </button>
+
+        <button
+          type="button"
+          className={`nav-item${discoverActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "discover" } })}
+        >
+          <Compass size={16} />
+          Discover
         </button>
 
         <div className="nav-section">Library</div>

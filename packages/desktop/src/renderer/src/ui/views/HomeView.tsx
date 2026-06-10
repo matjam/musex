@@ -1,10 +1,12 @@
 import type { Album, Artist } from "@musex/core";
 import { useEffect, useState } from "react";
+import type { SectionDto } from "../../../../shared/ipc-contract";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlaylists } from "../../state/playlists";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
+import { PluginSections } from "../PluginSections";
 
 /** Fisher-Yates pick of up to `n` random items (fresh each visit). */
 function pickRandom<T>(items: T[], n: number): T[] {
@@ -27,6 +29,22 @@ export function HomeView() {
   const { playAlbum, playArtist, playPlaylist } = useCollectionPlay();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [pluginSections, setPluginSections] = useState<SectionDto[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .sectionsGet("home")
+      .then((s) => {
+        if (!cancelled) setPluginSections(s);
+      })
+      .catch(() => {
+        // plugin sections are best-effort; skip silently when unavailable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!library) return;
@@ -51,7 +69,11 @@ export function HomeView() {
   }, [library]);
 
   const topPlaylists = playlists.slice(0, 8);
-  const empty = topPlaylists.length === 0 && artists.length === 0 && albums.length === 0;
+  const empty =
+    topPlaylists.length === 0 &&
+    artists.length === 0 &&
+    albums.length === 0 &&
+    pluginSections.every((s) => s.items.length === 0);
 
   return (
     <div className="browse-section home-view">
@@ -112,6 +134,8 @@ export function HomeView() {
           </div>
         </section>
       )}
+
+      <PluginSections sections={pluginSections} />
 
       {empty && <div className="content-placeholder">Your library overview will appear here.</div>}
     </div>

@@ -1864,6 +1864,33 @@ img.queue-row-art {
   filter: brightness(1.08);
 }
 
+/* Small chip over the artwork corner (Discover "external" items) */
+.grid-card-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+
+/* ---- Plugin detail sections (track detail panel) ---- */
+
+.detail-plugin-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.5;
+  margin-bottom: 1px;
+}
+
 /* ---- Home view ---- */
 
 .home-greeting {

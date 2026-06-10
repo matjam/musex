@@ -65,6 +65,12 @@ export const IPC = {
   pluginsSetSetting: "musex:plugins:setSetting", // (id, key, value) -> void
   pluginsSettingsAction: "musex:plugins:settingsAction", // (id, key) -> SettingsActionResult
   pluginsNotify: "musex:plugins:notify", // push: main -> renderer PluginNotification
+  // Plugin contribution surfaces (sections / track actions / track detail)
+  sectionsGet: "musex:sections:get", // (target) -> SectionDto[]
+  trackActionsList: "musex:trackActions:list", // -> TrackActionDto[]
+  trackActionsInvoke: "musex:trackActions:invoke", // (actionId, trackInfo) -> void
+  trackDetailGet: "musex:trackDetail:get", // (trackInfo) -> TrackDetailDto[]
+  openExternal: "musex:openExternal", // (url) -> void (http/https only)
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -122,6 +128,30 @@ export type PluginNotification = {
 /** Values keyed by setting key. Password fields carry `{ set: boolean }`
  *  (presence only) — the secret itself NEVER crosses to the renderer. */
 export type PluginSettings = { schema: SettingField[]; values: Record<string, unknown> };
+
+// ── Plugin contribution surfaces (wire DTOs — plugins never see these; the
+// host enriches plain plugin-api Section items with library-match results) ──
+
+export type SectionTarget = "discover" | "home";
+/** A plugin-api Section item + the host's library-match enrichment: matched
+ *  items gain artistId/serverId (renderer navigates); unmatched are flagged
+ *  external (badge + externalUrl link-out). */
+export type SectionItemDto = {
+  name: string;
+  artistName?: string;
+  imageUrl?: string;
+  externalUrl?: string;
+  artistId?: string;
+  serverId?: string;
+  external?: boolean;
+};
+export type SectionDto = { pluginId: string; title: string; items: SectionItemDto[] };
+export type TrackActionDto = { pluginId: string; id: string; label: string; icon?: string };
+export type TrackDetailDto = {
+  pluginId: string;
+  title: string;
+  rows: { label: string; value: string }[];
+};
 
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
@@ -193,4 +223,10 @@ export interface MusexApi {
   pluginsSettingsAction(id: string, key: string): Promise<SettingsActionResult>;
   /** Subscribe to plugin toast notifications; returns an unsubscribe function. */
   onPluginNotify(cb: (n: PluginNotification) => void): () => void;
+  sectionsGet(target: SectionTarget): Promise<SectionDto[]>;
+  trackActionsList(): Promise<TrackActionDto[]>;
+  trackActionsInvoke(actionId: string, track: TrackInfo): Promise<void>;
+  trackDetailGet(track: TrackInfo): Promise<TrackDetailDto[]>;
+  /** Open an http(s) URL in the system browser (validated in main). */
+  openExternal(url: string): Promise<void>;
 }

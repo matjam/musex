@@ -1,15 +1,24 @@
-import type { LibrarySort, Queue, Track } from "@musex/core";
+import type { Artist, LibrarySort, Queue, Track } from "@musex/core";
 import { createPlaylist, discoverMusicLibraries } from "@musex/core";
-import { ipcMain } from "electron";
+import type { SectionContext } from "@musex/plugin-api";
+import { ipcMain, shell } from "electron";
+import { isHttpUrl } from "../logic/external-url.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
   LoadPlaybackResult,
   NowPlayingMsg,
   PlaybackCursorDto,
+  SectionTarget,
+  TrackInfo,
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
+import { matchSectionsAgainstLibrary } from "./plugins/section-matching.js";
 import type { Runtime } from "./runtime.js";
+
+/** SectionContext caps: enough signal for providers, bounded payload. */
+const RECENT_ARTISTS_MAX = 10;
+const RECENT_TRACKS_MAX = 20;
 
 /** Light shape check for the fire-and-forget nowPlaying channel — malformed
  *  messages are dropped with a warning rather than thrown (nobody awaits). */
@@ -26,6 +35,18 @@ function isNowPlayingMsg(msg: unknown): msg is NowPlayingMsg {
     typeof t.title === "string" &&
     typeof t.artistName === "string" &&
     typeof t.durationMs === "number"
+  );
+}
+
+/** Light shape check for renderer-supplied TrackInfo (action/detail channels). */
+function isTrackInfo(t: unknown): t is TrackInfo {
+  if (typeof t !== "object" || t === null) return false;
+  const m = t as Record<string, unknown>;
+  return (
+    typeof m.title === "string" &&
+    typeof m.artistName === "string" &&
+    typeof m.durationMs === "number" &&
+    Number.isFinite(m.durationMs)
   );
 }
 
@@ -337,6 +358,47 @@ export function registerIpc(rt: Runtime): void {
     if (typeof id !== "string" || !id) throw new Error("invalid plugin id");
     if (typeof key !== "string" || !key) throw new Error("invalid action key");
     return rt.plugins.runSettingsAction(id, key);
+  });
+
+  // Plugin contribution surfaces — sections (Discover/Home), track actions
+  // (context menu), track detail (right panel), and the renderer-facing
+  // openExternal (external Discover items link out to the system browser).
+  ipcMain.handle(IPC.sectionsGet, async (_e, target: SectionTarget) => {
+    if (target !== "discover" && target !== "home") throw new Error("invalid sections target");
+    const history = rt.playbackMonitor.history();
+    const ctx: SectionContext = {
+      recentArtists: [...new Set(history.map((t) => t.artistName))].slice(0, RECENT_ARTISTS_MAX),
+      recentTracks: history
+        .slice(0, RECENT_TRACKS_MAX)
+        .map((t) => ({ title: t.title, artist: t.artistName })),
+    };
+    const results = await rt.plugins.getSections(target, ctx);
+    // Match items against the (cached) library artist list — one fetch per call.
+    let artists: Artist[] = [];
+    const lib = rt.libraries[0];
+    if (lib && rt.token) {
+      try {
+        artists = await rt.gateway.listArtists(lib, rt.token);
+      } catch (err) {
+        // Matching is best-effort: items render as external instead of failing.
+        console.error("[plugins] sections library matching failed:", err);
+      }
+    }
+    return matchSectionsAgainstLibrary(results, artists);
+  });
+  ipcMain.handle(IPC.trackActionsList, () => rt.plugins.listTrackActions());
+  ipcMain.handle(IPC.trackActionsInvoke, (_e, actionId: string, track: unknown) => {
+    if (typeof actionId !== "string" || !actionId) throw new Error("invalid action id");
+    if (!isTrackInfo(track)) throw new Error("invalid track info");
+    return rt.plugins.invokeTrackAction(actionId, track);
+  });
+  ipcMain.handle(IPC.trackDetailGet, (_e, track: unknown) => {
+    if (!isTrackInfo(track)) throw new Error("invalid track info");
+    return rt.plugins.getTrackDetails(track);
+  });
+  ipcMain.handle(IPC.openExternal, (_e, url: unknown) => {
+    if (typeof url !== "string" || !isHttpUrl(url)) throw new Error("invalid external url");
+    void shell.openExternal(url);
   });
 
   ipcMain.handle(IPC.prefetch, async (_e, tracks: Track[]) => {

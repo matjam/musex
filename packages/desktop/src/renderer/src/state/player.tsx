@@ -22,7 +22,7 @@ import { IpcStreamResolver } from "../audio/ipc-stream-resolver";
 
 /** Strip a track down to what plugins are allowed to see — title/artist/album/
  *  duration/track number only. NO ids, URLs, or thumbs cross this boundary. */
-function toTrackInfo(t: Track): TrackInfo {
+export function toTrackInfo(t: Track): TrackInfo {
   return {
     title: t.title,
     artistName: t.artistName,
