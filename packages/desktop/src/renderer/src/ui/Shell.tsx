@@ -1,19 +1,21 @@
 import {
+  ChevronDown,
+  ChevronRight,
   Compass,
   Disc3,
   Download,
   Flame,
   History,
   Home,
-  ListMusic,
   Mic2,
   Music,
-  Settings,
   Sparkles,
   Star,
   Tags,
   Wand2,
 } from "lucide-react";
+import type { ReactNode } from "react";
+import { useState } from "react";
 import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
@@ -46,9 +48,48 @@ const SMART_NAV: { kind: SmartKind; Icon: typeof Star }[] = [
   { kind: "rediscover", Icon: History },
 ];
 
+/** Collapsed state per sidebar section, persisted across launches.
+ *  localStorage (not main-process settings) — pure UI state. */
+function useCollapsed(key: string): [boolean, () => void] {
+  const storageKey = `musex.sidebar.${key}`;
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(storageKey) === "1");
+  const toggle = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem(storageKey, next ? "1" : "0");
+      return next;
+    });
+  return [collapsed, toggle];
+}
+
+function SidebarSection({
+  title,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  title: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <button type="button" className="nav-section nav-section-toggle" onClick={onToggle}>
+        {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+        {title}
+      </button>
+      {!collapsed && children}
+    </>
+  );
+}
+
 export function Shell() {
   const { library, view, dispatch } = useApp();
   const { playlists } = usePlaylists();
+  const [libraryCollapsed, toggleLibrary] = useCollapsed("library");
+  const [smartCollapsed, toggleSmart] = useCollapsed("smart");
+  const [playlistsCollapsed, togglePlaylists] = useCollapsed("playlists");
 
   const serverLabel = library ? `${library.serverName} · ${library.title}` : "No library";
 
@@ -64,7 +105,6 @@ export function Shell() {
   // The per-genre drill-down keeps the Genres nav highlighted.
   const genresActive = view.name === "genres" || view.name === "genre";
   const tracksActive = view.name === "tracks";
-  const settingsActive = view.name === "settings";
 
   function renderContent() {
     switch (view.name) {
@@ -146,63 +186,59 @@ export function Shell() {
           Downloads
         </button>
 
-        <div className="nav-section">Library</div>
-
-        <button
-          type="button"
-          className={`nav-item${albumsActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
-        >
-          <Disc3 size={16} />
-          Albums
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item${artistsActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
-        >
-          <Mic2 size={16} />
-          Artists
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item${genresActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "genres" } })}
-        >
-          <Tags size={16} />
-          Genres
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item${tracksActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "tracks" } })}
-        >
-          <Music size={16} />
-          Tracks
-        </button>
-
-        <div className="nav-section">Smart</div>
-
-        {SMART_NAV.map(({ kind, Icon }) => (
+        <SidebarSection title="Library" collapsed={libraryCollapsed} onToggle={toggleLibrary}>
           <button
-            key={kind}
             type="button"
-            className={`nav-item${view.name === "smart" && view.kind === kind ? " active" : ""}`}
-            onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+            className={`nav-item${albumsActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
           >
-            <Icon size={16} />
-            {SMART_TITLES[kind]}
+            <Disc3 size={16} />
+            Albums
           </button>
-        ))}
 
-        <div className="playlist-rail">
-          <div className="playlist-rail-head">
-            <ListMusic size={14} />
-            <span>Playlists</span>
-          </div>
+          <button
+            type="button"
+            className={`nav-item${artistsActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
+          >
+            <Mic2 size={16} />
+            Artists
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item${genresActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "genres" } })}
+          >
+            <Tags size={16} />
+            Genres
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item${tracksActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "tracks" } })}
+          >
+            <Music size={16} />
+            Tracks
+          </button>
+        </SidebarSection>
+
+        <SidebarSection title="Smart" collapsed={smartCollapsed} onToggle={toggleSmart}>
+          {SMART_NAV.map(({ kind, Icon }) => (
+            <button
+              key={kind}
+              type="button"
+              className={`nav-item${view.name === "smart" && view.kind === kind ? " active" : ""}`}
+              onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+            >
+              <Icon size={16} />
+              {SMART_TITLES[kind]}
+            </button>
+          ))}
+        </SidebarSection>
+
+        <SidebarSection title="Playlists" collapsed={playlistsCollapsed} onToggle={togglePlaylists}>
           {playlists.map((p) => (
             <button
               key={p.id}
@@ -215,18 +251,7 @@ export function Shell() {
               {p.title}
             </button>
           ))}
-        </div>
-
-        <div className="nav-section">App</div>
-
-        <button
-          type="button"
-          className={`nav-item${settingsActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
-        >
-          <Settings size={16} />
-          Settings
-        </button>
+        </SidebarSection>
 
         <div className="lib-switch">
           <div className="lib-switch-label">Plex Library</div>

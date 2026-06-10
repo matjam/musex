@@ -3,6 +3,8 @@ import { app, Menu, type MenuItemConstructorOptions, shell } from "electron";
 export interface AppMenuDeps {
   /** Open the custom About window (version + dependency attribution). */
   showAbout: () => void;
+  /** Navigate the current window to the Settings view. */
+  showSettings: () => void;
   /** Navigate the current window to Settings → Keyboard Shortcuts. */
   showShortcuts: () => void;
   /** Reveal the app's logs/data folder in Finder. */
@@ -37,6 +39,12 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
         {
           label: "Check for Updates…",
           click: () => deps.checkForUpdates(),
+        },
+        { type: "separator" },
+        {
+          label: "Settings…",
+          accelerator: "CmdOrCtrl+,",
+          click: () => deps.showSettings(),
         },
         { type: "separator" },
         { role: "services" },

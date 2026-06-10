@@ -65,6 +65,10 @@ app.whenReady().then(async () => {
           const payload: NavigateToPayload = { view: "about" };
           if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);
         },
+        showSettings: () => {
+          const payload: NavigateToPayload = { view: "settings" };
+          if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);
+        },
         showShortcuts: () => {
           const payload: NavigateToPayload = { view: "settings", section: "shortcuts" };
           if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);

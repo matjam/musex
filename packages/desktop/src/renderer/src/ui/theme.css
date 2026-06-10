@@ -216,6 +216,9 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  /* One tall scroll container — long playlist lists just grow into it
+     instead of being squeezed into an inner scrollbar. */
+  overflow-y: auto;
 }
 
 .sidebar-logo {
@@ -235,6 +238,26 @@ textarea:focus {
   letter-spacing: 0.08em;
   opacity: 0.4;
   padding: 14px 10px 6px;
+}
+
+/* Collapsible section header (button variant of .nav-section). */
+.nav-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-size: 10.5px;
+  text-align: left;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.nav-section-toggle:hover {
+  opacity: 0.8;
 }
 
 .nav-item {
@@ -300,6 +323,7 @@ textarea:focus {
 
 .lib-switch {
   margin-top: auto;
+  flex-shrink: 0;
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
@@ -1376,38 +1400,6 @@ img.np-art {
 }
 
 /* ---- Sidebar playlist rail ---- */
-
-.playlist-rail {
-  margin-top: 6px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: auto;
-}
-
-.playlist-rail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.5;
-  padding: 10px 10px 4px;
-}
-
-.playlist-rail-add {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.7;
-  font-size: 14px;
-}
-
-.playlist-rail-add:hover {
-  opacity: 1;
-}
 
 /* ---- Modal ---- */
 
