@@ -58,6 +58,34 @@ textarea {
   outline: none;
 }
 
+/* ---- Scrollbars: theme-styled instead of the native macOS ones.
+   transparent border + background-clip fakes a margin around the thumb so it
+   floats off the edge; the track stays invisible until you actually scroll. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.13);
+  border: 3px solid transparent;
+  border-radius: 7px;
+  background-clip: padding-box;
+  min-height: 32px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.26);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 input:focus,
 textarea:focus {
   border-color: var(--green);
@@ -75,6 +103,42 @@ textarea:focus {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* ---- Splash (session restore) ---- */
+
+.splash-logo {
+  font-size: 76px;
+  letter-spacing: 0.01em;
+  margin-bottom: 18px;
+  animation: splash-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes splash-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+.splash-line {
+  opacity: 0.55;
+  font-size: 13.5px;
+  animation: splash-line-in 0.35s ease-out;
+}
+
+@keyframes splash-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 0.55;
+    transform: translateY(0);
+  }
 }
 
 /* ---- Window chrome (titlebar) ---- */
@@ -107,6 +171,7 @@ textarea:focus {
 /* ---- Top bar (drag region + persistent search) ---- */
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -127,12 +192,16 @@ textarea:focus {
   flex-shrink: 0;
 }
 
+/* Absolutely centered so the box centers on the WINDOW, not on the space
+   left over after the traffic lights + logo (flex would sit it off-center). */
 .topbar-search {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   width: 360px;
-  max-width: 42%;
+  max-width: 38%;
   -webkit-app-region: no-drag;
 }
 
@@ -183,6 +252,9 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  /* One tall scroll container — long playlist lists just grow into it
+     instead of being squeezed into an inner scrollbar. */
+  overflow-y: auto;
 }
 
 .sidebar-logo {
@@ -202,6 +274,26 @@ textarea:focus {
   letter-spacing: 0.08em;
   opacity: 0.4;
   padding: 14px 10px 6px;
+}
+
+/* Collapsible section header (button variant of .nav-section). */
+.nav-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-size: 10.5px;
+  text-align: left;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.nav-section-toggle:hover {
+  opacity: 0.8;
 }
 
 .nav-item {
@@ -267,6 +359,7 @@ textarea:focus {
 
 .lib-switch {
   margin-top: auto;
+  flex-shrink: 0;
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
@@ -1344,38 +1437,6 @@ img.np-art {
 
 /* ---- Sidebar playlist rail ---- */
 
-.playlist-rail {
-  margin-top: 6px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: auto;
-}
-
-.playlist-rail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.5;
-  padding: 10px 10px 4px;
-}
-
-.playlist-rail-add {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.7;
-  font-size: 14px;
-}
-
-.playlist-rail-add:hover {
-  opacity: 1;
-}
-
 /* ---- Modal ---- */
 
 .modal-backdrop {
@@ -1469,26 +1530,12 @@ img.np-art {
 
 /* ---- Queue drawer ---- */
 
+/* Queue content inside the side-panel host (position/animation live there). */
 .queue-drawer {
-  position: fixed;
-  /* below the topbar (52px): its drag region is geometric at the window level
-     and would swallow clicks on anything overlapping it (e.g. the close X) */
-  top: 52px;
-  right: 0;
-  /* sit above the now-playing bar (68px) */
-  bottom: 68px;
-  width: 320px;
-  background: var(--panel);
-  border-left: 1px solid var(--line);
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  z-index: 40;
-  transform: translateX(100%);
-  transition: transform 0.22s ease;
-}
-
-.queue-drawer--open {
-  transform: translateX(0);
 }
 
 .queue-drawer-header {
@@ -1712,11 +1759,83 @@ img.queue-row-art {
 
 /* ---- Track detail panel (right side) ---- */
 
-.detail-panel {
-  width: 300px;
+/* ---- Side panel host (track detail / queue share it) ---- */
+
+.side-panel {
+  position: relative;
   flex-shrink: 0;
+  overflow: hidden;
   background: var(--panel);
+  transition: width 0.24s ease;
+}
+
+.side-panel--resizing {
+  transition: none;
+}
+
+/* Inner keeps its full width during open/close so the content never reflows —
+   pinned right + host width animating = the panel slides under the content. */
+.side-panel-inner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
   border-left: 1px solid var(--line);
+  transform: translateX(8%);
+  opacity: 0.4;
+  transition:
+    transform 0.24s ease,
+    opacity 0.24s ease;
+}
+
+.side-panel--open .side-panel-inner {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.side-panel--resizing .side-panel-inner {
+  transition: none;
+}
+
+.side-panel-resize {
+  position: absolute;
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.side-panel-resize:hover,
+.side-panel--resizing .side-panel-resize {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.side-panel-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  animation: side-panel-content-in 0.2s ease-out;
+}
+
+/* Re-runs when one panel replaces another (the content div is keyed). */
+@keyframes side-panel-content-in {
+  from {
+    transform: translateX(22px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.detail-panel {
+  flex: 1;
+  min-height: 0;
   padding: 16px;
   overflow-y: auto;
   display: flex;
@@ -2372,6 +2491,140 @@ img.queue-row-art {
   overflow-y: auto;
 }
 
+/* ---- Settings modal (musex menu → Settings…, ⌘,) ---- */
+
+.settings-modal {
+  width: min(760px, 92vw);
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.settings-modal-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Inside the modal the page chrome slims down (the modal header is the title). */
+.settings-modal .settings-page {
+  padding: 6px 20px 20px;
+  max-width: none;
+}
+
+/* ---- Log viewer (Help → Show Logs) ---- */
+
+.logs-modal {
+  width: min(920px, 92vw);
+  height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.logs-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logs-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.logs-copy-btn:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.logs-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.logs-empty {
+  opacity: 0.5;
+  padding: 10px 4px;
+}
+
+.logs-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 1px 0;
+}
+
+.logs-time {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.logs-source {
+  flex-shrink: 0;
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 0 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.logs-source--main {
+  color: var(--purple);
+  border: 1px solid color-mix(in srgb, var(--purple) 45%, transparent);
+}
+
+.logs-source--renderer {
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+}
+
+.logs-level {
+  flex-shrink: 0;
+  width: 42px;
+  color: var(--muted);
+}
+
+.logs-row--warn .logs-level,
+.logs-row--warn .logs-text {
+  color: var(--yellow);
+}
+
+.logs-row--error .logs-level,
+.logs-row--error .logs-text {
+  color: var(--red);
+}
+
+.logs-row--debug .logs-text {
+  color: var(--muted);
+}
+
+.logs-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-width: 0;
+}
+
 /* Secondary action button in the detail panel (e.g. "Similar Songs") */
 .detail-secondary {
   margin-top: 0;
@@ -2554,6 +2807,35 @@ img.queue-row-art {
   font-size: 11.5px;
   opacity: 0.6;
   line-height: 1.45;
+}
+
+/* Smart-playlist cards (Home → Smart Mixes): gradient icon tile in place of
+   the album collage, one hue per playlist. */
+.smart-card-art {
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.smart-card--for-you .smart-card-art {
+  background: linear-gradient(135deg, var(--purple), #3b2d80);
+}
+
+.smart-card--top-rated .smart-card-art {
+  background: linear-gradient(135deg, var(--yellow), #8a5a14);
+}
+
+.smart-card--heavy-rotation .smart-card-art {
+  background: linear-gradient(135deg, var(--red), #7a2420);
+}
+
+.smart-card--rediscover .smart-card-art {
+  background: linear-gradient(135deg, var(--green), #1f6e52);
 }
 
 /* Artist header: .album-actions sits inline in the flex row, so the

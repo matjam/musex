@@ -1,5 +1,6 @@
 import type { Track } from "@musex/core";
 import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
+import { usePanel } from "./panel";
 
 /** The currently highlighted track (single-click) shown in the detail panel.
  *  Independent of playback — selecting never plays. */
@@ -13,13 +14,18 @@ const Ctx = createContext<SelectionApi | null>(null);
 
 export function SelectionProvider({ children }: { children: ReactNode }) {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
+  const { openPanel } = usePanel();
   const api = useMemo<SelectionApi>(
     () => ({
       selectedTrack,
-      select: (track) => setSelectedTrack(track),
+      // Selecting summons the track detail panel (replacing the queue if open).
+      select: (track) => {
+        setSelectedTrack(track);
+        openPanel("track");
+      },
       clear: () => setSelectedTrack(null),
     }),
-    [selectedTrack],
+    [selectedTrack, openPanel],
   );
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

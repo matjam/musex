@@ -2,16 +2,12 @@ import type { Track } from "@musex/core";
 import { GripVertical, Radio, X } from "lucide-react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
+import { usePanel } from "../state/panel";
 import { usePlayer } from "../state/player";
 import { AlbumArt } from "./AlbumArt";
 import { TrackSubLinks } from "./TrackSubLinks";
 
 const MAX_UPCOMING_ROWS = 100;
-
-interface QueueDrawerProps {
-  open: boolean;
-  onClose: () => void;
-}
 
 interface UpcomingRowProps {
   track: Track;
@@ -95,9 +91,10 @@ function UpcomingRow({
   );
 }
 
-export function QueueDrawer({ open, onClose }: QueueDrawerProps) {
+export function QueueDrawer() {
   const { state, clearQueue, removeFromQueue, moveInQueue, jumpTo, radioActive, stopRadio } =
     usePlayer();
+  const { closePanel } = usePanel();
   const dragFromRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -138,7 +135,7 @@ export function QueueDrawer({ open, onClose }: QueueDrawerProps) {
   }
 
   return (
-    <aside className={`queue-drawer${open ? " queue-drawer--open" : ""}`} aria-label="Queue">
+    <aside className="queue-drawer" aria-label="Queue">
       <div className="queue-drawer-header">
         <span className="queue-drawer-title">Queue</span>
         <div className="queue-drawer-header-actions">
@@ -171,7 +168,7 @@ export function QueueDrawer({ open, onClose }: QueueDrawerProps) {
           <button
             type="button"
             className="queue-close-btn"
-            onClick={onClose}
+            onClick={() => closePanel("queue")}
             title="Close queue"
             aria-label="Close queue"
           >

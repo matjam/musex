@@ -1,12 +1,21 @@
 import type { Album, Artist } from "@musex/core";
 import { useEffect, useState } from "react";
+import { sampleThumbs } from "../../../../logic/collage";
+import { albumsForMix, MOOD_MIXES } from "../../../../logic/mood-mixes";
+import type { SmartKind } from "../../../../logic/smart-playlists";
+import { SMART_TITLES } from "../../../../logic/smart-playlists";
 import type { SectionDto } from "../../../../shared/ipc-contract";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlaylists } from "../../state/playlists";
+import { CardCollage } from "../CardCollage";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { PluginSections } from "../PluginSections";
+import { MIX_ICONS, SMART_ICONS } from "../smart-mix-icons";
+
+/** Home-card order for the smart playlists. */
+const SMART_ORDER: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
 
 /** Fisher-Yates pick of up to `n` random items (fresh each visit). */
 function pickRandom<T>(items: T[], n: number): T[] {
@@ -29,6 +38,7 @@ export function HomeView() {
   const { playAlbum, playArtist, playPlaylist } = useCollectionPlay();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [mixThumbs, setMixThumbs] = useState<Map<string, string[]>>(new Map());
   const [pluginSections, setPluginSections] = useState<SectionDto[]>([]);
 
   useEffect(() => {
@@ -59,6 +69,19 @@ export function HomeView() {
         if (cancelled) return;
         setArtists(pickRandom(ar, RANDOM_COUNT));
         setAlbums(pickRandom(al, RANDOM_COUNT));
+        // Collage art for the mood-mix cards, from the same album fetch.
+        setMixThumbs(
+          new Map(
+            MOOD_MIXES.map((mix) => [
+              mix.id,
+              sampleThumbs(
+                albumsForMix(mix, al).map((a) => a.thumb),
+                4,
+                mix.id,
+              ),
+            ]),
+          ),
+        );
       })
       .catch(() => {
         // overview is best-effort; leave sections empty on error
@@ -78,6 +101,40 @@ export function HomeView() {
   return (
     <div className="browse-section home-view">
       <h2 className="home-greeting">Home</h2>
+
+      <section className="home-row">
+        <h3 className="browse-title">Smart Mixes</h3>
+        <div className="genre-grid">
+          {SMART_ORDER.map((kind) => {
+            const Icon = SMART_ICONS[kind];
+            return (
+              <button
+                key={kind}
+                type="button"
+                className={`genre-card smart-card smart-card--${kind}`}
+                onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+              >
+                <div className="smart-card-art">
+                  <Icon size={42} strokeWidth={1.5} />
+                </div>
+                <div className="genre-card-name">{SMART_TITLES[kind]}</div>
+              </button>
+            );
+          })}
+          {MOOD_MIXES.map((mix) => (
+            <button
+              key={mix.id}
+              type="button"
+              className="genre-card mix-card"
+              onClick={() => dispatch({ type: "navigate", view: { name: "mix", mixId: mix.id } })}
+            >
+              <CardCollage thumbs={mixThumbs.get(mix.id) ?? []} className="genre-card-collage" />
+              <div className="genre-card-name">{mix.title}</div>
+              <div className="mix-card-desc">{mix.description}</div>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {topPlaylists.length > 0 && (
         <section className="home-row">

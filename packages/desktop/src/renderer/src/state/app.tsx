@@ -11,12 +11,10 @@ export type View =
   | { name: "artists" }
   | { name: "genres" }
   | { name: "genre"; genre: string }
-  | { name: "mixes" }
   | { name: "mix"; mixId: string }
   | { name: "tracks" }
   | { name: "album"; album: Album }
   | { name: "artist"; artist: Artist }
-  | { name: "settings" }
   | { name: "search" }
   | { name: "playlist"; playlist: Playlist }
   | { name: "smart"; kind: SmartKind }

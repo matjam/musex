@@ -8,6 +8,7 @@ import type {
   AcquirableAlbumDto,
   ExternalArtistResultDto,
   LoadPlaybackResult,
+  LogLevel,
   NowPlayingMsg,
   PlaybackCursorDto,
   RadioNextArgs,
@@ -18,6 +19,7 @@ import type {
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
+import { LOG_LEVELS, logBuffer } from "./logging.js";
 import { resolveRecommendations } from "./plugins/radio-resolve.js";
 import {
   matchItemsAgainstLibrary,
@@ -678,6 +680,25 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.openExternal, (_e, url: unknown) => {
     if (typeof url !== "string" || !isHttpUrl(url)) throw new Error("invalid external url");
     void shell.openExternal(url);
+  });
+
+  // Unified log buffer (Help → Show Logs).
+  ipcMain.handle(IPC.logsGet, () => logBuffer.snapshot());
+  ipcMain.handle(IPC.logsAppend, (_e, entries: unknown) => {
+    if (!Array.isArray(entries)) return;
+    // Bounded batch + text length: this channel is fed by a console hook, so
+    // a runaway logger must not balloon the buffer or the IPC payloads.
+    for (const entry of entries.slice(0, 200)) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const { ts, level, text } = entry as Record<string, unknown>;
+      if (typeof text !== "string") continue;
+      logBuffer.append({
+        ts: typeof ts === "number" && Number.isFinite(ts) ? ts : Date.now(),
+        source: "renderer",
+        level: LOG_LEVELS.includes(level as LogLevel) ? (level as LogLevel) : "log",
+        text: text.slice(0, 8192),
+      });
+    }
   });
 
   // Radio refill: plugin recommenders suggest, the host resolves against the

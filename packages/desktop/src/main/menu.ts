@@ -3,8 +3,12 @@ import { app, Menu, type MenuItemConstructorOptions, shell } from "electron";
 export interface AppMenuDeps {
   /** Open the custom About window (version + dependency attribution). */
   showAbout: () => void;
+  /** Navigate the current window to the Settings view. */
+  showSettings: () => void;
   /** Navigate the current window to Settings → Keyboard Shortcuts. */
   showShortcuts: () => void;
+  /** Open the unified log viewer (main + renderer console output). */
+  showLogs: () => void;
   /** Reveal the app's logs/data folder in Finder. */
   openLogsFolder: () => void;
   /** Interactive update check (dialogs for result). */
@@ -37,6 +41,12 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
         {
           label: "Check for Updates…",
           click: () => deps.checkForUpdates(),
+        },
+        { type: "separator" },
+        {
+          label: "Settings…",
+          accelerator: "CmdOrCtrl+,",
+          click: () => deps.showSettings(),
         },
         { type: "separator" },
         { role: "services" },
@@ -73,6 +83,10 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
           click: () => void shell.openExternal("https://github.com/matjam/musex/issues"),
         },
         { type: "separator" },
+        {
+          label: "Show Logs",
+          click: () => deps.showLogs(),
+        },
         {
           label: "Open Logs Folder",
           click: () => deps.openLogsFolder(),

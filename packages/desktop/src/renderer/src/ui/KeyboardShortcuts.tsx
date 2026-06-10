@@ -6,10 +6,12 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 export function KeyboardShortcuts({
   toggleQueue,
   toggleShortcutsHelp,
+  openSettings,
 }: {
   toggleQueue: () => void;
   toggleShortcutsHelp: () => void;
+  openSettings: () => void;
 }) {
-  useKeyboardShortcuts(toggleQueue, toggleShortcutsHelp);
+  useKeyboardShortcuts(toggleQueue, toggleShortcutsHelp, openSettings);
   return null;
 }

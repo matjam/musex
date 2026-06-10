@@ -66,7 +66,7 @@ export function SignIn() {
           mus<span>ex</span>
         </div>
         <div className="signin-tagline compact">
-          Approve this code in the browser tab we just opened.
+          Enter this code at plex.tv/link — we opened it in your browser.
         </div>
         <div className="signin-code">{signInCode}</div>
         <div className="signin-dots">

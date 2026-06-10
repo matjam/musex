@@ -1,24 +1,23 @@
 import {
+  ChevronDown,
+  ChevronRight,
   Compass,
   Disc3,
   Download,
-  Flame,
-  History,
   Home,
-  ListMusic,
   Mic2,
   Music,
-  Settings,
-  Sparkles,
-  Star,
   Tags,
-  Wand2,
 } from "lucide-react";
+import type { ReactNode } from "react";
+import { useState } from "react";
+import { MOOD_MIXES } from "../../../logic/mood-mixes";
 import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
-import { TrackDetailPanel } from "./TrackDetailPanel";
+import { SidePanelHost } from "./SidePanel";
+import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
@@ -29,26 +28,58 @@ import { ExternalArtistView } from "./views/ExternalArtistView";
 import { GenresView } from "./views/GenresView";
 import { GenreView } from "./views/GenreView";
 import { HomeView } from "./views/HomeView";
-import { MixesView } from "./views/MixesView";
 import { MixView } from "./views/MixView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
-import { SettingsView } from "./views/SettingsView";
 import { SimilarView } from "./views/SimilarView";
 import { SmartPlaylistView } from "./views/SmartPlaylistView";
 import { TracksView } from "./views/TracksView";
 
-/** Sidebar entries for the Smart section, in display order. */
-const SMART_NAV: { kind: SmartKind; Icon: typeof Star }[] = [
-  { kind: "for-you", Icon: Wand2 },
-  { kind: "top-rated", Icon: Star },
-  { kind: "heavy-rotation", Icon: Flame },
-  { kind: "rediscover", Icon: History },
-];
+/** Sidebar order for the smart playlists in the Smart Mixes section. */
+const SMART_NAV: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
+
+/** Collapsed state per sidebar section, persisted across launches.
+ *  localStorage (not main-process settings) — pure UI state. */
+function useCollapsed(key: string): [boolean, () => void] {
+  const storageKey = `musex.sidebar.${key}`;
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(storageKey) === "1");
+  const toggle = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem(storageKey, next ? "1" : "0");
+      return next;
+    });
+  return [collapsed, toggle];
+}
+
+function SidebarSection({
+  title,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  title: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <button type="button" className="nav-section nav-section-toggle" onClick={onToggle}>
+        {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+        {title}
+      </button>
+      {!collapsed && children}
+    </>
+  );
+}
 
 export function Shell() {
   const { library, view, dispatch } = useApp();
   const { playlists } = usePlaylists();
+  const [libraryCollapsed, toggleLibrary] = useCollapsed("library");
+  const [smartCollapsed, toggleSmart] = useCollapsed("smart");
+  const [playlistsCollapsed, togglePlaylists] = useCollapsed("playlists");
 
   const serverLabel = library ? `${library.serverName} · ${library.title}` : "No library";
 
@@ -56,15 +87,12 @@ export function Shell() {
   // artist/album drill-downs keep the Artists nav highlighted.
   const homeActive = view.name === "home";
   const discoverActive = view.name === "discover";
-  // The per-mix drill-down keeps the Mixes nav highlighted.
-  const mixesActive = view.name === "mixes" || view.name === "mix";
   const downloadsActive = view.name === "downloads";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   // The per-genre drill-down keeps the Genres nav highlighted.
   const genresActive = view.name === "genres" || view.name === "genre";
   const tracksActive = view.name === "tracks";
-  const settingsActive = view.name === "settings";
 
   function renderContent() {
     switch (view.name) {
@@ -80,16 +108,12 @@ export function Shell() {
         return <AlbumDetailView album={view.album} />;
       case "albums":
         return <AlbumsView />;
-      case "settings":
-        return <SettingsView />;
       case "search":
         return <SearchView />;
       case "genres":
         return <GenresView />;
       case "genre":
         return <GenreView genre={view.genre} />;
-      case "mixes":
-        return <MixesView />;
       case "mix":
         return <MixView mixId={view.mixId} />;
       case "tracks":
@@ -130,15 +154,6 @@ export function Shell() {
 
         <button
           type="button"
-          className={`nav-item${mixesActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "mixes" } })}
-        >
-          <Sparkles size={16} />
-          Mixes
-        </button>
-
-        <button
-          type="button"
           className={`nav-item${downloadsActive ? " active" : ""}`}
           onClick={() => dispatch({ type: "navigate", view: { name: "downloads" } })}
         >
@@ -146,63 +161,76 @@ export function Shell() {
           Downloads
         </button>
 
-        <div className="nav-section">Library</div>
-
-        <button
-          type="button"
-          className={`nav-item${albumsActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
-        >
-          <Disc3 size={16} />
-          Albums
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item${artistsActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
-        >
-          <Mic2 size={16} />
-          Artists
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item${genresActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "genres" } })}
-        >
-          <Tags size={16} />
-          Genres
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item${tracksActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "tracks" } })}
-        >
-          <Music size={16} />
-          Tracks
-        </button>
-
-        <div className="nav-section">Smart</div>
-
-        {SMART_NAV.map(({ kind, Icon }) => (
+        <SidebarSection title="Library" collapsed={libraryCollapsed} onToggle={toggleLibrary}>
           <button
-            key={kind}
             type="button"
-            className={`nav-item${view.name === "smart" && view.kind === kind ? " active" : ""}`}
-            onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+            className={`nav-item${albumsActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
           >
-            <Icon size={16} />
-            {SMART_TITLES[kind]}
+            <Disc3 size={16} />
+            Albums
           </button>
-        ))}
 
-        <div className="playlist-rail">
-          <div className="playlist-rail-head">
-            <ListMusic size={14} />
-            <span>Playlists</span>
-          </div>
+          <button
+            type="button"
+            className={`nav-item${artistsActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
+          >
+            <Mic2 size={16} />
+            Artists
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item${genresActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "genres" } })}
+          >
+            <Tags size={16} />
+            Genres
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item${tracksActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "tracks" } })}
+          >
+            <Music size={16} />
+            Tracks
+          </button>
+        </SidebarSection>
+
+        <SidebarSection title="Smart Mixes" collapsed={smartCollapsed} onToggle={toggleSmart}>
+          {SMART_NAV.map((kind) => {
+            const Icon = SMART_ICONS[kind];
+            return (
+              <button
+                key={kind}
+                type="button"
+                className={`nav-item${view.name === "smart" && view.kind === kind ? " active" : ""}`}
+                onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+              >
+                <Icon size={16} />
+                {SMART_TITLES[kind]}
+              </button>
+            );
+          })}
+          {MOOD_MIXES.map((mix) => {
+            const Icon = MIX_ICONS[mix.id] ?? Music;
+            return (
+              <button
+                key={mix.id}
+                type="button"
+                className={`nav-item${view.name === "mix" && view.mixId === mix.id ? " active" : ""}`}
+                onClick={() => dispatch({ type: "navigate", view: { name: "mix", mixId: mix.id } })}
+              >
+                <Icon size={16} />
+                {mix.title}
+              </button>
+            );
+          })}
+        </SidebarSection>
+
+        <SidebarSection title="Playlists" collapsed={playlistsCollapsed} onToggle={togglePlaylists}>
           {playlists.map((p) => (
             <button
               key={p.id}
@@ -215,18 +243,7 @@ export function Shell() {
               {p.title}
             </button>
           ))}
-        </div>
-
-        <div className="nav-section">App</div>
-
-        <button
-          type="button"
-          className={`nav-item${settingsActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
-        >
-          <Settings size={16} />
-          Settings
-        </button>
+        </SidebarSection>
 
         <div className="lib-switch">
           <div className="lib-switch-label">Plex Library</div>
@@ -236,7 +253,7 @@ export function Shell() {
 
       <main className="content-area">{renderContent()}</main>
 
-      <TrackDetailPanel />
+      <SidePanelHost />
     </div>
   );
 }

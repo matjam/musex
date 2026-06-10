@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  LogEntryDto,
   MusexApi,
   NavigateToPayload,
   PlaybackEngineEvent,
@@ -101,6 +102,13 @@ const api: MusexApi = {
     const listener = (_e: Electron.IpcRendererEvent, p: NavigateToPayload) => cb(p);
     ipcRenderer.on(IPC.navigateTo, listener);
     return () => ipcRenderer.removeListener(IPC.navigateTo, listener);
+  },
+  logsGet: () => ipcRenderer.invoke(IPC.logsGet),
+  logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
+  onLogsEvent: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, entry: LogEntryDto) => cb(entry);
+    ipcRenderer.on(IPC.logsEvent, listener);
+    return () => ipcRenderer.removeListener(IPC.logsEvent, listener);
   },
 };
 

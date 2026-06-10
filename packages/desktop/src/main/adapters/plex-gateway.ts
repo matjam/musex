@@ -74,9 +74,22 @@ export class PlexapiGateway implements PlexGateway {
   constructor(private readonly urlCache?: ServerUrlCache) {}
 
   async createPin(): Promise<Pin> {
-    // WebLogin shape: { id: number, code: string, uri: string }
-    const web = await MyPlexAccount.getWebLogin();
-    return { id: String(web.id), code: web.code, authUrl: web.uri };
+    // A NON-strong pin (strong=false) yields the short 4-character code that
+    // plex.tv/link accepts when typed by hand. getWebLogin() creates a STRONG
+    // pin — a long code that only works embedded in the app.plex.tv/auth URL
+    // and can never be entered manually — so we hand-roll the pin request.
+    const res = await fetch("https://plex.tv/api/v2/pins?strong=false", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "X-Plex-Product": "musex",
+        // Must match pollPin's identifier so Plex associates the poll with us.
+        "X-Plex-Client-Identifier": X_PLEX_IDENTIFIER,
+      },
+    });
+    if (!res.ok) throw new Error(`Plex pin request failed: HTTP ${res.status}`);
+    const body = (await res.json()) as { id: number; code: string };
+    return { id: String(body.id), code: body.code, authUrl: "https://plex.tv/link" };
   }
 
   async pollPin(id: string): Promise<{ authToken: string | null }> {
