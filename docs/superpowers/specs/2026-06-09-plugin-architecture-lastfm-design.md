@@ -37,7 +37,15 @@ PlaybackSession ──nowPlaying──►    ├─ PlaybackMonitor (host-side s
 - **apiVersion gate**: host supports `apiVersion: 1`; mismatch → plugin listed as incompatible, not loaded.
 - **Monorepo home for first-party plugins**: `plugins/lastfm/` workspace package (`@musex/plugin-lastfm`), bundled by **esbuild** to `plugins/lastfm/dist/{plugin.json,index.mjs}` (single file, `@musex/core` types used at compile time only). Its build is independent of the app build — that's the "iterate without touching the app" property. (esbuild version verified current at plan time.)
 
-### PluginContext API (v1)
+### PluginContext API (v1) — small kernel + generic contribution points
+
+Design principle: instead of one bespoke interface per feature (a `Scrobbler`, a
+`DiscoveryProvider`, …), the API is a **kernel of general capabilities** (events,
+library access, storage/secrets/fetch, notifications, settings) plus **generic,
+data-only contribution points** (sections, track actions, detail sections). Each
+concrete feature is an *instance* of these: scrobbling = an event subscriber;
+discovery = a section contribution targeting the Discover view. New plugin ideas
+(Discord presence, stats, lyrics, ListenBrainz) need no new API surface.
 
 ```ts
 interface PluginContext {
@@ -46,10 +54,63 @@ interface PluginContext {
   storage: { get<T>(key: string): Promise<T | null>; set<T>(key: string, v: T): Promise<void> };
   secrets: { get(key: string): Promise<string | null>; set(key: string, v: string | null): Promise<void> }; // safeStorage-encrypted
   fetch: typeof fetch;                                        // convenience; full trust anyway
-  registerSettings(schema: SettingField[]): void;             // declarative; host renders
+
+  // ── events (generalizes "Scrobbler"): playback lifecycle + curated domain events
+  events: {
+    on<K extends keyof PluginEvents>(event: K, handler: (payload: PluginEvents[K]) => void): Disposable;
+  };
+
+  // ── read-only library access (matching, taste profiles, dedupe — any plugin)
+  library: {
+    search(query: string): Promise<LibrarySearchResult>;       // artists/albums/tracks with opaque ids
+    recentlyPlayed(limit?: number): Promise<TrackInfo[]>;      // host-tracked history
+  };
+
+  // ── UI (data-only; host renders everything)
+  ui: {
+    notify(message: string, level?: "info" | "error"): void;   // toast
+    contributeSections(target: "discover" | "home", provider: SectionProvider): Disposable;
+    contributeTrackAction(action: TrackAction): Disposable;    // context menu + detail panel
+    contributeTrackDetail(provider: TrackDetailProvider): Disposable; // slide-out panel section
+  };
+
+  // ── settings (declarative; host renders the form)
+  registerSettings(schema: SettingField[]): void;
   onSettingsAction(key: string, handler: () => Promise<SettingsActionResult>): void; // e.g. "Connect"
-  registerScrobbler(s: Scrobbler): void;
-  registerDiscoveryProvider(p: DiscoveryProvider): void;
+}
+
+interface PluginEvents {
+  trackStarted: { track: TrackInfo; startedAtEpochSec: number };
+  trackEnded: { track: TrackInfo; playedSec: number };
+  paused: { track: TrackInfo };
+  resumed: { track: TrackInfo };
+  /** Curated: fires once per play-through when the host's scrobble gate passes
+   *  (last.fm thresholds — see pipeline below). Subscribers scrobble; that's all
+   *  "being a scrobbler" means. */
+  scrobble: { track: TrackInfo; startedAtEpochSec: number };
+}
+
+interface SectionProvider {
+  id: string;
+  getSections(ctx: SectionContext): Promise<Section[]>;
+}
+interface SectionContext { recentArtists: string[]; recentTracks: { title: string; artist: string }[] }
+interface Section {
+  title: string;                                               // e.g. "Because you listened to Lamb"
+  items: { name: string; artistName?: string; imageUrl?: string; externalUrl?: string }[];
+}
+
+interface TrackAction {
+  id: string;
+  label: string;                                               // e.g. "Love on Last.fm"
+  icon?: string;                                               // lucide icon name; host resolves
+  onInvoke(track: TrackInfo): Promise<void>;
+}
+
+interface TrackDetailProvider {
+  id: string;
+  /** Key-value rows / short text for the selected track's panel (playcount, tags, …). */
+  getDetail(track: TrackInfo): Promise<{ title: string; rows: { label: string; value: string }[] } | null>;
 }
 
 type SettingField =
@@ -58,42 +119,37 @@ type SettingField =
   | { kind: "action"; key: string; label: string; help?: string }   // button → onSettingsAction
   | { kind: "status"; key: string };                                 // read-only line the plugin updates
 
-interface Scrobbler {
-  nowPlaying(track: TrackInfo): Promise<void>;                 // fire-and-forget; never retried
-  scrobble(track: TrackInfo, startedAtEpochSec: number): Promise<void>;
-}
-
-interface DiscoveryProvider {
-  id: string;
-  getSections(ctx: DiscoveryContext): Promise<DiscoverySection[]>;
-}
-interface DiscoveryContext { recentArtists: string[]; recentTracks: { title: string; artist: string }[] }
-interface DiscoverySection {
-  title: string;                                               // e.g. "Because you listened to Lamb"
-  items: { name: string; artistName?: string; imageUrl?: string; externalUrl?: string }[];
-}
 type TrackInfo = { title: string; artistName: string; albumTitle?: string; durationMs: number; trackNumber?: number };
+type Disposable = { dispose(): void };
 ```
 
-### Scrobble pipeline (host-side — plugins just send)
+**Named for v2 (shape reserved, NOT built in v1):**
+- `ctx.player` — queue/playback control (`enqueue`, `playTracks`, `getState`): enables last.fm-radio / AI-DJ / smart-queue plugins, but needs new main→renderer command plumbing and nothing in v1 requires it.
+- `MetadataProvider` — external metadata enrichment (the roadmap's metadata-search feature will define it).
+- `AcquisitionProvider` — "I can acquire this external item" (the Lidarr spec will define it; Discover's unowned badge is its entry point).
+- `ctx.commands` — command-palette registration, when a palette exists.
+
+### Playback events pipeline (host-side; plugins subscribe)
 
 - The **renderer session** notifies main over a new IPC (`playbackNowPlaying`) on track start / pause / resume / track change / stop, carrying the `TrackInfo`. (Restore-paused does NOT notify until the user actually plays.)
-- Main's **PlaybackMonitor** combines that with the mpv position events it already sees to accumulate *actual played time* per track (robust to pause/seek: accumulate deltas only while playing, ignore jumps > ~2s as seeks).
-- **Scrobble gate (pure, unit-tested, `logic/scrobble-gate.ts`)** — last.fm rules verified 2026-06-09: track length > 30s AND played ≥ half its duration or ≥ 4 minutes (whichever comes first). Gate fires once per play-through, on track end/change; emits `{track, startedAt}` to every registered scrobbler. `nowPlaying` is sent on each track start and never retried (per last.fm guidance).
+- Main's **PlaybackMonitor** combines that with the mpv position events it already sees to accumulate *actual played time* per track (robust to pause/seek: accumulate deltas only while playing, ignore jumps > ~2s as seeks). It emits the `trackStarted/trackEnded/paused/resumed` plugin events and feeds the host's recently-played history (which also backs `ctx.library.recentlyPlayed` and `SectionContext`).
+- **Scrobble gate (pure, unit-tested, `logic/scrobble-gate.ts`)** — last.fm rules verified 2026-06-09: track length > 30s AND played ≥ half its duration or ≥ 4 minutes (whichever comes first). Fires the curated `scrobble` event once per play-through, on track end/change.
 - Plugins receive only `TrackInfo` — no ids, URLs, or tokens.
 
 ### Renderer surfaces
 
 - **Settings → Plugins**: list (name, version, enabled toggle, error state), Reload plugins, and a per-plugin settings form rendered from the declarative schema (text/password/toggle/action/status). Values round-trip over IPC to the plugin's storage/secrets (password fields → secrets); action buttons invoke `onSettingsAction` and show the returned status/error.
-- **Discover view** (new nav item, lucide `Compass`): host collects sections from all enabled providers (per-provider try/catch + timeout), renders rows of cards. Each item is **matched against the library** (search by artist/name, best-effort) — owned items navigate to their artist/album page; unowned items show an "external" badge (the future Lidarr acquisition hook) and link out via `externalUrl`.
-- New IPC: `plugins:list / setEnabled / reload / getSettingsSchema / getSettingsValues / setSettingsValue / settingsAction`, `discover:getSections`, `playbackNowPlaying` (renderer→main notify).
+- **Discover view** (new nav item, lucide `Compass`): host collects sections from all providers contributed to `"discover"` (per-provider try/catch + timeout), renders rows of cards. Each item is **matched against the library** (search by artist/name, best-effort) — owned items navigate to their artist/album page; unowned items show an "external" badge (the future Lidarr acquisition hook) and link out via `externalUrl`. Home renders `"home"`-targeted contributions below its built-in rows with the same machinery.
+- **Plugin-contributed track actions** render in the track context menu (below "Go to album") and the detail panel; **track-detail contributions** render as extra panel sections.
+- New IPC: `plugins:list / setEnabled / reload / getSettingsSchema / getSettingsValues / setSettingsValue / settingsAction`, `sections:get (target)`, `trackActions:list / invoke`, `trackDetail:get`, `playbackNowPlaying` (renderer→main notify), `pluginNotify` (main→renderer toast push).
 
 ## last.fm plugin (v1 scope)
 
 - **Settings**: API key (text), shared secret (password→secrets), "Connect last.fm account" (action), status line ("Connected as <user>" / "Not connected").
 - **Auth** (desktop flow, verified 2026-06-09): `auth.getToken` → `shell`-opened browser to `last.fm/api/auth/?api_key=…&token=…` → user approves → `auth.getSession` (poll a few times after the action, token valid 60 min) → store session key in `secrets`. All signed calls: `api_sig = md5(concat(sorted param name+value pairs) + secret)` (`node:crypto`), POST form-encoded to `https://ws.audioscrobbler.com/2.0/`.
-- **Scrobbler**: `track.updateNowPlaying` on start; `track.scrobble` (artist, track, timestamp=startedAt, album, duration) when the host gate fires. Failures logged, never retried in v1 (offline scrobble queueing is a listed follow-up).
-- **Discovery provider**: for the host-provided recent artists, `artist.getSimilar` → "Because you listened to X" sections (top ~10 similar each, capped at 3 sections). last.fm artist images are mostly defunct — items render with the placeholder/initial art; owned matches use library art.
+- **Scrobbling** (event subscriber): on `trackStarted` → `track.updateNowPlaying` (never retried, per last.fm guidance); on `scrobble` → `track.scrobble` (artist, track, timestamp=startedAt, album, duration). Failures logged, never retried in v1 (offline scrobble queueing is a listed follow-up).
+- **Discover sections**: `ui.contributeSections("discover", …)` — for the host-provided recent artists, `artist.getSimilar` → "Because you listened to X" sections (top ~10 similar each, capped at 3 sections). last.fm artist images are mostly defunct — items render with the placeholder/initial art; owned matches use library art.
+- **Track action**: "Love on Last.fm" (`track.love`) — exercises the generic action point end-to-end and surfaces a toast via `ui.notify`.
 
 ## Out of scope (v1, listed deliberately)
 
@@ -108,11 +164,11 @@ Plugin install/marketplace UI (drop a folder in `userData/plugins/` instead) · 
 
 ## Phases
 
-1. **Plugin host**: manifest/loader/registry/ctx (storage/secrets/log/fetch/settings), Settings→Plugins UI, reload. Fixture-plugin tests.
-2. **Scrobble pipeline**: `playbackNowPlaying` IPC, PlaybackMonitor + scrobble gate (tested), scrobbler fan-out.
-3. **last.fm plugin**: package + build, auth flow, scrobbler. First real end-to-end.
-4. **Discover**: provider extension point, Discover view + library matching, last.fm similar-artists provider.
-5. **Docs**: `docs/plugins.md` — manifest, API v1, how to build/install a plugin.
+1. **Plugin host kernel**: manifest/loader/registry, ctx (storage/secrets/log/fetch/settings, `ui.notify`), Settings→Plugins UI, reload. Fixture-plugin tests.
+2. **Events pipeline**: `playbackNowPlaying` IPC, PlaybackMonitor + recently-played history, scrobble gate (tested), `ctx.events` + `ctx.library` (search, recentlyPlayed).
+3. **last.fm plugin**: package + independent esbuild, auth flow, scrobbling via events, "Love" track action. First real end-to-end (incl. the `trackActions` contribution point).
+4. **Discover + sections**: `contributeSections` (discover + home targets), Discover view + library matching, last.fm similar-artists provider, `contributeTrackDetail` point.
+5. **Docs**: `docs/plugins.md` — manifest, API v1 (kernel + contribution points), how to build/install a plugin.
 
 ## Risks / notes
 
