@@ -81,6 +81,7 @@ const api: MusexApi = {
     ipcRenderer.invoke(IPC.trackActionsInvoke, actionId, track),
   trackDetailGet: (track) => ipcRenderer.invoke(IPC.trackDetailGet, track),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
+  radioNext: (args) => ipcRenderer.invoke(IPC.radioNext, args),
 };
 
 contextBridge.exposeInMainWorld("musex", api);

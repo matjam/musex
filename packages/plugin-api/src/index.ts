@@ -80,6 +80,25 @@ export interface TrackAction {
   onInvoke(track: TrackInfo): Promise<void>;
 }
 
+/** What the host knows when it asks recommenders for radio suggestions. */
+export interface RecommendContext {
+  seedTracks: { title: string; artist: string }[];
+  seedArtists: string[];
+  /** Already queued / recently played — do not re-suggest. */
+  exclude: { title: string; artist: string }[];
+  count: number;
+}
+
+/** title absent = artist-level suggestion (host picks tracks by that artist). */
+export type RecommendedTrack = { artistName: string; title?: string };
+
+/** Suggests tracks for the host's radio mode. Plugins only SUGGEST — the host
+ *  resolves suggestions against the user's library and owns the queue. */
+export interface TrackRecommender {
+  id: string;
+  recommend(ctx: RecommendContext): Promise<RecommendedTrack[]>;
+}
+
 export interface TrackDetailProvider {
   id: string;
   /** Key-value rows / short text for the selected track's panel (playcount, tags, …). */
@@ -143,6 +162,9 @@ export interface PluginContext {
     /** Slide-out panel section. */
     contributeTrackDetail(provider: TrackDetailProvider): Disposable;
   };
+
+  /** Radio: suggest tracks when the host's auto-extending queue runs low. */
+  registerTrackRecommender(recommender: TrackRecommender): Disposable;
 
   /** Declarative settings; the host renders the form. */
   registerSettings(schema: SettingField[]): void;

@@ -8,11 +8,13 @@ import type {
   LoadPlaybackResult,
   NowPlayingMsg,
   PlaybackCursorDto,
+  RadioNextArgs,
   SectionTarget,
   TrackInfo,
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
+import { resolveRecommendations } from "./plugins/radio-resolve.js";
 import { matchSectionsAgainstLibrary } from "./plugins/section-matching.js";
 import type { Runtime } from "./runtime.js";
 
@@ -49,6 +51,20 @@ function isTrackInfo(t: unknown): t is TrackInfo {
     typeof m.durationMs === "number" &&
     Number.isFinite(m.durationMs)
   );
+}
+
+/** Cap on tracks one radioNext call may return (defense against silly args). */
+const RADIO_COUNT_MAX = 50;
+
+/** Loose shape filter for renderer-supplied {title, artist} pairs — IPC input
+ *  is untrusted, so malformed entries are dropped rather than thrown over. */
+function titleArtistPairs(v: unknown): { title: string; artist: string }[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((p): p is { title: string; artist: string } => {
+    if (typeof p !== "object" || p === null) return false;
+    const m = p as Record<string, unknown>;
+    return typeof m.title === "string" && typeof m.artist === "string";
+  });
 }
 
 export function registerIpc(rt: Runtime): void {
@@ -465,6 +481,35 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.openExternal, (_e, url: unknown) => {
     if (typeof url !== "string" || !isHttpUrl(url)) throw new Error("invalid external url");
     void shell.openExternal(url);
+  });
+
+  // Radio refill: plugin recommenders suggest, the host resolves against the
+  // library and returns real playable tracks (proxy-baked thumbs). Empty when
+  // signed out / no library — the renderer treats that as "radio ran dry".
+  ipcMain.handle(IPC.radioNext, async (_e, args: RadioNextArgs): Promise<Track[]> => {
+    if (typeof args !== "object" || args === null) throw new Error("invalid radioNext args");
+    if (typeof args.count !== "number" || !Number.isFinite(args.count) || args.count < 1) {
+      throw new Error("invalid count");
+    }
+    const count = Math.min(Math.floor(args.count), RADIO_COUNT_MAX);
+    const seedTracks = titleArtistPairs(args.seedTracks);
+    const exclude = titleArtistPairs(args.exclude);
+    const seedArtists = Array.isArray(args.seedArtists)
+      ? args.seedArtists.filter((a): a is string => typeof a === "string" && a.length > 0)
+      : [];
+
+    const lib = rt.libraries[0];
+    const token = rt.token;
+    if (!lib || !token) return [];
+
+    const recs = await rt.plugins.recommendTracks({ seedTracks, seedArtists, exclude, count });
+    if (recs.length === 0) return [];
+
+    await rt.ensureProxyEndpoint(lib.serverId);
+    const tracks = await resolveRecommendations(recs, exclude, count, (query) =>
+      rt.gateway.search(lib, query, token).then((r) => ({ tracks: r.tracks })),
+    );
+    return tracks.map((t) => ({ ...t, thumb: rt.proxy.artUrl(t.serverId, t.thumb) }));
   });
 
   ipcMain.handle(IPC.prefetch, async (_e, tracks: Track[]) => {

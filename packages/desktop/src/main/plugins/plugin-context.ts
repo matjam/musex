@@ -10,6 +10,7 @@ import type {
   TrackAction,
   TrackDetailProvider,
   TrackInfo,
+  TrackRecommender,
 } from "@musex/plugin-api";
 import type { PluginNotification } from "../../shared/ipc-contract.js";
 import type { PluginSecrets, PluginStorage } from "./plugin-store.js";
@@ -32,6 +33,10 @@ export interface RegisteredTrackDetailProvider {
   pluginId: string;
   provider: TrackDetailProvider;
 }
+export interface RegisteredTrackRecommender {
+  pluginId: string;
+  recommender: TrackRecommender;
+}
 
 /** Registrations from all active plugins. Stored now; consumed by the events
  *  pipeline (Task 2) and the sections/actions/detail surfaces (Task 4). */
@@ -40,10 +45,17 @@ export interface PluginRegistry {
   sectionProviders: RegisteredSectionProvider[];
   trackActions: RegisteredTrackAction[];
   trackDetailProviders: RegisteredTrackDetailProvider[];
+  trackRecommenders: RegisteredTrackRecommender[];
 }
 
 export function createPluginRegistry(): PluginRegistry {
-  return { eventSubscribers: [], sectionProviders: [], trackActions: [], trackDetailProviders: [] };
+  return {
+    eventSubscribers: [],
+    sectionProviders: [],
+    trackActions: [],
+    trackDetailProviders: [],
+    trackRecommenders: [],
+  };
 }
 
 /** Everything a plugin's context needs from the host, injected so the ctx
@@ -130,6 +142,13 @@ export function buildPluginContext(
           trackDisposable,
         );
       },
+    },
+    registerTrackRecommender(recommender) {
+      return register(
+        registry.trackRecommenders,
+        { pluginId: manifest.id, recommender },
+        trackDisposable,
+      );
     },
     registerSettings: (schema) => deps.registerSettings(schema),
     onSettingsAction: (key, handler) => deps.onSettingsAction(key, handler),

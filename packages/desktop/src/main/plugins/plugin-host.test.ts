@@ -335,6 +335,72 @@ describe("PluginHost", () => {
     ]);
   });
 
+  it("recommendTracks merges + dedupes recommenders, applies exclude, isolates throws", async () => {
+    await writePlugin(
+      "recs-a",
+      `export function activate(ctx) {
+        ctx.registerTrackRecommender({
+          id: "a",
+          recommend: async () => [
+            { artistName: "Lamb", title: "Gorecki" },
+            { artistName: "Portishead", title: "Glory Box" }, // excluded below
+            { artistName: "Massive Attack" }, // artist-level
+          ],
+        });
+      }`,
+    );
+    await writePlugin(
+      "recs-b",
+      `export function activate(ctx) {
+        ctx.registerTrackRecommender({
+          id: "b",
+          recommend: async () => [
+            { artistName: "LAMB", title: "GORECKI" }, // dupe of recs-a (case-insensitive)
+            { artistName: "Massive Attack", title: "Teardrop" }, // NOT excluded by the
+            // artist-level "Massive Attack" key — exclude/dedupe match is exact
+            { artistName: "Björk" },
+          ],
+        });
+      }`,
+    );
+    await writePlugin(
+      "recs-boom",
+      `export function activate(ctx) {
+        ctx.registerTrackRecommender({
+          id: "boom",
+          recommend: async () => { throw new Error("recommender boom"); },
+        });
+      }`,
+    );
+    await writePlugin(
+      "recs-slow",
+      `export function activate(ctx) {
+        ctx.registerTrackRecommender({
+          id: "slow",
+          recommend: () => new Promise(() => {}), // never resolves
+        });
+      }`,
+    );
+    const { host } = makeHost({ providerTimeoutMs: 50 });
+    await host.loadAll();
+    expect(host.registry.trackRecommenders).toHaveLength(4);
+
+    const recs = await host.recommendTracks({
+      seedTracks: [{ title: "Gabriel", artist: "Lamb" }],
+      seedArtists: ["Lamb"],
+      exclude: [{ title: "Glory Box", artist: "portishead" }],
+      count: 10,
+    });
+    // recs-a's results first (registration order), then recs-b's novel ones;
+    // the thrower and the hung recommender are isolated/skipped.
+    expect(recs).toEqual([
+      { artistName: "Lamb", title: "Gorecki" },
+      { artistName: "Massive Attack" },
+      { artistName: "Massive Attack", title: "Teardrop" },
+      { artistName: "Björk" },
+    ]);
+  });
+
   it("lists and invokes track actions; unknown ids and failures throw with context", async () => {
     await writePlugin(
       "actions",

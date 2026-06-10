@@ -74,6 +74,7 @@ export const IPC = {
   trackActionsInvoke: "musex:trackActions:invoke", // (actionId, trackInfo) -> void
   trackDetailGet: "musex:trackDetail:get", // (trackInfo) -> TrackDetailDto[]
   openExternal: "musex:openExternal", // (url) -> void (http/https only)
+  radioNext: "musex:radio:next", // (RadioNextArgs) -> Track[]
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -172,6 +173,15 @@ export type TrackDetailDto = {
   rows: { label: string; value: string }[];
 };
 
+/** Radio refill request: seeds + everything already queued/recently played
+ *  (never re-suggested), and how many tracks the renderer wants back. */
+export type RadioNextArgs = {
+  seedTracks: { title: string; artist: string }[];
+  seedArtists: string[];
+  exclude: { title: string; artist: string }[];
+  count: number;
+};
+
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
   signInStart(): Promise<SignInStartResult>;
@@ -266,4 +276,7 @@ export interface MusexApi {
   trackDetailGet(track: TrackInfo): Promise<TrackDetailDto[]>;
   /** Open an http(s) URL in the system browser (validated in main). */
   openExternal(url: string): Promise<void>;
+  /** Radio refill: fan out to plugin recommenders, resolve suggestions against
+   *  the library, return playable tracks (proxy-baked thumbs). May be empty. */
+  radioNext(args: RadioNextArgs): Promise<Track[]>;
 }

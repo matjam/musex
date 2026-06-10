@@ -5,7 +5,13 @@
  * @musex/plugin-api types (compile-time only) + node:crypto. Never imports
  * electron or any @musex runtime code.
  */
-import type { PluginContext, PluginEvents, Section, TrackInfo } from "@musex/plugin-api";
+import type {
+  PluginContext,
+  PluginEvents,
+  RecommendedTrack,
+  Section,
+  TrackInfo,
+} from "@musex/plugin-api";
 import { isLastfmError, LastfmClient } from "./client.js";
 
 const AUTH_URL = "https://www.last.fm/api/auth/";
@@ -15,11 +21,18 @@ const AUTH_POLL_TIMEOUT_MS = 120_000;
 const SIMILAR_SEED_ARTISTS = 3;
 const SIMILAR_LIMIT = 10;
 const TOP_TAGS = 3;
+/** Radio: similar tracks per seed track / similar artists for the seed artist. */
+const RADIO_SEED_TRACKS = 3;
+const RADIO_SIMILAR_TRACKS_LIMIT = 10;
+const RADIO_SIMILAR_ARTISTS_LIMIT = 5;
 
 type TokenResponse = { token: string };
 type SessionResponse = { session: { name: string; key: string } };
 type SimilarResponse = {
   similarartists?: { artist?: { name: string; url?: string }[] };
+};
+type SimilarTracksResponse = {
+  similartracks?: { track?: { name: string; artist?: { name?: string } }[] };
 };
 type TrackInfoResponse = {
   track?: {
@@ -228,6 +241,63 @@ export async function activate(ctx: PluginContext): Promise<void> {
         }
       }
       return sections;
+    },
+  });
+
+  // ── Radio: similar-track / similar-artist suggestions ─────────────────────
+  ctx.registerTrackRecommender({
+    id: "lastfm-similar-tracks",
+    recommend: async (rctx) => {
+      const s = await session();
+      if (!s) return []; // needs API key + connected account
+      const out: RecommendedTrack[] = [];
+      for (const seed of rctx.seedTracks.slice(0, RADIO_SEED_TRACKS)) {
+        try {
+          const res = await s.client.call<SimilarTracksResponse>(
+            "track.getSimilar",
+            {
+              artist: seed.artist,
+              track: seed.title,
+              limit: String(RADIO_SIMILAR_TRACKS_LIMIT),
+              autocorrect: "1",
+            },
+            { signed: false }, // read method — api_key only
+          );
+          const raw = res.similartracks?.track;
+          for (const t of Array.isArray(raw) ? raw : []) {
+            const artistName = t.artist?.name;
+            if (
+              typeof t.name === "string" &&
+              t.name.length > 0 &&
+              typeof artistName === "string" &&
+              artistName.length > 0
+            ) {
+              out.push({ artistName, title: t.name });
+            }
+          }
+        } catch (err) {
+          ctx.log(`track.getSimilar failed for "${seed.artist} – ${seed.title}":`, errText(err));
+        }
+      }
+      const seedArtist = rctx.seedArtists[0];
+      if (seedArtist !== undefined) {
+        try {
+          const res = await s.client.call<SimilarResponse>(
+            "artist.getSimilar",
+            { artist: seedArtist, limit: String(RADIO_SIMILAR_ARTISTS_LIMIT), autocorrect: "1" },
+            { signed: false },
+          );
+          const raw = res.similarartists?.artist;
+          for (const a of Array.isArray(raw) ? raw : []) {
+            if (typeof a.name === "string" && a.name.length > 0) {
+              out.push({ artistName: a.name }); // artist-level — host picks the tracks
+            }
+          }
+        } catch (err) {
+          ctx.log(`artist.getSimilar failed for "${seedArtist}":`, errText(err));
+        }
+      }
+      return out;
     },
   });
 

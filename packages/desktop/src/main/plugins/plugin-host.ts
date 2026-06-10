@@ -7,6 +7,8 @@ import type {
   PluginContext,
   PluginEvents,
   PluginManifest,
+  RecommendContext,
+  RecommendedTrack,
   Section,
   SectionContext,
   SettingField,
@@ -14,6 +16,7 @@ import type {
   TrackInfo,
 } from "@musex/plugin-api";
 import { validateManifest } from "../../logic/plugin-manifest.js";
+import { KEY_SEPARATOR } from "../../logic/taste-profile.js";
 import type { PluginInfo, PluginNotification, PluginSettings } from "../../shared/ipc-contract.js";
 import { buildPluginContext, createPluginRegistry, type PluginRegistry } from "./plugin-context.js";
 import {
@@ -39,6 +42,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
     }),
   ]).finally(() => clearTimeout(timer));
+}
+
+/** Dedupe/exclusion key for recommendations: lower(artist)␟lower(title ?? "").
+ *  The same artist+title join key the taste profile and smart playlists use. */
+function recommendationKey(artist: string, title: string | undefined): string {
+  return `${artist.toLowerCase()}${KEY_SEPARATOR}${(title ?? "").toLowerCase()}`;
 }
 
 export interface PluginHostDeps {
@@ -178,6 +187,40 @@ export class PluginHost {
       }),
     );
     return results.filter((r) => r !== null);
+  }
+
+  /** Fan out to every registered track recommender (radio), isolating throwing
+   *  and slow recommenders; merge, dedupe by lower(artist)␟lower(title ?? ""),
+   *  and drop suggestions matching an `exclude` entry. Exclusion is an EXACT
+   *  key match: an artist-level suggestion (no title, key `artist␟`) is only
+   *  excluded by an exclude entry with an empty title, never by that artist's
+   *  excluded tracks — the host's resolution step filters those per track. */
+  async recommendTracks(ctx: RecommendContext): Promise<RecommendedTrack[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
+    const results = await Promise.all(
+      this.registry.trackRecommenders.map(async (r) => {
+        try {
+          const recs = await withTimeout(r.recommender.recommend(ctx), timeoutMs);
+          return Array.isArray(recs) ? recs : [];
+        } catch (err) {
+          console.error(`[plugins] ${r.pluginId} recommender "${r.recommender.id}" failed:`, err);
+          return [];
+        }
+      }),
+    );
+    const excluded = new Set(ctx.exclude.map((e) => recommendationKey(e.artist, e.title)));
+    const seen = new Set<string>();
+    const merged: RecommendedTrack[] = [];
+    for (const rec of results.flat()) {
+      // Full-trust, but a recommender can still return junk — drop it here.
+      if (typeof rec?.artistName !== "string" || rec.artistName.length === 0) continue;
+      if (rec.title !== undefined && typeof rec.title !== "string") continue;
+      const key = recommendationKey(rec.artistName, rec.title);
+      if (seen.has(key) || excluded.has(key)) continue;
+      seen.add(key);
+      merged.push(rec);
+    }
+    return merged;
   }
 
   listTrackActions(): { pluginId: string; id: string; label: string; icon?: string }[] {
