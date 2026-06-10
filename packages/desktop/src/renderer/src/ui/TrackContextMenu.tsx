@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   Mic2,
   Puzzle,
+  Radio,
   Star,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -49,7 +50,7 @@ interface Props {
 
 export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: Props) {
   const { playlists, addTo, remove } = usePlaylists();
-  const { enqueueNext, enqueueEnd } = usePlayer();
+  const { enqueueNext, enqueueEnd, startRadioFromTrack } = usePlayer();
   const { goArtist, goAlbum } = useEntityNav();
   const [submenu, setSubmenu] = useState(false);
   const [pluginActions, setPluginActions] = useState<TrackActionDto[]>([]);
@@ -180,6 +181,18 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
       >
         <Disc3 size={14} />
         Go to album
+      </button>
+      <div className="ctx-sep" />
+      <button
+        type="button"
+        className="ctx-item ctx-item--icon"
+        onClick={() => {
+          startRadioFromTrack(target.track);
+          onClose();
+        }}
+      >
+        <Radio size={14} />
+        Start Radio
       </button>
       {pluginActions.length > 0 && (
         <>

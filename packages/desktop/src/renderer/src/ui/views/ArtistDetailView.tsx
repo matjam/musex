@@ -1,5 +1,5 @@
 import type { Album, Artist, Track } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal, Play, Shuffle } from "lucide-react";
+import { ListEnd, ListPlus, MoreHorizontal, Play, Radio, Shuffle } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -19,7 +19,8 @@ interface Props {
 
 export function ArtistDetailView({ artist }: Props) {
   const { library, dispatch } = useApp();
-  const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd } = usePlayer();
+  const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
+    usePlayer();
   const { ratingFor, rate, seed } = useRatings();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
@@ -214,6 +215,10 @@ export function ArtistDetailView({ artist }: Props) {
           onClose={() => setMoreOpen(false)}
           onPlayNext={() => void handlePlayNext()}
           onAddToQueue={() => void handleAddToQueue()}
+          onStartRadio={() => {
+            startRadioFromArtist(artist.name);
+            setMoreOpen(false);
+          }}
         />
       )}
     </div>
@@ -228,10 +233,12 @@ interface MoreMenuProps {
   onClose: () => void;
   onPlayNext: () => void;
   onAddToQueue: () => void;
+  onStartRadio: () => void;
 }
 
-/** Fixed-position dropdown for "Play next" / "Add to queue" on the artist. */
-function ArtistMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue }: MoreMenuProps) {
+/** Fixed-position dropdown for "Play next" / "Add to queue" / "Start Artist
+ *  Radio" on the artist. */
+function ArtistMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue, onStartRadio }: MoreMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   const MARGIN = 8;
@@ -281,6 +288,10 @@ function ArtistMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue }: MoreMenuPro
       <button type="button" className="ctx-item ctx-item--icon" onClick={onAddToQueue}>
         <ListEnd size={14} />
         Add to queue
+      </button>
+      <button type="button" className="ctx-item ctx-item--icon" onClick={onStartRadio}>
+        <Radio size={14} />
+        Start Artist Radio
       </button>
     </div>
   );

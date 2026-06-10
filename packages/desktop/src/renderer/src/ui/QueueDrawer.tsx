@@ -1,5 +1,5 @@
 import type { Track } from "@musex/core";
-import { GripVertical, X } from "lucide-react";
+import { GripVertical, Radio, X } from "lucide-react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { usePlayer } from "../state/player";
@@ -91,7 +91,8 @@ function UpcomingRow({
 }
 
 export function QueueDrawer({ open, onClose }: QueueDrawerProps) {
-  const { state, clearQueue, removeFromQueue, moveInQueue, jumpTo } = usePlayer();
+  const { state, clearQueue, removeFromQueue, moveInQueue, jumpTo, radioActive, stopRadio } =
+    usePlayer();
   const dragFromRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -136,6 +137,22 @@ export function QueueDrawer({ open, onClose }: QueueDrawerProps) {
       <div className="queue-drawer-header">
         <span className="queue-drawer-title">Queue</span>
         <div className="queue-drawer-header-actions">
+          {radioActive && (
+            <>
+              <span className="radio-chip">
+                <Radio size={12} /> Radio
+              </span>
+              <button
+                type="button"
+                className="radio-stop-btn"
+                onClick={stopRadio}
+                title="Stop radio"
+                aria-label="Stop radio"
+              >
+                <X size={12} />
+              </button>
+            </>
+          )}
           {queue !== null && upcoming.length > 0 && (
             <button
               type="button"
