@@ -256,21 +256,35 @@ export function registerIpc(rt: Runtime): void {
     rt.gateway.deletePlaylist(playlistId, serverId, rt.requireToken()),
   );
 
+  // TEMP DIAGNOSTIC (playback-stall investigation): timestamped user-action log,
+  // same terminal + clock as the proxy logs so traces correlate.
+  const ts = () => new Date().toISOString().slice(11, 23);
+  const tail = (url: string) => url.split("/").slice(-2).join("/");
+
   // mpv playback engine — load lazily spawns mpv; the rest are no-ops if it
   // isn't running (nothing is playing).
   ipcMain.handle(IPC.playbackLoad, (_e, args: { url: string; startSec?: number }) => {
     if (typeof args?.url !== "string" || !args.url) throw new Error("invalid url");
+    console.log(`[musex ui ${ts()}] LOAD …${tail(args.url)} start=${args.startSec ?? 0}`);
     return rt.mpv.load(args.url, { startSec: args.startSec });
   });
   ipcMain.handle(IPC.playbackPreload, (_e, url: string) => {
     if (typeof url !== "string" || !url) throw new Error("invalid url");
+    console.log(`[musex ui ${ts()}] PRELOAD …${tail(url)}`);
     return rt.mpv.preload(url);
   });
-  ipcMain.handle(IPC.playbackPlay, () => rt.mpv.play());
-  ipcMain.handle(IPC.playbackPause, () => rt.mpv.pause());
+  ipcMain.handle(IPC.playbackPlay, () => {
+    console.log(`[musex ui ${ts()}] PLAY`);
+    return rt.mpv.play();
+  });
+  ipcMain.handle(IPC.playbackPause, () => {
+    console.log(`[musex ui ${ts()}] PAUSE`);
+    return rt.mpv.pause();
+  });
   ipcMain.handle(IPC.playbackSeek, (_e, sec: number) => {
     if (typeof sec !== "number" || !Number.isFinite(sec) || sec < 0)
       throw new Error("invalid seek");
+    console.log(`[musex ui ${ts()}] SEEK ${sec.toFixed(1)}s`);
     return rt.mpv.seek(sec);
   });
   ipcMain.handle(IPC.playbackSetVolume, (_e, v: number) => {
