@@ -114,13 +114,15 @@ ids, stream URLs, or tokens ever cross the plugin boundary.**
   excludes, return `RecommendedTrack[]` (`{artistName, title?}`; no title =
   artist-level). The host resolves suggestions against the library and appends
   real tracks to the queue.
-- `ctx.registerAcquisitionProvider({id, lookupArtistAlbums, acquireAlbum, status})`
+- `ctx.registerAcquisitionProvider({id, lookupArtistAlbums, acquireAlbum, status, searchArtists?, acquireArtist?})`
   — powers the External Artist view (an unowned artist's discography with
   per-album `state`: downloaded/downloading/requested/available/unavailable;
   the host adds `owned` by cross-checking the library) and the Downloads view
-  (merged `status()` items, polled while open). `providerRef` is opaque to the
-  host — encode whatever your acquire needs. See `plugins/lidarr` for the
-  reference implementation.
+  (merged `status()` items, polled while open). The optional `searchArtists`
+  feeds the federated search's "Not in your library" section, and
+  `acquireArtist` implements "monitor everything by this artist". `providerRef`
+  is opaque to the host — encode whatever your acquire needs. See
+  `plugins/lidarr` for the reference implementation.
 
 ### Settings — declarative, host-rendered
 
