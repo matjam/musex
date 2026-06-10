@@ -307,7 +307,7 @@ export function registerIpc(rt: Runtime): void {
 
   ipcMain.handle(
     IPC.rateItem,
-    (
+    async (
       _e,
       args: {
         serverId: string;
@@ -315,6 +315,7 @@ export function registerIpc(rt: Runtime): void {
         rating: number | null;
         albumId?: string;
         libraryId?: string;
+        trackInfo?: TrackInfo;
       },
     ) => {
       if (typeof args?.serverId !== "string" || !args.serverId) throw new Error("invalid serverId");
@@ -323,10 +324,22 @@ export function registerIpc(rt: Runtime): void {
       if (r !== null && (!Number.isInteger(r) || r < 0 || r > 10)) {
         throw new Error("invalid rating");
       }
-      return rt.gateway.rateItem(args.serverId, args.itemId, r, rt.requireToken(), {
+      await rt.gateway.rateItem(args.serverId, args.itemId, r, rt.requireToken(), {
         albumId: args.albumId,
         libraryId: args.libraryId,
       });
+      // Track ratings only — the renderer sends trackInfo for tracks, never
+      // for artists. Shape-check it (IPC input is untrusted) before fanning
+      // out to plugins.
+      const ti = args.trackInfo;
+      if (
+        typeof ti === "object" &&
+        ti !== null &&
+        typeof ti.title === "string" &&
+        typeof ti.artistName === "string"
+      ) {
+        rt.plugins.emitEvent("trackRated", { track: ti, rating10: r });
+      }
     },
   );
   ipcMain.handle(IPC.getUserRating, (_e, serverId: string, itemId: string) => {

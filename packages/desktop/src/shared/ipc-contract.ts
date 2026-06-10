@@ -43,7 +43,7 @@ export const IPC = {
   removeFromPlaylist: "musex:removeFromPlaylist", // (playlistId, serverId, playlistItemIds) -> void
   renamePlaylist: "musex:renamePlaylist", // (playlistId, serverId, title) -> void
   deletePlaylist: "musex:deletePlaylist", // (playlistId, serverId) -> void
-  rateItem: "musex:rateItem", // ({ serverId, itemId, rating, albumId?, libraryId? }) -> void
+  rateItem: "musex:rateItem", // ({ serverId, itemId, rating, albumId?, libraryId?, trackInfo? }) -> void
   getUserRating: "musex:getUserRating", // (serverId, itemId) -> number | null
   prefetch: "musex:prefetch", // (tracks: Track[]) -> void
   savePlaybackQueue: "musex:playback:saveQueue", // (tracks: Track[]) -> void
@@ -204,13 +204,16 @@ export interface MusexApi {
   renamePlaylist(playlistId: string, serverId: string, title: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string): Promise<void>;
   /** Set a Plex userRating (0–10, integer; null clears). albumId/libraryId, when
-   *  known, let main evict the exact list caches the rated item appears in. */
+   *  known, let main evict the exact list caches the rated item appears in.
+   *  trackInfo, when supplied (track ratings only), makes main fire the
+   *  `trackRated` plugin event after the rating is written. */
   rateItem(args: {
     serverId: string;
     itemId: string;
     rating: number | null;
     albumId?: string;
     libraryId?: string;
+    trackInfo?: TrackInfo;
   }): Promise<void>;
   /** Read an item's current Plex userRating (0–10), or null when unrated. */
   getUserRating(serverId: string, itemId: string): Promise<number | null>;

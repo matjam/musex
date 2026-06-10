@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useApp } from "../state/app";
-import { usePlayer } from "../state/player";
+import { toTrackInfo, usePlayer } from "../state/player";
 import { useRatings } from "../state/ratings";
 import { formatDuration } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
@@ -78,6 +78,7 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
                   stars,
                   albumId: track.albumId || undefined,
                   libraryId: library?.id,
+                  trackInfo: toTrackInfo(track),
                 })
               }
               size={13}

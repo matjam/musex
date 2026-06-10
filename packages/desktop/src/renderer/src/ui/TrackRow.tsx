@@ -2,6 +2,7 @@ import type { Track } from "@musex/core";
 import { AudioLines, MoreHorizontal } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useApp } from "../state/app";
+import { toTrackInfo } from "../state/player";
 import { useRatings } from "../state/ratings";
 import { formatDuration } from "../util/format";
 import { StarRating } from "./StarRating";
@@ -86,6 +87,7 @@ export function TrackRow({
             stars,
             albumId: track.albumId || undefined,
             libraryId: library?.id,
+            trackInfo: toTrackInfo(track),
           })
         }
         size={12}

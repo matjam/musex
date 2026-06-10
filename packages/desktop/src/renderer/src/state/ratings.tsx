@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import type { TrackInfo } from "../../../shared/ipc-contract";
 
 /** Session overlay of user ratings (itemId → 0–10 or null = unrated), layered
  *  over whatever rating came with the fetched data. Lets a click update every
@@ -6,13 +7,15 @@ import { createContext, type ReactNode, useCallback, useContext, useMemo, useSta
 interface RatingsApi {
   /** Current rating for an item: overlay first, then the fetched fallback. 0–10 or null. */
   ratingFor(itemId: string, fallback?: number): number | null;
-  /** Optimistically rate (stars 1–5) or clear (null); fires the IPC; reverts the overlay + logs on failure. */
+  /** Optimistically rate (stars 1–5) or clear (null); fires the IPC; reverts the overlay + logs on failure.
+   *  Pass `trackInfo` when rating a TRACK so main can fire the `trackRated` plugin event (omit for artists). */
   rate(args: {
     serverId: string;
     itemId: string;
     stars: number | null;
     albumId?: string;
     libraryId?: string;
+    trackInfo?: TrackInfo;
   }): void;
   /** Seed the overlay from a fresh fetch (e.g. artist page getUserRating). */
   seed(itemId: string, rating: number | null): void;
@@ -24,7 +27,7 @@ export function RatingsProvider({ children }: { children: ReactNode }) {
   const [overlay, setOverlay] = useState(() => new Map<string, number | null>());
 
   const rate = useCallback<RatingsApi["rate"]>(
-    ({ serverId, itemId, stars, albumId, libraryId }) => {
+    ({ serverId, itemId, stars, albumId, libraryId, trackInfo }) => {
       const rating = stars === null ? null : stars * 2;
       // Snapshot the previous overlay entry so a failed IPC can revert exactly.
       let had = false;
@@ -34,15 +37,17 @@ export function RatingsProvider({ children }: { children: ReactNode }) {
         prev = m.get(itemId) ?? null;
         return new Map(m).set(itemId, rating);
       });
-      window.musex.rateItem({ serverId, itemId, rating, albumId, libraryId }).catch((err) => {
-        console.error("[ratings] rateItem failed:", err);
-        setOverlay((m) => {
-          const next = new Map(m);
-          if (had) next.set(itemId, prev);
-          else next.delete(itemId);
-          return next;
+      window.musex
+        .rateItem({ serverId, itemId, rating, albumId, libraryId, trackInfo })
+        .catch((err) => {
+          console.error("[ratings] rateItem failed:", err);
+          setOverlay((m) => {
+            const next = new Map(m);
+            if (had) next.set(itemId, prev);
+            else next.delete(itemId);
+            return next;
+          });
         });
-      });
     },
     [],
   );

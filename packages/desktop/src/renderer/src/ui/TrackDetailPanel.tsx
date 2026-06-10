@@ -102,6 +102,7 @@ export function TrackDetailPanel() {
             stars,
             albumId: track.albumId || undefined,
             libraryId: library?.id,
+            trackInfo: toTrackInfo(track),
           })
         }
         size={15}

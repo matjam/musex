@@ -62,6 +62,7 @@ export async function activate(ctx: PluginContext): Promise<void> {
     { kind: "action", key: "connect", label: "Connect Last.fm account" },
     { kind: "status", key: "connection" },
     { kind: "toggle", key: "scrobbling", label: "Scrobble plays" },
+    { kind: "toggle", key: "loveOnRating", label: "Love tracks rated ★★★★ or more" },
   ]);
 
   if ((await ctx.storage.get<string>("connection")) === null) {
@@ -151,6 +152,21 @@ export async function activate(ctx: PluginContext): Promise<void> {
       ctx.log("scrobble failed:", errText(err));
       ctx.ui.notify(`Last.fm scrobble failed: ${errText(err)}`, "error");
     });
+  });
+
+  // ── Rating → love sync (4★+ loved; lower or cleared unloved) ─────────────
+  const loveOnRatingEnabled = async () =>
+    (await ctx.storage.get<boolean>("loveOnRating")) !== false; // default on
+
+  const onTrackRated = async ({ track, rating10 }: PluginEvents["trackRated"]): Promise<void> => {
+    const s = await session();
+    if (!s || !(await loveOnRatingEnabled())) return;
+    const method = rating10 !== null && rating10 >= 8 ? "track.love" : "track.unlove";
+    await s.client.call(method, { artist: track.artistName, track: track.title }, { sk: s.sk });
+  };
+  ctx.events.on("trackRated", (payload) => {
+    // Log only — no toasts, no retries (a background sync, not a user action).
+    onTrackRated(payload).catch((err) => ctx.log("love-sync failed:", errText(err)));
   });
 
   // ── "Love on Last.fm" track action ────────────────────────────────────────

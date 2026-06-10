@@ -40,6 +40,10 @@ export interface PluginEvents {
    *  (last.fm thresholds). Subscribers scrobble; that's all "being a
    *  scrobbler" means. */
   scrobble: { track: TrackInfo; startedAtEpochSec: number };
+  /** Fired when the user rates (or clears the rating of) a TRACK in the app.
+   *  `rating10` is the Plex 0–10 scale (stars × 2); null = rating cleared.
+   *  Artist ratings do NOT fire this event. */
+  trackRated: { track: TrackInfo; rating10: number | null };
 }
 
 export type LibrarySearchResult = {
