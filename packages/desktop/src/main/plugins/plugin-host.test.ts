@@ -401,6 +401,79 @@ describe("PluginHost", () => {
     ]);
   });
 
+  it("getSimilar routes by kind to the matching method, merges + dedupes, isolates throws", async () => {
+    await writePlugin(
+      "sim-a",
+      `export function activate(ctx) {
+        ctx.ui.registerSimilarProvider({
+          id: "a",
+          similarArtists: async (name) => [
+            { name: "Portishead", externalUrl: "https://last.fm/p" },
+            { name: "Massive Attack" },
+          ],
+          similarTracks: async (seed) => [
+            { name: "Glory Box", artistName: seed.artist },
+          ],
+        });
+      }`,
+    );
+    await writePlugin(
+      "sim-b",
+      `export function activate(ctx) {
+        ctx.ui.registerSimilarProvider({
+          id: "b",
+          // artists-only provider: must be skipped for kind "track"
+          similarArtists: async () => [
+            { name: "PORTISHEAD" }, // dupe of sim-a (case-insensitive)
+            { name: "Björk" },
+            { name: "" }, // junk — dropped
+          ],
+        });
+      }`,
+    );
+    await writePlugin(
+      "sim-boom",
+      `export function activate(ctx) {
+        ctx.ui.registerSimilarProvider({
+          id: "boom",
+          similarArtists: async () => { throw new Error("similar boom"); },
+          similarTracks: () => new Promise(() => {}), // never resolves
+        });
+      }`,
+    );
+    const { host } = makeHost({ providerTimeoutMs: 50 });
+    await host.loadAll();
+    expect(host.registry.similarProviders).toHaveLength(3);
+
+    const artists = await host.getSimilar("artist", { name: "Lamb" });
+    expect(artists).toEqual([
+      { name: "Portishead", externalUrl: "https://last.fm/p" },
+      { name: "Massive Attack" },
+      { name: "Björk" },
+    ]);
+
+    const tracks = await host.getSimilar("track", { title: "Gorecki", artist: "Lamb" });
+    expect(tracks).toEqual([{ name: "Glory Box", artistName: "Lamb" }]);
+  });
+
+  it("getSimilar caps merged results at 24", async () => {
+    await writePlugin(
+      "sim-many",
+      `export function activate(ctx) {
+        ctx.ui.registerSimilarProvider({
+          id: "many",
+          similarArtists: async () =>
+            Array.from({ length: 40 }, (_, i) => ({ name: "Artist " + i })),
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+    const items = await host.getSimilar("artist", { name: "Lamb" });
+    expect(items).toHaveLength(24);
+    expect(items[0]).toEqual({ name: "Artist 0" });
+  });
+
   it("lists and invokes track actions; unknown ids and failures throw with context", async () => {
     await writePlugin(
       "actions",

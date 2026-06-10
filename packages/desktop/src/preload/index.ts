@@ -85,6 +85,7 @@ const api: MusexApi = {
   trackActionsInvoke: (actionId, track) =>
     ipcRenderer.invoke(IPC.trackActionsInvoke, actionId, track),
   trackDetailGet: (track) => ipcRenderer.invoke(IPC.trackDetailGet, track),
+  similarGet: (args) => ipcRenderer.invoke(IPC.similarGet, args),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   radioNext: (args) => ipcRenderer.invoke(IPC.radioNext, args),
   onNavigateTo: (cb) => {

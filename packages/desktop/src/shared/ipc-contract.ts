@@ -73,6 +73,7 @@ export const IPC = {
   trackActionsList: "musex:trackActions:list", // -> TrackActionDto[]
   trackActionsInvoke: "musex:trackActions:invoke", // (actionId, trackInfo) -> void
   trackDetailGet: "musex:trackDetail:get", // (trackInfo) -> TrackDetailDto[]
+  similarGet: "musex:similar:get", // (SimilarGetArgs) -> SectionItemDto[]
   openExternal: "musex:openExternal", // (url) -> void (http/https only)
   radioNext: "musex:radio:next", // (RadioNextArgs) -> Track[]
   navigateTo: "musex:navigateTo", // push: main -> renderer NavigateToPayload (app menu navigation)
@@ -160,7 +161,9 @@ export type PluginSettings = { schema: SettingField[]; values: Record<string, un
 export type SectionTarget = "discover" | "home";
 /** A plugin-api Section item + the host's library-match enrichment: matched
  *  items gain artistId/serverId (renderer navigates); unmatched are flagged
- *  external (badge + externalUrl link-out). */
+ *  external (badge + externalUrl link-out). Similar-SONGS items resolved to an
+ *  owned library track additionally carry the full playable `track` (baked
+ *  thumb) — a wire-DTO-only field; plugins never see it. */
 export type SectionItemDto = {
   name: string;
   artistName?: string;
@@ -169,7 +172,13 @@ export type SectionItemDto = {
   artistId?: string;
   serverId?: string;
   external?: boolean;
+  track?: Track;
 };
+
+/** Similar side panel request: an artist page's name, or a track's seed. */
+export type SimilarGetArgs =
+  | { kind: "artist"; name: string }
+  | { kind: "track"; title: string; artist: string };
 export type SectionDto = { pluginId: string; title: string; items: SectionItemDto[] };
 export type TrackActionDto = { pluginId: string; id: string; label: string; icon?: string };
 export type TrackDetailDto = {
@@ -281,6 +290,9 @@ export interface MusexApi {
   trackActionsList(): Promise<TrackActionDto[]>;
   trackActionsInvoke(actionId: string, track: TrackInfo): Promise<void>;
   trackDetailGet(track: TrackInfo): Promise<TrackDetailDto[]>;
+  /** Similar panel: fan out to plugin similar-providers, match/resolve items
+   *  against the library (owned items navigate/play; the rest are external). */
+  similarGet(args: SimilarGetArgs): Promise<SectionItemDto[]>;
   /** Open an http(s) URL in the system browser (validated in main). */
   openExternal(url: string): Promise<void>;
   /** Radio refill: fan out to plugin recommenders, resolve suggestions against

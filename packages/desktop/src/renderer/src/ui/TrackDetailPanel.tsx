@@ -1,10 +1,11 @@
-import { Play, X } from "lucide-react";
+import { Play, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { TrackDetailDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { useRatings } from "../state/ratings";
 import { useSelection } from "../state/selection";
+import { useSimilar } from "../state/similar";
 import { formatDuration } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
 import { StarRating } from "./StarRating";
@@ -16,6 +17,7 @@ export function TrackDetailPanel() {
   const { dispatch, library } = useApp();
   const { ratingFor, rate } = useRatings();
   const { playTrackNext } = usePlayer();
+  const { open: openSimilar } = useSimilar();
   const [pluginDetails, setPluginDetails] = useState<TrackDetailDto[]>([]);
 
   // Plugin-contributed detail sections; refetched per selection. The cancelled
@@ -126,6 +128,15 @@ export function TrackDetailPanel() {
       <button type="button" className="detail-play" onClick={() => playTrackNext(track)}>
         <Play size={16} />
         Play
+      </button>
+
+      <button
+        type="button"
+        className="detail-play detail-secondary"
+        onClick={() => openSimilar({ kind: "track", title: track.title, artist: track.artistName })}
+      >
+        <Sparkles size={16} />
+        Similar Songs
       </button>
 
       <div className="detail-meta">

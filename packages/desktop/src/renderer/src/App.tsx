@@ -4,6 +4,7 @@ import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
+import { SimilarProvider } from "./state/similar";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
@@ -41,20 +42,22 @@ function Inner() {
     return (
       <PlaylistsProvider>
         <SelectionProvider>
-          <RatingsProvider>
-            <KeyboardShortcuts
-              toggleQueue={() => setQueueOpen((o) => !o)}
-              toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
-            />
-            <div className="app-root">
-              <TopBar />
-              <Shell />
-              <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
-              <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
-              <Toasts />
-              {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
-            </div>
-          </RatingsProvider>
+          <SimilarProvider>
+            <RatingsProvider>
+              <KeyboardShortcuts
+                toggleQueue={() => setQueueOpen((o) => !o)}
+                toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
+              />
+              <div className="app-root">
+                <TopBar />
+                <Shell />
+                <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
+                <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
+                <Toasts />
+                {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+              </div>
+            </RatingsProvider>
+          </SimilarProvider>
         </SelectionProvider>
       </PlaylistsProvider>
     );

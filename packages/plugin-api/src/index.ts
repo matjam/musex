@@ -99,6 +99,23 @@ export interface TrackRecommender {
   recommend(ctx: RecommendContext): Promise<RecommendedTrack[]>;
 }
 
+/** One tile in the Similar side panel. `artistName` is set for similar TRACKS
+ *  (the song's artist); similar artists carry only `name`. */
+export type SimilarItem = {
+  name: string;
+  artistName?: string;
+  imageUrl?: string;
+  externalUrl?: string;
+};
+
+/** Powers the Similar side panel (artist pages → similar artists; track detail
+ *  → similar songs). Implement whichever methods the source supports. */
+export interface SimilarProvider {
+  id: string;
+  similarArtists?(artistName: string): Promise<SimilarItem[]>;
+  similarTracks?(seed: { title: string; artist: string }): Promise<SimilarItem[]>;
+}
+
 export interface TrackDetailProvider {
   id: string;
   /** Key-value rows / short text for the selected track's panel (playcount, tags, …). */
@@ -161,6 +178,8 @@ export interface PluginContext {
     contributeTrackAction(action: TrackAction): Disposable;
     /** Slide-out panel section. */
     contributeTrackDetail(provider: TrackDetailProvider): Disposable;
+    /** Similar side panel (similar artists / similar songs). */
+    registerSimilarProvider(provider: SimilarProvider): Disposable;
   };
 
   /** Radio: suggest tracks when the host's auto-extending queue runs low. */

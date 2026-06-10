@@ -10,6 +10,7 @@ import type {
   PluginEvents,
   RecommendedTrack,
   Section,
+  SimilarItem,
   TrackInfo,
 } from "@musex/plugin-api";
 import { isLastfmError, LastfmClient } from "./client.js";
@@ -21,6 +22,8 @@ const AUTH_POLL_TIMEOUT_MS = 120_000;
 const SIMILAR_SEED_ARTISTS = 3;
 const SIMILAR_LIMIT = 10;
 const TOP_TAGS = 3;
+/** Similar side panel: items per artist.getSimilar / track.getSimilar call. */
+const SIMILAR_PANEL_LIMIT = 18;
 /** Radio: similar tracks per seed track / similar artists for the seed artist. */
 const RADIO_SEED_TRACKS = 3;
 const RADIO_SIMILAR_TRACKS_LIMIT = 10;
@@ -40,7 +43,9 @@ type SimilarResponse = {
   similarartists?: { artist?: { name: string; url?: string }[] };
 };
 type SimilarTracksResponse = {
-  similartracks?: { track?: { name: string; artist?: { name?: string } }[] };
+  similartracks?: {
+    track?: { name: string; url?: string; artist?: { name?: string }; image?: LastfmImage[] }[];
+  };
 };
 type LastfmImage = { size?: string; ["#text"]?: string };
 type TopAlbumsResponse = {
@@ -240,9 +245,13 @@ export async function activate(ctx: PluginContext): Promise<void> {
   /** Fill item.imageUrl with each artist's top-album cover (last.fm artist
    *  images are a dead generic placeholder). Lookups go through a 30-day
    *  ctx.storage cache (url: null = known-miss, so misses aren't re-queried
-   *  every open). A failed lookup only logs — art never breaks a section. */
-  const applyArtistArt = async (c: LastfmClient, sections: Section[]): Promise<void> => {
-    const names = [...new Set(sections.flatMap((sec) => sec.items.map((i) => i.name)))];
+   *  every open). A failed lookup only logs — art never breaks the caller.
+   *  Shared by the Discover sections and the Similar-artists panel. */
+  const applyArtistArt = async (
+    c: LastfmClient,
+    items: { name: string; imageUrl?: string }[],
+  ): Promise<void> => {
+    const names = [...new Set(items.map((i) => i.name))];
     if (names.length === 0) return;
     const cache = (await ctx.storage.get<ArtistArtCache>(ART_CACHE_KEY)) ?? {};
     const now = Date.now();
@@ -278,12 +287,32 @@ export async function activate(ctx: PluginContext): Promise<void> {
       }
       await ctx.storage.set(ART_CACHE_KEY, Object.fromEntries(entries));
     }
-    for (const section of sections) {
-      for (const item of section.items) {
-        const url = cache[item.name.toLowerCase()]?.url;
-        if (url) item.imageUrl = url;
-      }
+    for (const item of items) {
+      const url = cache[item.name.toLowerCase()]?.url;
+      if (url) item.imageUrl = url;
     }
+  };
+
+  /** artist.getSimilar → SimilarItem[] (name + last.fm URL); shared by the
+   *  Discover sections and the Similar-artists panel. Throws on API failure —
+   *  callers log per-seed. */
+  const fetchSimilarArtists = async (
+    c: LastfmClient,
+    artistName: string,
+    limit: number,
+  ): Promise<SimilarItem[]> => {
+    const res = await c.call<SimilarResponse>(
+      "artist.getSimilar",
+      { artist: artistName, limit: String(limit), autocorrect: "1" },
+      { signed: false }, // read method — api_key only
+    );
+    const raw = res.similarartists?.artist;
+    return (Array.isArray(raw) ? raw : [])
+      .filter((a) => typeof a.name === "string" && a.name.length > 0)
+      .map((a) => ({
+        name: a.name,
+        ...(typeof a.url === "string" ? { externalUrl: a.url } : {}),
+      }));
   };
 
   ctx.ui.contributeSections("discover", {
@@ -300,18 +329,7 @@ export async function activate(ctx: PluginContext): Promise<void> {
           : sectionCtx.recentArtists;
       for (const artistName of seeds.slice(0, SIMILAR_SEED_ARTISTS)) {
         try {
-          const res = await s.client.call<SimilarResponse>(
-            "artist.getSimilar",
-            { artist: artistName, limit: String(SIMILAR_LIMIT), autocorrect: "1" },
-            { signed: false }, // read method — api_key only
-          );
-          const raw = res.similarartists?.artist;
-          const items = (Array.isArray(raw) ? raw : [])
-            .filter((a) => typeof a.name === "string" && a.name.length > 0)
-            .map((a) => ({
-              name: a.name,
-              ...(typeof a.url === "string" ? { externalUrl: a.url } : {}),
-            }));
+          const items = await fetchSimilarArtists(s.client, artistName, SIMILAR_LIMIT);
           if (items.length > 0) {
             sections.push({ title: `Because you listened to ${artistName}`, items });
           }
@@ -320,12 +338,66 @@ export async function activate(ctx: PluginContext): Promise<void> {
         }
       }
       try {
-        await applyArtistArt(s.client, sections);
+        await applyArtistArt(
+          s.client,
+          sections.flatMap((sec) => sec.items),
+        );
       } catch (err) {
         // Artwork is decoration — a storage/lookup failure never drops sections.
         ctx.log("artist artwork lookup failed:", errText(err));
       }
       return sections;
+    },
+  });
+
+  // ── Similar side panel: similar artists + similar songs ───────────────────
+  ctx.ui.registerSimilarProvider({
+    id: "lastfm-similar",
+    similarArtists: async (artistName) => {
+      const s = await session();
+      if (!s) return []; // needs API key + connected account
+      try {
+        const items = await fetchSimilarArtists(s.client, artistName, SIMILAR_PANEL_LIMIT);
+        try {
+          await applyArtistArt(s.client, items);
+        } catch (err) {
+          // Artwork is decoration — a storage/lookup failure never drops items.
+          ctx.log("artist artwork lookup failed:", errText(err));
+        }
+        return items;
+      } catch (err) {
+        ctx.log(`artist.getSimilar failed for "${artistName}":`, errText(err));
+        return [];
+      }
+    },
+    similarTracks: async ({ title, artist }) => {
+      const s = await session();
+      if (!s) return []; // needs API key + connected account
+      try {
+        const res = await s.client.call<SimilarTracksResponse>(
+          "track.getSimilar",
+          { artist, track: title, limit: String(SIMILAR_PANEL_LIMIT), autocorrect: "1" },
+          { signed: false }, // read method — api_key only
+        );
+        const raw = res.similartracks?.track;
+        const items: SimilarItem[] = [];
+        for (const t of Array.isArray(raw) ? raw : []) {
+          const artistName = t.artist?.name;
+          if (typeof t.name !== "string" || t.name.length === 0) continue;
+          if (typeof artistName !== "string" || artistName.length === 0) continue;
+          const imageUrl = pickImageUrl(t.image);
+          items.push({
+            name: t.name,
+            artistName,
+            ...(imageUrl !== null ? { imageUrl } : {}),
+            ...(typeof t.url === "string" ? { externalUrl: t.url } : {}),
+          });
+        }
+        return items;
+      } catch (err) {
+        ctx.log(`track.getSimilar failed for "${artist} – ${title}":`, errText(err));
+        return [];
+      }
     },
   });
 

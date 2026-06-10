@@ -2250,3 +2250,36 @@ img.queue-row-art {
   padding: 5px 0;
   font-size: 12.5px;
 }
+
+/* ---- Similar panel (right side, replaces the track panel while open) ---- */
+
+.similar-panel {
+  width: 340px;
+}
+
+.similar-seed {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.similar-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+/* Secondary action button in the detail panel (e.g. "Similar Songs") */
+.detail-secondary {
+  margin-top: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.detail-secondary:hover {
+  filter: none;
+  color: var(--green);
+  border-color: var(--green);
+}

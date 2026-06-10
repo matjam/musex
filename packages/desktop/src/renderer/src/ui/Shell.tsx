@@ -14,6 +14,8 @@ import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
+import { useSimilar } from "../state/similar";
+import { SimilarPanel } from "./SimilarPanel";
 import { TrackDetailPanel } from "./TrackDetailPanel";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
@@ -37,6 +39,7 @@ const SMART_NAV: { kind: SmartKind; Icon: typeof Star }[] = [
 export function Shell() {
   const { library, view, dispatch } = useApp();
   const { playlists } = usePlaylists();
+  const { target: similarTarget } = useSimilar();
 
   const serverLabel = library ? `${library.serverName} · ${library.title}` : "No library";
 
@@ -178,7 +181,9 @@ export function Shell() {
 
       <main className="content-area">{renderContent()}</main>
 
-      <TrackDetailPanel />
+      {/* Similar takes priority over the track panel; closing it restores the
+          track panel when a selection exists. */}
+      {similarTarget ? <SimilarPanel /> : <TrackDetailPanel />}
     </div>
   );
 }

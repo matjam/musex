@@ -13,6 +13,7 @@ import type {
   SectionContext,
   SettingField,
   SettingsActionResult,
+  SimilarItem,
   TrackInfo,
 } from "@musex/plugin-api";
 import { validateManifest } from "../../logic/plugin-manifest.js";
@@ -43,6 +44,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     }),
   ]).finally(() => clearTimeout(timer));
 }
+
+/** Cap on merged Similar-panel results across all providers. */
+const SIMILAR_ITEMS_MAX = 24;
 
 /** Dedupe/exclusion key for recommendations: lower(artist)␟lower(title ?? "").
  *  The same artist+title join key the taste profile and smart playlists use. */
@@ -219,6 +223,54 @@ export class PluginHost {
       if (seen.has(key) || excluded.has(key)) continue;
       seen.add(key);
       merged.push(rec);
+    }
+    return merged;
+  }
+
+  /** Fan out a Similar-panel request to every provider implementing the
+   *  matching method (artist → similarArtists, track → similarTracks),
+   *  isolating throwing/slow providers; merge, dedupe by
+   *  lower(name)␟lower(artistName ?? ""), cap at SIMILAR_ITEMS_MAX. */
+  async getSimilar(
+    kind: "artist" | "track",
+    seed: { name?: string; title?: string; artist?: string },
+  ): Promise<SimilarItem[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
+    const results = await Promise.all(
+      this.registry.similarProviders.map(async (p) => {
+        try {
+          let items: SimilarItem[] | undefined;
+          if (kind === "artist" && p.provider.similarArtists && seed.name !== undefined) {
+            items = await withTimeout(p.provider.similarArtists(seed.name), timeoutMs);
+          } else if (
+            kind === "track" &&
+            p.provider.similarTracks &&
+            seed.title !== undefined &&
+            seed.artist !== undefined
+          ) {
+            items = await withTimeout(
+              p.provider.similarTracks({ title: seed.title, artist: seed.artist }),
+              timeoutMs,
+            );
+          }
+          return Array.isArray(items) ? items : [];
+        } catch (err) {
+          console.error(`[plugins] ${p.pluginId} similar provider "${p.provider.id}" failed:`, err);
+          return [];
+        }
+      }),
+    );
+    const seen = new Set<string>();
+    const merged: SimilarItem[] = [];
+    for (const item of results.flat()) {
+      if (merged.length >= SIMILAR_ITEMS_MAX) break;
+      // Full-trust, but a provider can still return junk — drop it here.
+      if (typeof item?.name !== "string" || item.name.length === 0) continue;
+      if (item.artistName !== undefined && typeof item.artistName !== "string") continue;
+      const key = recommendationKey(item.name, item.artistName);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
     }
     return merged;
   }

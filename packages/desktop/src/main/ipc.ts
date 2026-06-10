@@ -9,13 +9,19 @@ import type {
   NowPlayingMsg,
   PlaybackCursorDto,
   RadioNextArgs,
+  SectionItemDto,
   SectionTarget,
+  SimilarGetArgs,
   TrackInfo,
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
 import { resolveRecommendations } from "./plugins/radio-resolve.js";
-import { matchSectionsAgainstLibrary } from "./plugins/section-matching.js";
+import {
+  matchItemsAgainstLibrary,
+  matchSectionsAgainstLibrary,
+} from "./plugins/section-matching.js";
+import { resolveSimilarTracks } from "./plugins/similar-resolve.js";
 import type { Runtime } from "./runtime.js";
 
 /** SectionContext caps: enough signal for providers, bounded payload. */
@@ -65,6 +71,19 @@ function titleArtistPairs(v: unknown): { title: string; artist: string }[] {
     const m = p as Record<string, unknown>;
     return typeof m.title === "string" && typeof m.artist === "string";
   });
+}
+
+/** Bake a plugin-supplied artwork URL through the proxy's /ext endpoint so
+ *  it's disk-cached (art cache) and loads offline. Non-https/unparseable URLs
+ *  are dropped rather than handed to the renderer. */
+function bakeExternalArt(rt: Runtime, item: SectionItemDto): SectionItemDto {
+  if (item.imageUrl === undefined) return item;
+  const proxied = rt.proxy.externalArtUrl(item.imageUrl);
+  if (proxied === undefined) {
+    const { imageUrl: _dropped, ...rest } = item;
+    return rest;
+  }
+  return { ...item, imageUrl: proxied };
 }
 
 export function registerIpc(rt: Runtime): void {
@@ -473,19 +492,62 @@ export function registerIpc(rt: Runtime): void {
     }
     // Plugin-supplied artwork is an external https URL; bake it through the
     // proxy's /ext endpoint so it's disk-cached (art cache) and loads offline.
-    // Non-https/unparseable URLs are dropped rather than handed to the renderer.
     return matchSectionsAgainstLibrary(results, artists).map((section) => ({
       ...section,
-      items: section.items.map((item) => {
-        if (item.imageUrl === undefined) return item;
-        const proxied = rt.proxy.externalArtUrl(item.imageUrl);
-        if (proxied === undefined) {
-          const { imageUrl: _dropped, ...rest } = item;
-          return rest;
-        }
-        return { ...item, imageUrl: proxied };
-      }),
+      items: section.items.map((item) => bakeExternalArt(rt, item)),
     }));
+  });
+
+  // Similar side panel: fan out to plugin similar-providers. Artist items are
+  // matched against the library exactly like sections (owned → navigate);
+  // track items resolve to owned playable tracks via library search (the same
+  // approach radio resolution uses). Everything unowned is flagged external.
+  ipcMain.handle(IPC.similarGet, async (_e, args: SimilarGetArgs): Promise<SectionItemDto[]> => {
+    if (typeof args !== "object" || args === null) throw new Error("invalid similarGet args");
+    const lib = rt.libraries[0];
+    const token = rt.token;
+    if (args.kind === "artist") {
+      if (typeof args.name !== "string" || !args.name) throw new Error("invalid artist name");
+      const items = await rt.plugins.getSimilar("artist", { name: args.name });
+      let artists: Artist[] = [];
+      if (lib && token) {
+        try {
+          artists = await rt.gateway.listArtists(lib, token);
+        } catch (err) {
+          // Matching is best-effort: items render as external instead of failing.
+          console.error("[plugins] similar library matching failed:", err);
+        }
+      }
+      return matchItemsAgainstLibrary(items, artists).map((item) => bakeExternalArt(rt, item));
+    }
+    if (args.kind === "track") {
+      if (typeof args.title !== "string" || !args.title) throw new Error("invalid track title");
+      if (typeof args.artist !== "string" || !args.artist) throw new Error("invalid track artist");
+      const items = await rt.plugins.getSimilar("track", {
+        title: args.title,
+        artist: args.artist,
+      });
+      if (!lib || !token) {
+        return items.map((item) => bakeExternalArt(rt, { ...item, external: true }));
+      }
+      await rt.ensureProxyEndpoint(lib.serverId);
+      const resolved = await resolveSimilarTracks(items, (query) =>
+        rt.gateway.search(lib, query, token).then((r) => ({ tracks: r.tracks })),
+      );
+      return resolved.map((item) => {
+        const baked = bakeExternalArt(rt, item);
+        return baked.track
+          ? {
+              ...baked,
+              track: {
+                ...baked.track,
+                thumb: rt.proxy.artUrl(baked.track.serverId, baked.track.thumb),
+              },
+            }
+          : baked;
+      });
+    }
+    throw new Error("invalid similarGet kind");
   });
   ipcMain.handle(IPC.trackActionsList, () => rt.plugins.listTrackActions());
   ipcMain.handle(IPC.trackActionsInvoke, (_e, actionId: string, track: unknown) => {

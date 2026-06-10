@@ -7,6 +7,7 @@ import type {
   SectionProvider,
   SettingField,
   SettingsActionResult,
+  SimilarProvider,
   TrackAction,
   TrackDetailProvider,
   TrackInfo,
@@ -37,6 +38,10 @@ export interface RegisteredTrackRecommender {
   pluginId: string;
   recommender: TrackRecommender;
 }
+export interface RegisteredSimilarProvider {
+  pluginId: string;
+  provider: SimilarProvider;
+}
 
 /** Registrations from all active plugins. Stored now; consumed by the events
  *  pipeline (Task 2) and the sections/actions/detail surfaces (Task 4). */
@@ -46,6 +51,7 @@ export interface PluginRegistry {
   trackActions: RegisteredTrackAction[];
   trackDetailProviders: RegisteredTrackDetailProvider[];
   trackRecommenders: RegisteredTrackRecommender[];
+  similarProviders: RegisteredSimilarProvider[];
 }
 
 export function createPluginRegistry(): PluginRegistry {
@@ -55,6 +61,7 @@ export function createPluginRegistry(): PluginRegistry {
     trackActions: [],
     trackDetailProviders: [],
     trackRecommenders: [],
+    similarProviders: [],
   };
 }
 
@@ -138,6 +145,13 @@ export function buildPluginContext(
       contributeTrackDetail(provider) {
         return register(
           registry.trackDetailProviders,
+          { pluginId: manifest.id, provider },
+          trackDisposable,
+        );
+      },
+      registerSimilarProvider(provider) {
+        return register(
+          registry.similarProviders,
           { pluginId: manifest.id, provider },
           trackDisposable,
         );

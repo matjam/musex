@@ -1,10 +1,11 @@
 import type { Album, Artist, Track } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal, Play, Radio, Shuffle } from "lucide-react";
+import { ListEnd, ListPlus, MoreHorizontal, Play, Radio, Shuffle, Sparkles } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
+import { useSimilar } from "../../state/similar";
 import { AlbumArt } from "../AlbumArt";
 import { StarRating } from "../StarRating";
 
@@ -22,6 +23,7 @@ export function ArtistDetailView({ artist }: Props) {
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
     usePlayer();
   const { ratingFor, rate, seed } = useRatings();
+  const { open: openSimilar } = useSimilar();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
@@ -174,6 +176,14 @@ export function ArtistDetailView({ artist }: Props) {
             </button>
           </div>
         )}
+        <button
+          type="button"
+          className="shuffle-btn"
+          title="Similar artists"
+          onClick={() => openSimilar({ kind: "artist", name: artist.name })}
+        >
+          <Sparkles size={16} />
+        </button>
       </div>
 
       {fetch.status === "loading" && <div className="content-placeholder">Loading albums…</div>}
