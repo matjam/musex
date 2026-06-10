@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { type GenreEntry, genreIndex } from "../../../../logic/genres";
+import { sampleThumbs } from "../../../../logic/collage";
+import { albumsForGenre, type GenreEntry, genreIndex } from "../../../../logic/genres";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
+import { CardCollage } from "../CardCollage";
 
 type FetchState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ok"; genres: GenreEntry[] };
+  | { status: "ok"; genres: GenreEntry[]; thumbsByGenre: Map<string, string[]> };
 
 export function GenresView() {
   const { library, dispatch } = useApp();
@@ -21,7 +23,19 @@ export function GenresView() {
     window.musex
       .listAllAlbums(id, "title", validator)
       .then((albums) => {
-        if (!cancelled) setFetch({ status: "ok", genres: genreIndex(albums) });
+        if (cancelled) return;
+        const genres = genreIndex(albums);
+        const thumbsByGenre = new Map(
+          genres.map(({ genre }) => [
+            genre,
+            sampleThumbs(
+              albumsForGenre(genre, albums).map((a) => a.thumb),
+              4,
+              genre,
+            ),
+          ]),
+        );
+        setFetch({ status: "ok", genres, thumbsByGenre });
       })
       .catch((err: unknown) => {
         if (!cancelled)
@@ -43,7 +57,7 @@ export function GenresView() {
     return <div className="content-placeholder error-text">Error: {fetch.message}</div>;
   }
 
-  const { genres } = fetch;
+  const { genres, thumbsByGenre } = fetch;
 
   if (genres.length === 0) {
     return (
@@ -69,6 +83,7 @@ export function GenresView() {
             className="genre-card"
             onClick={() => dispatch({ type: "navigate", view: { name: "genre", genre } })}
           >
+            <CardCollage thumbs={thumbsByGenre.get(genre) ?? []} className="genre-card-collage" />
             <div className="genre-card-name">{genre}</div>
             <div className="genre-card-count">
               {albumCount} album{albumCount !== 1 ? "s" : ""}

@@ -1,6 +1,6 @@
 import type { Album, Track } from "@musex/core";
 import { describe, expect, it } from "vitest";
-import { genreIndex, tracksForGenre } from "./genres";
+import { albumsForGenre, genreIndex, tracksForGenre } from "./genres";
 
 function album(over: Partial<Album> & { id: string }): Album {
   return {
@@ -58,6 +58,19 @@ describe("genreIndex", () => {
   it("ignores albums without genres and returns empty for an empty library", () => {
     expect(genreIndex([album({ id: "1" }), album({ id: "2", genres: [] })])).toEqual([]);
     expect(genreIndex([])).toEqual([]);
+  });
+});
+
+describe("albumsForGenre", () => {
+  it("returns albums tagged with the genre, matched case-insensitively", () => {
+    const albums = [
+      album({ id: "a1", genres: ["Rock"] }),
+      album({ id: "a2", genres: ["rock", "Jazz"] }),
+      album({ id: "a3", genres: ["Jazz"] }),
+      album({ id: "a4" }),
+    ];
+    expect(albumsForGenre("ROCK", albums).map((a) => a.id)).toEqual(["a1", "a2"]);
+    expect(albumsForGenre("Classical", albums)).toEqual([]);
   });
 });
 

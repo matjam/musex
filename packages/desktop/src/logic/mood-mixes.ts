@@ -104,6 +104,25 @@ export const MOOD_MIXES: MoodMix[] = [
   },
 ];
 
+/** True when any (lowercased) keyword is a substring of any (lowercased) tag. */
+function tagsMatchKeywords(keywords: string[], tags: string[]): boolean {
+  return keywords.some((kw) => tags.some((tag) => tag.includes(kw)));
+}
+
+/** True when the album's own genre+mood tags hit any mix keyword
+ *  (case-insensitive substring — the same matching composeMoodMix uses). */
+export function albumMatchesMix(mix: MoodMix, album: Album): boolean {
+  const keywords = mix.keywords.map((k) => k.toLowerCase());
+  const tags = [...(album.genres ?? []), ...(album.moods ?? [])].map((t) => t.toLowerCase());
+  return tagsMatchKeywords(keywords, tags);
+}
+
+/** Albums whose genre+mood tags match the mix — usable without tracks/stats
+ *  (e.g. for sampling card collage art). */
+export function albumsForMix(mix: MoodMix, albums: Album[]): Album[] {
+  return albums.filter((album) => albumMatchesMix(mix, album));
+}
+
 /** Per-track stat slice the composer scores against (keyed by smartTrackKey). */
 export interface MoodMixStat {
   plays: number;
@@ -161,7 +180,7 @@ export function composeMoodMix(
       ...(album?.genres ?? []),
       ...(album?.moods ?? []),
     ].map((t) => t.toLowerCase());
-    if (!keywords.some((kw) => tags.some((tag) => tag.includes(kw)))) continue;
+    if (!tagsMatchKeywords(keywords, tags)) continue;
 
     const stat = stats.get(smartTrackKey(track));
     if (stat !== undefined && stat.skips >= EXCLUDE_MIN_SKIPS && stat.plays <= EXCLUDE_MAX_PLAYS) {

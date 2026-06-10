@@ -1,11 +1,13 @@
 import type { Track } from "@musex/core";
 import { Play, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { tracksForGenre } from "../../../../logic/genres";
+import { sampleThumbs } from "../../../../logic/collage";
+import { albumsForGenre, tracksForGenre } from "../../../../logic/genres";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
+import { CardCollage } from "../CardCollage";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
@@ -15,7 +17,7 @@ import { VirtualTrackList } from "../VirtualTrackList";
 type FetchState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ok"; tracks: Track[] };
+  | { status: "ok"; tracks: Track[]; thumbs: string[] };
 
 /** Dynamic playlist for one genre: all tracks from albums tagged with it. */
 export function GenreView({ genre }: { genre: string }) {
@@ -37,7 +39,13 @@ export function GenreView({ genre }: { genre: string }) {
       window.musex.listAllTracks(id, "title", validator),
     ])
       .then(([albums, tracks]) => {
-        if (!cancelled) setFetch({ status: "ok", tracks: tracksForGenre(genre, albums, tracks) });
+        if (cancelled) return;
+        const thumbs = sampleThumbs(
+          albumsForGenre(genre, albums).map((a) => a.thumb),
+          4,
+          genre,
+        );
+        setFetch({ status: "ok", tracks: tracksForGenre(genre, albums, tracks), thumbs });
       })
       .catch((err: unknown) => {
         if (!cancelled)
@@ -70,7 +78,12 @@ export function GenreView({ genre }: { genre: string }) {
 
       <div className="tracks-view-header">
         <div className="browse-header">
-          <h3 className="browse-title">{genre}</h3>
+          <div className="header-with-collage">
+            {fetch.status === "ok" && (
+              <CardCollage thumbs={fetch.thumbs} className="header-collage" />
+            )}
+            <h3 className="browse-title">{genre}</h3>
+          </div>
           <div className="tracks-header-actions">
             {fetch.status === "ok" && fetch.tracks.length > 0 && (
               <>

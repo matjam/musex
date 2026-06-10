@@ -30,16 +30,19 @@ export function genreIndex(albums: Album[]): GenreEntry[] {
   );
 }
 
+/** Albums tagged with the genre, matched case-insensitively. */
+export function albumsForGenre(genre: string, albums: Album[]): Album[] {
+  const wanted = genre.toLowerCase();
+  return albums.filter((a) => (a.genres ?? []).some((g) => g.toLowerCase() === wanted));
+}
+
 /**
  * Tracks belonging to a genre: every track whose album is tagged with the
  * genre (matched case-insensitively). Sorted artist -> album title -> track
  * number (tracks without a number sort last within their album).
  */
 export function tracksForGenre(genre: string, albums: Album[], tracks: Track[]): Track[] {
-  const wanted = genre.toLowerCase();
-  const albumIds = new Set(
-    albums.filter((a) => (a.genres ?? []).some((g) => g.toLowerCase() === wanted)).map((a) => a.id),
-  );
+  const albumIds = new Set(albumsForGenre(genre, albums).map((a) => a.id));
   return tracks
     .filter((t) => albumIds.has(t.albumId))
     .sort((a, b) => {

@@ -1,6 +1,6 @@
 import type { Album, Track } from "@musex/core";
 import { describe, expect, it } from "vitest";
-import { composeMoodMix, MOOD_MIXES, type MoodMix } from "./mood-mixes";
+import { albumsForMix, composeMoodMix, MOOD_MIXES, type MoodMix } from "./mood-mixes";
 import { smartTrackKey } from "./smart-playlists";
 
 function album(over: Partial<Album> & { id: string }): Album {
@@ -40,6 +40,19 @@ describe("MOOD_MIXES", () => {
       expect(mix.description.length).toBeGreaterThan(0);
       expect(mix.keywords.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("albumsForMix", () => {
+  it("matches albums by genre+mood tags as case-insensitive substrings", () => {
+    const albums = [
+      album({ id: "a1", genres: ["Indie Rock"] }),
+      album({ id: "a2", moods: ["Mellow"] }),
+      album({ id: "a3", genres: ["Classical"] }),
+      album({ id: "a4" }),
+    ];
+    expect(albumsForMix(driving, albums).map((a) => a.id)).toEqual(["a1"]);
+    expect(albumsForMix(chill, albums).map((a) => a.id)).toEqual(["a2"]);
   });
 });
 

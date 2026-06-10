@@ -1,11 +1,13 @@
 import type { Track } from "@musex/core";
 import { Play, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { composeMoodMix, MOOD_MIXES } from "../../../../logic/mood-mixes";
+import { sampleThumbs } from "../../../../logic/collage";
+import { albumsForMix, composeMoodMix, MOOD_MIXES } from "../../../../logic/mood-mixes";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
+import { CardCollage } from "../CardCollage";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
@@ -15,7 +17,7 @@ import { VirtualTrackList } from "../VirtualTrackList";
 type FetchState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ok"; tracks: Track[] };
+  | { status: "ok"; tracks: Track[]; thumbs: string[] };
 
 /** One curated mood mix: keyword-matched library tracks, taste-ordered. */
 export function MixView({ mixId }: { mixId: string }) {
@@ -55,6 +57,11 @@ export function MixView({ mixId }: { mixId: string }) {
         setFetch({
           status: "ok",
           tracks: composeMoodMix(mix, albums, tracks, stats, snapshot.topArtists),
+          thumbs: sampleThumbs(
+            albumsForMix(mix, albums).map((a) => a.thumb),
+            4,
+            mix.id,
+          ),
         });
       })
       .catch((err: unknown) => {
@@ -90,7 +97,12 @@ export function MixView({ mixId }: { mixId: string }) {
 
       <div className="tracks-view-header">
         <div className="browse-header">
-          <h3 className="browse-title">{mix.title}</h3>
+          <div className="header-with-collage">
+            {fetch.status === "ok" && (
+              <CardCollage thumbs={fetch.thumbs} className="header-collage" />
+            )}
+            <h3 className="browse-title">{mix.title}</h3>
+          </div>
           <div className="tracks-header-actions">
             {fetch.status === "ok" && fetch.tracks.length > 0 && (
               <>
