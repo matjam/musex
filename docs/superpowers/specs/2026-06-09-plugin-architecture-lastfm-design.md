@@ -1,6 +1,6 @@
 # Spec: Plugin Architecture + last.fm Plugin (scrobbling + Discover)
 
-**Status:** decisions confirmed with user 2026-06-09.
+**Status:** implemented 2026-06-09 (plan: `docs/superpowers/plans/2026-06-09-plugin-architecture-lastfm.md`; API docs: `docs/plugins.md`).
 
 ## Decisions (confirmed)
 
