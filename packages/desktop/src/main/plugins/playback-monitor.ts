@@ -4,6 +4,12 @@ import type { NowPlayingMsg } from "../../shared/ipc-contract.js";
 
 /** Most-recent-first recently-played cap (backs ctx.library.recentlyPlayed). */
 const HISTORY_MAX = 50;
+/** Early skip = heard less than this many seconds… */
+const SKIP_MAX_SEC = 60;
+/** …AND less than this fraction of the track. */
+const SKIP_MAX_FRACTION = 0.25;
+
+export type PlayKind = "full" | "skip" | "partial";
 
 export interface PlaybackMonitorDeps {
   /** Host fan-out (PluginHost.emitEvent) — per-subscriber try/catch lives
@@ -12,6 +18,9 @@ export interface PlaybackMonitorDeps {
   /** Persistence-backed so the history survives restarts. */
   loadHistory: () => TrackInfo[];
   saveHistory: (h: TrackInfo[]) => void;
+  /** Taste-profile feed, classified at the end of each play-through: full =
+   *  the scrobble gate passed; skip = early skip; partial = everything else. */
+  recordPlay: (track: TrackInfo, kind: PlayKind) => void;
 }
 
 /**
@@ -66,12 +75,14 @@ export class PlaybackMonitor {
     return this.recentlyPlayed.slice(0, n);
   }
 
-  /** End the current play-through: scrobble (if the gate passes) then trackEnded. */
+  /** End the current play-through: scrobble (if the gate passes), feed the
+   *  taste profile, then trackEnded. */
   private finishCurrent(): void {
     if (!this.current) return;
     const playedSec = this.gate.playedSec();
     const scrobble = this.gate.finish();
     if (scrobble) this.deps.emit("scrobble", scrobble);
+    this.deps.recordPlay(this.current, classifyPlay(playedSec, this.current, scrobble !== null));
     this.deps.emit("trackEnded", { track: this.current, playedSec });
   }
 
@@ -82,4 +93,12 @@ export class PlaybackMonitor {
     this.recentlyPlayed = [track, ...this.recentlyPlayed].slice(0, HISTORY_MAX);
     this.deps.saveHistory(this.recentlyPlayed);
   }
+}
+
+/** full = scrobbled; skip = <60s heard AND <25% of the track; else partial. */
+function classifyPlay(playedSec: number, track: TrackInfo, scrobbled: boolean): PlayKind {
+  if (scrobbled) return "full";
+  const isSkip =
+    playedSec < SKIP_MAX_SEC && playedSec < SKIP_MAX_FRACTION * (track.durationMs / 1000);
+  return isSkip ? "skip" : "partial";
 }

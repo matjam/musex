@@ -59,6 +59,7 @@ export interface PluginHostDeps {
   library: {
     search(query: string): Promise<LibrarySearchResult>;
     recentlyPlayed(limit?: number): Promise<TrackInfo[]>;
+    topArtists(limit?: number): Promise<{ name: string; score: number }[]>;
   };
   /** Per-provider fan-out budget override (tests); defaults to 8s. */
   providerTimeoutMs?: number;

@@ -19,6 +19,7 @@ import type { Runtime } from "./runtime.js";
 /** SectionContext caps: enough signal for providers, bounded payload. */
 const RECENT_ARTISTS_MAX = 10;
 const RECENT_TRACKS_MAX = 20;
+const TOP_ARTISTS_MAX = 10;
 
 /** Light shape check for the fire-and-forget nowPlaying channel — malformed
  *  messages are dropped with a warning rather than thrown (nobody awaits). */
@@ -316,6 +317,7 @@ export function registerIpc(rt: Runtime): void {
         albumId?: string;
         libraryId?: string;
         trackInfo?: TrackInfo;
+        artistName?: string;
       },
     ) => {
       if (typeof args?.serverId !== "string" || !args.serverId) throw new Error("invalid serverId");
@@ -330,7 +332,7 @@ export function registerIpc(rt: Runtime): void {
       });
       // Track ratings only — the renderer sends trackInfo for tracks, never
       // for artists. Shape-check it (IPC input is untrusted) before fanning
-      // out to plugins.
+      // out to plugins / feeding the taste profile.
       const ti = args.trackInfo;
       if (
         typeof ti === "object" &&
@@ -339,6 +341,12 @@ export function registerIpc(rt: Runtime): void {
         typeof ti.artistName === "string"
       ) {
         rt.plugins.emitEvent("trackRated", { track: ti, rating10: r });
+        rt.tasteProfile.recordTrackRating(ti, r);
+        rt.saveTasteProfileSoon();
+      } else if (typeof args.artistName === "string" && args.artistName) {
+        // Artist ratings carry the name instead (no TrackInfo, no plugin event).
+        rt.tasteProfile.recordArtistRating(args.artistName, r);
+        rt.saveTasteProfileSoon();
       }
     },
   );
@@ -414,6 +422,7 @@ export function registerIpc(rt: Runtime): void {
       recentTracks: history
         .slice(0, RECENT_TRACKS_MAX)
         .map((t) => ({ title: t.title, artist: t.artistName })),
+      topArtists: rt.tasteProfile.topArtists(TOP_ARTISTS_MAX),
     };
     const results = await rt.plugins.getSections(target, ctx);
     // Match items against the (cached) library artist list — one fetch per call.

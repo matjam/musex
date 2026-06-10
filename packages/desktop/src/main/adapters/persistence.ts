@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Library, RepeatMode, Track } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import Store from "electron-store";
+import type { TasteState } from "../../logic/taste-profile.js";
 
 export interface PersistedState {
   clientId: string;
@@ -54,6 +55,12 @@ const queueStore = new Store<{ tracks: Track[] | null }>({
 const cursorStore = new Store<{ cursor: PlaybackCursor | null }>({
   name: "playback-cursor",
   defaults: { cursor: null },
+});
+// Taste profile (artist affinity + track stats) — its own file because it's
+// written on every play/rating (debounced in the Runtime) and can grow large.
+const tasteStore = new Store<{ taste: TasteState | null }>({
+  name: "listening-profile",
+  defaults: { taste: null },
 });
 
 /** A stable per-install Plex client identifier (generated once, then reused). */
@@ -113,6 +120,12 @@ export const persistence = {
     const all = { ...store.get("serverUrls") };
     delete all[serverId];
     store.set("serverUrls", all);
+  },
+  getTasteState(): TasteState | null {
+    return tasteStore.get("taste") ?? null;
+  },
+  setTasteState(s: TasteState): void {
+    tasteStore.set("taste", s);
   },
   getRecentlyPlayed(): TrackInfo[] {
     return store.get("recentlyPlayed");

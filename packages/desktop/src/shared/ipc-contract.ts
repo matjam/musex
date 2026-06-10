@@ -206,7 +206,8 @@ export interface MusexApi {
   /** Set a Plex userRating (0–10, integer; null clears). albumId/libraryId, when
    *  known, let main evict the exact list caches the rated item appears in.
    *  trackInfo, when supplied (track ratings only), makes main fire the
-   *  `trackRated` plugin event after the rating is written. */
+   *  `trackRated` plugin event and feed the taste profile. artistName, when
+   *  supplied (artist ratings only), feeds the taste profile's artist affinity. */
   rateItem(args: {
     serverId: string;
     itemId: string;
@@ -214,6 +215,7 @@ export interface MusexApi {
     albumId?: string;
     libraryId?: string;
     trackInfo?: TrackInfo;
+    artistName?: string;
   }): Promise<void>;
   /** Read an item's current Plex userRating (0–10), or null when unrated. */
   getUserRating(serverId: string, itemId: string): Promise<number | null>;

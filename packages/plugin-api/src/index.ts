@@ -55,6 +55,9 @@ export type LibrarySearchResult = {
 export interface SectionContext {
   recentArtists: string[];
   recentTracks: { title: string; artist: string }[];
+  /** Host taste profile: artists by decayed affinity, best first (may be
+   *  empty until the user has listened/rated enough). */
+  topArtists: { name: string; score: number }[];
 }
 
 export interface Section {
@@ -124,6 +127,8 @@ export interface PluginContext {
     search(query: string): Promise<LibrarySearchResult>;
     /** Host-tracked history. */
     recentlyPlayed(limit?: number): Promise<TrackInfo[]>;
+    /** Host taste profile: artists by decayed affinity score, best first. */
+    topArtists(limit?: number): Promise<{ name: string; score: number }[]>;
   };
 
   /** UI (data-only; the host renders everything). */

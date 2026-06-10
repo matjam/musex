@@ -4,6 +4,7 @@ import type { Library, Pin, Track } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { app, safeStorage, shell } from "electron";
 import { isHttpUrl } from "../logic/external-url.js";
+import { TasteProfile } from "../logic/taste-profile.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
 import { ListCacheStore } from "./adapters/list-cache-store.js";
@@ -18,6 +19,8 @@ import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
 
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
+/** Taste profile writes are debounced: one persist ~5s after the last mutation. */
+const TASTE_SAVE_DEBOUNCE_MS = 5_000;
 
 // electron-vite bundles all main files into packages/desktop/out/main/index.js,
 // so __dirname here is packages/desktop/out/main/ → repo root is 4 levels up.
@@ -45,9 +48,13 @@ export class Runtime {
   /** Constructed in init() — drives the plugin events pipeline (trackStarted/
    *  paused/resumed/trackEnded/scrobble) + the recently-played history. */
   playbackMonitor!: PlaybackMonitor;
+  /** Persisted listening profile (loaded in init()); fed by the playback
+   *  monitor and the rate IPC; read by plugins via library.topArtists. */
+  readonly tasteProfile = new TasteProfile();
   token: string | null = null;
   libraries: Library[] = [];
 
+  private tasteSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingPin: Pin | null = null;
   private readonly registeredServers = new Set<string>();
   /** Set by main/index per window (like mpv's sink); plugins notify through it. */
@@ -69,12 +76,19 @@ export class Runtime {
     this.proxy.setArtCache(this.artCache, ART_CACHE_MAX_BYTES);
     await this.proxy.start();
 
+    const tasteState = persistence.getTasteState();
+    if (tasteState) this.tasteProfile.load(tasteState);
+
     // Playback monitor: emits into the plugin host's event registry (lazily —
     // this.plugins is assigned just below, before any playback can happen).
     this.playbackMonitor = new PlaybackMonitor({
       emit: (event, payload) => this.plugins.emitEvent(event, payload),
       loadHistory: () => persistence.getRecentlyPlayed(),
       saveHistory: (h) => persistence.setRecentlyPlayed(h),
+      recordPlay: (track, kind) => {
+        this.tasteProfile.recordPlay(track, kind);
+        this.saveTasteProfileSoon();
+      },
     });
 
     // Plugin host: userData/plugins always; in dev also <repo>/plugins (the
@@ -124,6 +138,7 @@ export class Runtime {
           };
         },
         recentlyPlayed: async (limit) => this.playbackMonitor.history(limit),
+        topArtists: async (limit) => this.tasteProfile.topArtists(limit),
       },
     });
     await this.plugins.loadAll();
@@ -131,6 +146,16 @@ export class Runtime {
 
   async restore(): Promise<void> {
     this.token = await this.tokenStore.load();
+  }
+
+  /** Debounced taste-profile persist: collapses bursts of plays/ratings into
+   *  one write to the listening-profile store. */
+  saveTasteProfileSoon(): void {
+    if (this.tasteSaveTimer) clearTimeout(this.tasteSaveTimer);
+    this.tasteSaveTimer = setTimeout(() => {
+      this.tasteSaveTimer = null;
+      persistence.setTasteState(this.tasteProfile.serialize());
+    }, TASTE_SAVE_DEBOUNCE_MS);
   }
 
   async signInStart(): Promise<{ code: string; authUrl: string }> {

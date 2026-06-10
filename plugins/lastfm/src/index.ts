@@ -200,7 +200,13 @@ export async function activate(ctx: PluginContext): Promise<void> {
       const s = await session();
       if (!s) return []; // needs API key + connected account
       const sections: Section[] = [];
-      for (const artistName of sectionCtx.recentArtists.slice(0, SIMILAR_SEED_ARTISTS)) {
+      // Seed from the host's taste profile (decayed affinity, best first);
+      // fall back to plain recency until the profile has signal.
+      const seeds =
+        sectionCtx.topArtists.length > 0
+          ? sectionCtx.topArtists.map((a) => a.name)
+          : sectionCtx.recentArtists;
+      for (const artistName of seeds.slice(0, SIMILAR_SEED_ARTISTS)) {
         try {
           const res = await s.client.call<SimilarResponse>(
             "artist.getSimilar",

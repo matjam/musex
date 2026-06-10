@@ -56,6 +56,7 @@ export interface PluginContextDeps {
   library: {
     search(query: string): Promise<LibrarySearchResult>;
     recentlyPlayed(limit?: number): Promise<TrackInfo[]>;
+    topArtists(limit?: number): Promise<{ name: string; score: number }[]>;
   };
   registerSettings: (schema: SettingField[]) => void;
   onSettingsAction: (key: string, handler: () => Promise<SettingsActionResult>) => void;
@@ -103,6 +104,7 @@ export function buildPluginContext(
     library: {
       search: (query) => deps.library.search(query),
       recentlyPlayed: (limit) => deps.library.recentlyPlayed(limit),
+      topArtists: (limit) => deps.library.topArtists(limit),
     },
     ui: {
       notify(message, level = "info") {

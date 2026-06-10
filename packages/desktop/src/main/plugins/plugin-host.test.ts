@@ -69,6 +69,7 @@ function makeHost(overrides: Partial<PluginHostDeps> = {}) {
     library: {
       search: async () => ({ artists: [], albums: [], tracks: [] }),
       recentlyPlayed: async () => [],
+      topArtists: async () => [],
     },
     ...overrides,
   });
@@ -320,7 +321,7 @@ describe("PluginHost", () => {
     const { host } = makeHost({ providerTimeoutMs: 50 });
     await host.loadAll();
 
-    const sctx = { recentArtists: ["Lamb"], recentTracks: [] };
+    const sctx = { recentArtists: ["Lamb"], recentTracks: [], topArtists: [] };
     const discover = await host.getSections("discover", sctx);
     expect(discover).toEqual([
       {

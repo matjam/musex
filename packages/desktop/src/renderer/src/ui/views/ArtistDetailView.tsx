@@ -136,7 +136,9 @@ export function ArtistDetailView({ artist }: Props) {
         <h3 className="browse-title">{artist.name}</h3>
         <StarRating
           value10={ratingFor(artist.id, artist.userRating)}
-          onRate={(stars) => rate({ serverId: artist.serverId, itemId: artist.id, stars })}
+          onRate={(stars) =>
+            rate({ serverId: artist.serverId, itemId: artist.id, stars, artistName: artist.name })
+          }
           size={16}
           className="artist-stars"
         />

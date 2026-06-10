@@ -1,6 +1,6 @@
 import type { PluginEvents, TrackInfo } from "@musex/plugin-api";
 import { beforeEach, describe, expect, it } from "vitest";
-import { PlaybackMonitor } from "./playback-monitor";
+import { PlaybackMonitor, type PlayKind } from "./playback-monitor";
 
 function track(title: string, durationMs = 240_000, artistName = "Artist"): TrackInfo {
   return { title, artistName, durationMs };
@@ -10,6 +10,7 @@ type Emitted = { event: keyof PluginEvents; payload: PluginEvents[keyof PluginEv
 
 let emitted: Emitted[];
 let persisted: TrackInfo[];
+let plays: { track: TrackInfo; kind: PlayKind }[];
 let monitor: PlaybackMonitor;
 
 function makeMonitor(initialHistory: TrackInfo[] = []): PlaybackMonitor {
@@ -20,11 +21,13 @@ function makeMonitor(initialHistory: TrackInfo[] = []): PlaybackMonitor {
     saveHistory: (h) => {
       persisted = h;
     },
+    recordPlay: (t, kind) => plays.push({ track: t, kind }),
   });
 }
 
 beforeEach(() => {
   emitted = [];
+  plays = [];
   monitor = makeMonitor();
 });
 
@@ -158,5 +161,51 @@ describe("PlaybackMonitor", () => {
     tick(0, 100);
     monitor.handleNowPlaying({ kind: "stop" });
     expect(emitted).toEqual([]);
+    expect(plays).toEqual([]);
+  });
+
+  describe("recordPlay classification", () => {
+    function playFor(durationMs: number, playedSec: number): PlayKind {
+      const a = track("A", durationMs);
+      monitor.handleNowPlaying({ kind: "start", track: a, atEpochSec: 1000 });
+      tick(0, playedSec);
+      monitor.handleNowPlaying({ kind: "stop" });
+      expect(plays).toHaveLength(1);
+      expect(plays[0]?.track).toEqual(a);
+      // biome-ignore lint/style/noNonNullAssertion: length asserted above
+      return plays[0]!.kind;
+    }
+
+    it("full when the scrobble gate passes (half the track heard)", () => {
+      expect(playFor(240_000, 130)).toBe("full");
+    });
+
+    it("skip when under 60s AND under 25% of the duration", () => {
+      expect(playFor(240_000, 30)).toBe("skip"); // 30 < 60, 30 < 60 (25% of 240)
+    });
+
+    it("partial at exactly 60s (not strictly under)", () => {
+      expect(playFor(240_000, 60)).toBe("partial"); // 60s is not < 60s
+    });
+
+    it("partial when under 60s but past 25% of a short track", () => {
+      expect(playFor(150_000, 50)).toBe("partial"); // 50 < 60 but ≥ 37.5 (25% of 150)
+    });
+
+    it("partial in the long middle ground (past 60s, no scrobble)", () => {
+      expect(playFor(1_000_000, 70)).toBe("partial"); // 70 ≥ 60, < half, < 240s
+    });
+
+    it("records exactly one play per play-through across track changes", () => {
+      const a = track("A", 240_000);
+      monitor.handleNowPlaying({ kind: "start", track: a, atEpochSec: 1 });
+      tick(0, 10);
+      monitor.handleNowPlaying({ kind: "start", track: track("B"), atEpochSec: 2 });
+      monitor.handleNowPlaying({ kind: "stop" });
+      expect(plays.map((p) => [p.track.title, p.kind])).toEqual([
+        ["A", "skip"],
+        ["B", "skip"],
+      ]);
+    });
   });
 });
