@@ -58,6 +58,11 @@ export interface PlexGateway {
     size: number,
     token: string,
   ): Promise<{ items: Track[]; total: number }>;
+  /** Set the Plex userRating for an item (track/artist ratingKey). `rating` is
+   *  0–10 (one star = 2 points); `null` clears the rating. */
+  rateItem(serverId: string, itemId: string, rating: number | null, token: string): Promise<void>;
+  /** Read an item's current Plex userRating (0–10), or null when unrated. */
+  getUserRating(serverId: string, itemId: string, token: string): Promise<number | null>;
 }
 
 /** Thrown by a PlexGateway implementation when the Plex token is rejected (HTTP 401).

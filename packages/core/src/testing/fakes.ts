@@ -68,6 +68,7 @@ export class FakePlexGateway implements PlexGateway {
   readonly tracks = new Map<string, Track[]>(); // albumId -> tracks
   readonly unreachableServerIds = new Set<string>();
   readonly authErrorServerIds = new Set<string>();
+  readonly ratings = new Map<string, number>(); // itemId -> userRating (0–10)
   createPinCalls = 0;
   private pollIdx = 0;
   private playlists = new Map<string, { playlist: Playlist; items: PlaylistTrack[] }>();
@@ -221,6 +222,20 @@ export class FakePlexGateway implements PlexGateway {
   ): Promise<{ items: Track[]; total: number }> {
     const all = sortTracks([...this.tracks.values()].flat(), sort);
     return { items: all.slice(start, start + size), total: all.length };
+  }
+
+  async rateItem(
+    _serverId: string,
+    itemId: string,
+    rating: number | null,
+    _token: string,
+  ): Promise<void> {
+    if (rating === null) this.ratings.delete(itemId);
+    else this.ratings.set(itemId, rating);
+  }
+
+  async getUserRating(_serverId: string, itemId: string, _token: string): Promise<number | null> {
+    return this.ratings.get(itemId) ?? null;
   }
 }
 

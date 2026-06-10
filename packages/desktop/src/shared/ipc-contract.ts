@@ -43,6 +43,8 @@ export const IPC = {
   removeFromPlaylist: "musex:removeFromPlaylist", // (playlistId, serverId, playlistItemIds) -> void
   renamePlaylist: "musex:renamePlaylist", // (playlistId, serverId, title) -> void
   deletePlaylist: "musex:deletePlaylist", // (playlistId, serverId) -> void
+  rateItem: "musex:rateItem", // ({ serverId, itemId, rating, albumId?, libraryId? }) -> void
+  getUserRating: "musex:getUserRating", // (serverId, itemId) -> number | null
   prefetch: "musex:prefetch", // (tracks: Track[]) -> void
   savePlaybackQueue: "musex:playback:saveQueue", // (tracks: Track[]) -> void
   savePlaybackCursor: "musex:playback:saveCursor", // (cursor: PlaybackCursorDto) -> void
@@ -201,6 +203,17 @@ export interface MusexApi {
   ): Promise<void>;
   renamePlaylist(playlistId: string, serverId: string, title: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string): Promise<void>;
+  /** Set a Plex userRating (0–10, integer; null clears). albumId/libraryId, when
+   *  known, let main evict the exact list caches the rated item appears in. */
+  rateItem(args: {
+    serverId: string;
+    itemId: string;
+    rating: number | null;
+    albumId?: string;
+    libraryId?: string;
+  }): Promise<void>;
+  /** Read an item's current Plex userRating (0–10), or null when unrated. */
+  getUserRating(serverId: string, itemId: string): Promise<number | null>;
   prefetch(tracks: Track[]): Promise<void>;
   savePlaybackQueue(tracks: Track[]): Promise<void>;
   savePlaybackCursor(cursor: PlaybackCursorDto): Promise<void>;

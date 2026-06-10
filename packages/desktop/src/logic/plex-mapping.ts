@@ -5,6 +5,7 @@ interface RawArtist {
   title: string;
   thumb?: string;
   updatedAt?: number;
+  userRating?: number; // 0–10
 }
 interface RawAlbum {
   ratingKey: string;
@@ -35,6 +36,7 @@ interface RawTrack {
   grandparentRatingKey?: string | number;
   grandparentTitle?: string;
   thumb?: string;
+  userRating?: number; // 0–10
   media?: RawMedia[];
 }
 
@@ -60,6 +62,7 @@ export function toArtist(raw: RawArtist, serverId: string): Artist {
     name: raw.title,
     thumb: thumbPath(raw.thumb),
     updatedAt: raw.updatedAt,
+    userRating: raw.userRating,
   };
 }
 
@@ -99,6 +102,7 @@ export function toTrack(raw: RawTrack, serverId: string): Track {
     trackNumber: raw.index,
     durationMs: raw.duration ?? 0,
     thumb: thumbPath(raw.thumb),
+    userRating: raw.userRating,
     media: info,
   };
 }

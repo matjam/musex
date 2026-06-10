@@ -117,9 +117,10 @@ export class CachingPlexGateway implements PlexGateway {
   /** Bump when the MAPPED shape changes (cached entries hold mapper OUTPUT, so a
    *  mapper fix is invisible to existing entries until their Plex validator
    *  changes — versioning the key makes corrected data flow immediately).
-   *  v2: Track.artistId (2026-06-09). */
+   *  v2: Track.artistId (2026-06-09).
+   *  v3: userRating on Track/Artist (2026-06-09). */
   private vkey(key: string): string {
-    return `v2:${key}`;
+    return `v3:${key}`;
   }
 
   private async cached<T>(
@@ -182,6 +183,31 @@ export class CachingPlexGateway implements PlexGateway {
     await this.cache.evictKey(this.vkey(`pltracks:${playlistId}`));
   }
 
+  /** Rate, then evict the exactly-addressable list caches the rated track appears
+   *  in: its album's track list (when the caller knows the albumId) and the
+   *  library-wide track lists for every sort (when the caller knows the libraryId).
+   *  The opts live on this class only — the core port stays minimal, and the IPC
+   *  layer calls the caching class directly (like `endpoint()`). Playlist lists
+   *  are NOT evicted: the renderer session overlay covers live UI and their
+   *  validators refresh them eventually. */
+  async rateItem(
+    serverId: string,
+    itemId: string,
+    rating: number | null,
+    token: string,
+    opts?: { albumId?: string; libraryId?: string },
+  ): Promise<void> {
+    await this.inner.rateItem(serverId, itemId, rating, token);
+    if (opts?.albumId) {
+      await this.cache.evictKey(this.vkey(`tracks:${opts.albumId}`));
+    }
+    if (opts?.libraryId) {
+      for (const sort of ["title", "artist", "added"] as const) {
+        await this.cache.evictKey(this.vkey(`alltracks:${opts.libraryId}:${sort}`));
+      }
+    }
+  }
+
   // --- pass-through (cheap / live / auth) ---
 
   createPin(): Promise<Pin> {
@@ -206,6 +232,10 @@ export class CachingPlexGateway implements PlexGateway {
 
   search(library: Library, query: string, token: string): Promise<SearchResults> {
     return this.inner.search(library, query, token);
+  }
+
+  getUserRating(serverId: string, itemId: string, token: string): Promise<number | null> {
+    return this.inner.getUserRating(serverId, itemId, token);
   }
 
   endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }> {

@@ -27,6 +27,7 @@ export interface Artist {
   name: string;
   thumb?: string;
   updatedAt?: number; // epoch ms, for cache validation
+  userRating?: number; // Plex user rating, 0–10 (one star = 2 points)
 }
 
 export interface Album {
@@ -58,6 +59,7 @@ export interface Track {
   durationMs: number;
   trackNumber?: number;
   thumb?: string;
+  userRating?: number; // Plex user rating, 0–10 (one star = 2 points)
   media: MediaInfo;
 }
 

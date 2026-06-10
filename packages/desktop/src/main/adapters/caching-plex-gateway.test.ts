@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CachingPlexGateway } from "./caching-plex-gateway";
 import { ListCacheStore } from "./list-cache-store";
 
-const _lib: Library = { id: "1", serverId: "s1", serverName: "K", title: "Music", type: "music" };
+const lib: Library = { id: "1", serverId: "s1", serverName: "K", title: "Music", type: "music" };
 const track = (id: string): Track => ({
   id,
   serverId: "s1",
@@ -30,7 +30,11 @@ afterEach(async () => {
 function setup() {
   const inner = {
     listPlaylistTracks: vi.fn(async () => ptracks),
+    listTracks: vi.fn(async () => [track("t1")]),
+    listAllTracks: vi.fn(async () => [track("t1")]),
     addToPlaylist: vi.fn(async () => {}),
+    rateItem: vi.fn(async () => {}),
+    getUserRating: vi.fn(async () => 8),
     endpoint: vi.fn(async (_serverId: string, token: string) => ({
       baseUrl: "http://localhost",
       token,
@@ -79,5 +83,48 @@ describe("CachingPlexGateway", () => {
     await gw.addToPlaylist("pl1", "s1", ["t9"], "tok");
     await gw.listPlaylistTracks("pl1", "s1", "tok", "v1");
     expect(inner.listPlaylistTracks).toHaveBeenCalledTimes(2);
+  });
+
+  it("delegates rateItem and getUserRating to inner", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.rateItem("s1", "t1", 8, "tok");
+    expect(inner.rateItem).toHaveBeenCalledWith("s1", "t1", 8, "tok");
+    await expect(gw.getUserRating("s1", "t1", "tok")).resolves.toBe(8);
+    expect(inner.getUserRating).toHaveBeenCalledWith("s1", "t1", "tok");
+  });
+
+  it("rateItem with albumId evicts that album's track cache only", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listTracks(lib, "al1", "tok", "v1"); // seed tracks:al1
+    await gw.listPlaylistTracks("pl1", "s1", "tok", "v1"); // unrelated key
+    await gw.rateItem("s1", "t1", 6, "tok", { albumId: "al1" });
+    await gw.listTracks(lib, "al1", "tok", "v1"); // evicted -> refetch
+    await gw.listPlaylistTracks("pl1", "s1", "tok", "v1"); // untouched -> hit
+    expect(inner.listTracks).toHaveBeenCalledTimes(2);
+    expect(inner.listPlaylistTracks).toHaveBeenCalledTimes(1);
+  });
+
+  it("rateItem with libraryId evicts all three alltracks sort caches", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listAllTracks(lib, "title", "tok", "v1");
+    await gw.listAllTracks(lib, "artist", "tok", "v1");
+    await gw.listAllTracks(lib, "added", "tok", "v1");
+    await gw.rateItem("s1", "t1", 6, "tok", { libraryId: lib.id });
+    await gw.listAllTracks(lib, "title", "tok", "v1");
+    await gw.listAllTracks(lib, "artist", "tok", "v1");
+    await gw.listAllTracks(lib, "added", "tok", "v1");
+    expect(inner.listAllTracks).toHaveBeenCalledTimes(6); // every sort refetched
+  });
+
+  it("rateItem without opts evicts nothing", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listTracks(lib, "al1", "tok", "v1");
+    await gw.rateItem("s1", "t1", null, "tok");
+    await gw.listTracks(lib, "al1", "tok", "v1"); // still cached
+    expect(inner.listTracks).toHaveBeenCalledTimes(1);
   });
 });

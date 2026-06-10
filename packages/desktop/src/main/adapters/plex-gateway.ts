@@ -395,6 +395,36 @@ export class PlexapiGateway implements PlexGateway {
     }
   }
 
+  async rateItem(
+    serverId: string,
+    itemId: string,
+    rating: number | null,
+    token: string,
+  ): Promise<void> {
+    try {
+      const server = await this.connect(serverId, token);
+      // Same endpoint python-plexapi uses; rating -1 clears the user rating.
+      const path =
+        `/:/rate?key=${encodeURIComponent(itemId)}` +
+        `&identifier=com.plexapp.plugins.library&rating=${rating === null ? -1 : rating}`;
+      await server.query({ path, method: "put" });
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
+  async getUserRating(serverId: string, itemId: string, token: string): Promise<number | null> {
+    try {
+      const server = await this.connect(serverId, token);
+      const response = (await server.query({ path: `/library/metadata/${itemId}` })) as {
+        MediaContainer: { Metadata?: { userRating?: number }[] };
+      };
+      return response.MediaContainer.Metadata?.[0]?.userRating ?? null;
+    } catch (err) {
+      asPlexAuthError(err);
+    }
+  }
+
   /** Return the working connection URL and token for a server, using the cached
    *  connection (cheap after the first browse call for that server). */
   async endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }> {
@@ -500,6 +530,7 @@ function toArtistSafe(a: PlexArtist, serverId: string): Artist {
       title: a.title ?? "",
       thumb: a.thumb,
       updatedAt: a.updatedAt ? a.updatedAt.getTime() : undefined,
+      userRating: a.userRating,
     },
     serverId,
   );
@@ -545,6 +576,7 @@ function toTrackSafe(t: PlexTrack, serverId: string): Track {
         t.grandparentRatingKey !== undefined ? String(t.grandparentRatingKey) : undefined,
       grandparentTitle: t.grandparentTitle,
       thumb: t.thumb,
+      userRating: t.userRating,
       // MediaPart.key (from PlexObject.key) is the Plex server-relative path.
       // Media.id is number; MediaPart.id is number.
       media: t.media?.map((m) => ({

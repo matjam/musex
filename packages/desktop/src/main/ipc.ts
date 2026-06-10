@@ -305,6 +305,36 @@ export function registerIpc(rt: Runtime): void {
     rt.gateway.deletePlaylist(playlistId, serverId, rt.requireToken()),
   );
 
+  ipcMain.handle(
+    IPC.rateItem,
+    (
+      _e,
+      args: {
+        serverId: string;
+        itemId: string;
+        rating: number | null;
+        albumId?: string;
+        libraryId?: string;
+      },
+    ) => {
+      if (typeof args?.serverId !== "string" || !args.serverId) throw new Error("invalid serverId");
+      if (typeof args.itemId !== "string" || !args.itemId) throw new Error("invalid itemId");
+      const r = args.rating;
+      if (r !== null && (!Number.isInteger(r) || r < 0 || r > 10)) {
+        throw new Error("invalid rating");
+      }
+      return rt.gateway.rateItem(args.serverId, args.itemId, r, rt.requireToken(), {
+        albumId: args.albumId,
+        libraryId: args.libraryId,
+      });
+    },
+  );
+  ipcMain.handle(IPC.getUserRating, (_e, serverId: string, itemId: string) => {
+    if (typeof serverId !== "string" || !serverId) throw new Error("invalid serverId");
+    if (typeof itemId !== "string" || !itemId) throw new Error("invalid itemId");
+    return rt.gateway.getUserRating(serverId, itemId, rt.requireToken());
+  });
+
   // mpv playback engine — load lazily spawns mpv; the rest are no-ops if it
   // isn't running (nothing is playing).
   ipcMain.handle(IPC.playbackLoad, (_e, args: { url: string; startSec?: number }) => {

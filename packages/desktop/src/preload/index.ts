@@ -43,6 +43,8 @@ const api: MusexApi = {
     ipcRenderer.invoke(IPC.renamePlaylist, playlistId, serverId, title),
   deletePlaylist: (playlistId, serverId) =>
     ipcRenderer.invoke(IPC.deletePlaylist, playlistId, serverId),
+  rateItem: (args) => ipcRenderer.invoke(IPC.rateItem, args),
+  getUserRating: (serverId, itemId) => ipcRenderer.invoke(IPC.getUserRating, serverId, itemId),
   prefetch: (tracks) => ipcRenderer.invoke(IPC.prefetch, tracks),
   savePlaybackQueue: (tracks) => ipcRenderer.invoke(IPC.savePlaybackQueue, tracks),
   savePlaybackCursor: (cursor) => ipcRenderer.invoke(IPC.savePlaybackCursor, cursor),

@@ -30,6 +30,12 @@ describe("plex-mapping", () => {
     );
     expect(a.updatedAt).toBe(1717800000000);
   });
+  it("maps an artist userRating, and leaves it undefined when absent", () => {
+    const rated = toArtist({ ratingKey: "10", title: "Radiohead", userRating: 6 }, "srv-1");
+    expect(rated.userRating).toBe(6);
+    const unrated = toArtist({ ratingKey: "11", title: "Boards of Canada" }, "srv-1");
+    expect(unrated.userRating).toBeUndefined();
+  });
   it("maps an album with year + parent artist id", () => {
     const al = toAlbum(
       { ratingKey: "20", title: "In Rainbows", year: 2007, thumb: "/a.jpg", parentRatingKey: "10" },
@@ -69,6 +75,7 @@ describe("plex-mapping", () => {
         parentTitle: "In Rainbows",
         grandparentRatingKey: "10",
         grandparentTitle: "Radiohead",
+        userRating: 8,
         media: [
           {
             audioCodec: "flac",
@@ -90,6 +97,7 @@ describe("plex-mapping", () => {
       title: "Nude",
       trackNumber: 3,
       durationMs: 254000,
+      userRating: 8,
       media: {
         container: "flac",
         audioCodec: "flac",
@@ -122,6 +130,7 @@ describe("plex-mapping", () => {
       "srv-1",
     );
     expect(t.thumb).toBe("/library/metadata/32/thumb/99");
+    expect(t.userRating).toBeUndefined(); // no raw userRating -> stays undefined
   });
   it("throws if a track has no playable media part (not silently dropped)", () => {
     expect(() =>
