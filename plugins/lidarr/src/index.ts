@@ -21,14 +21,20 @@
  * - GET  /api/v1/qualityprofile, /api/v1/metadataprofile, /api/v1/rootfolder
  */
 import type { AcquirableAlbum, AcquisitionStatusItem, PluginContext } from "@musex/plugin-api";
-import { LidarrClient } from "./client.js";
+import { LidarrClient, LidarrError } from "./client.js";
 import { deriveAlbumState } from "./state.js";
 import { createNodeTransport, fetchTransport } from "./transport.js";
 
 /** Album metadata may not exist immediately after adding an artist (Lidarr
- *  refreshes it asynchronously) — poll a few times before giving up. */
-const ALBUM_FIND_ATTEMPTS = 5;
+ *  refreshes it asynchronously, often taking 30–60s) — poll briefly inline,
+ *  then defer to the background pending-albums poller instead of failing. */
+const ALBUM_FIND_ATTEMPTS = 3;
 const ALBUM_FIND_RETRY_MS = 2_000;
+/** Background poll cadence for albums deferred until Lidarr's artist refresh
+ *  produces their metadata, and how long before we give up on one. */
+const PENDING_POLL_MS = 20_000;
+const PENDING_MAX_AGE_MS = 15 * 60_000;
+const PENDING_KEY = "pendingAlbums";
 /** Queue page size for lookup/status (Lidarr defaults to 10). */
 const QUEUE_PAGE_SIZE = 100;
 /** Downloads view cap. */
@@ -76,8 +82,24 @@ type LidarrProfile = { id: number; name?: string | null };
 type LidarrRootFolder = { id: number; path?: string | null };
 
 /** providerRef payload — opaque to the host; carries everything acquireAlbum
- *  needs to add the artist to Lidarr if it isn't there yet. */
-type ProviderRef = { foreignAlbumId: string; foreignArtistId: string; artistName: string };
+ *  needs to add the artist to Lidarr if it isn't there yet. `title` is for
+ *  human-readable notifications/status (older refs may not carry it). */
+type ProviderRef = {
+  foreignAlbumId: string;
+  foreignArtistId: string;
+  artistName: string;
+  title?: string;
+};
+
+/** An album whose acquisition is deferred until Lidarr's async artist refresh
+ *  produces the album metadata; persisted in storage under PENDING_KEY. */
+type PendingAlbum = {
+  foreignArtistId: string;
+  artistName: string;
+  title?: string;
+  addedAt: number;
+};
+type PendingAlbums = Record<string, PendingAlbum>;
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -105,6 +127,101 @@ function yearOf(releaseDate: string | null | undefined): number | undefined {
 function queueProgress(rec: LidarrQueueRecord): number | undefined {
   if (!(rec.size > 0) || !(rec.sizeleft >= 0)) return undefined;
   return Math.min(1, Math.max(0, 1 - rec.sizeleft / rec.size));
+}
+
+// ── Ensure-artist (idempotent + race-proof) ──────────────────────────────────
+
+type LogFn = (msg: string, ...args: unknown[]) => void;
+
+/** Concurrent acquires for the same artist share one ensure (two quick Adds
+ *  on a not-yet-added artist must not both POST /api/v1/artist). */
+const ensureArtistInflight = new Map<string, Promise<LidarrArtist>>();
+
+/** Ensure `ref`'s artist exists in Lidarr, adding it if needed. Concurrent
+ *  calls for the same foreignArtistId share one in-flight ensure, and a POST
+ *  that loses an add race (400 ArtistExistsValidator) resolves to the
+ *  already-added artist instead of throwing. Exported for tests. */
+export function ensureArtist(
+  c: LidarrClient,
+  ref: { foreignArtistId: string; artistName: string },
+  log: LogFn,
+): Promise<LidarrArtist> {
+  const inflight = ensureArtistInflight.get(ref.foreignArtistId);
+  if (inflight !== undefined) return inflight;
+  const promise = doEnsureArtist(c, ref, log).finally(() => {
+    ensureArtistInflight.delete(ref.foreignArtistId);
+  });
+  ensureArtistInflight.set(ref.foreignArtistId, promise);
+  return promise;
+}
+
+async function doEnsureArtist(
+  c: LidarrClient,
+  ref: { foreignArtistId: string; artistName: string },
+  log: LogFn,
+): Promise<LidarrArtist> {
+  const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
+  const existing = artists.find((a) => a.foreignArtistId === ref.foreignArtistId);
+  if (existing !== undefined) return existing;
+
+  const [qualityProfiles, metadataProfiles, rootFolders] = await Promise.all([
+    c.get<LidarrProfile[]>("/api/v1/qualityprofile"),
+    c.get<LidarrProfile[]>("/api/v1/metadataprofile"),
+    c.get<LidarrRootFolder[]>("/api/v1/rootfolder"),
+  ]);
+  const quality = qualityProfiles[0];
+  const metadata = metadataProfiles[0];
+  const root = rootFolders[0];
+  if (quality === undefined) {
+    throw new Error("Lidarr has no quality profiles — create one in Lidarr first");
+  }
+  if (metadata === undefined) {
+    throw new Error("Lidarr has no metadata profiles — create one in Lidarr first");
+  }
+  if (root === undefined || !root.path) {
+    throw new Error("Lidarr has no root folders — add one in Lidarr first");
+  }
+  log(
+    `adding artist "${ref.artistName}" with quality profile "${quality.name ?? quality.id}", ` +
+      `metadata profile "${metadata.name ?? metadata.id}", root folder "${root.path}"`,
+  );
+  try {
+    // monitored: true (the artist participates in monitoring) but
+    // addOptions.monitor "none" → no albums auto-monitored; the caller
+    // monitors exactly the requested album.
+    return await c.post<LidarrArtist>("/api/v1/artist", {
+      artistName: ref.artistName,
+      foreignArtistId: ref.foreignArtistId,
+      qualityProfileId: quality.id,
+      metadataProfileId: metadata.id,
+      rootFolderPath: root.path,
+      monitored: true,
+      addOptions: { monitor: "none", searchForMissingAlbums: false },
+    });
+  } catch (err) {
+    // Someone (another acquire, the Lidarr UI) added the artist between our
+    // list fetch and the POST — treat it as success and use the existing one.
+    if (err instanceof LidarrError && err.body.includes("ArtistExistsValidator")) {
+      log(`artist "${ref.artistName}" was added concurrently; reusing it`);
+      const refreshed = await c.get<LidarrArtist[]>("/api/v1/artist");
+      const added = refreshed.find((a) => a.foreignArtistId === ref.foreignArtistId);
+      if (added !== undefined) return added;
+    }
+    throw err;
+  }
+}
+
+// ── Plugin lifecycle ─────────────────────────────────────────────────────────
+
+/** Background poller for pending (deferred) albums; module-level so
+ *  deactivate() can clear it. */
+let pendingPollTimer: ReturnType<typeof setInterval> | undefined;
+
+export function deactivate(): void {
+  if (pendingPollTimer !== undefined) {
+    clearInterval(pendingPollTimer);
+    pendingPollTimer = undefined;
+  }
 }
 
 export async function activate(ctx: PluginContext): Promise<void> {
@@ -148,6 +265,72 @@ export async function activate(ctx: PluginContext): Promise<void> {
       : fetchTransport;
     return new LidarrClient({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, httpFn });
   };
+
+  // ── Pending albums (deferred until Lidarr's artist refresh finishes) ─────
+  const readPending = async (): Promise<PendingAlbums> =>
+    (await ctx.storage.get<PendingAlbums>(PENDING_KEY)) ?? {};
+
+  /** Monitor the album and kick off a search (shared by acquire + poller). */
+  const requestAlbum = async (c: LidarrClient, album: LidarrAlbum): Promise<void> => {
+    if (!album.monitored) {
+      await c.put("/api/v1/album/monitor", { albumIds: [album.id], monitored: true });
+    }
+    await c.post("/api/v1/command", { name: "AlbumSearch", albumIds: [album.id] });
+    ctx.ui.notify(`Requested ${album.title ?? "album"} on Lidarr`);
+  };
+
+  const stopPendingPoller = (): void => {
+    if (pendingPollTimer !== undefined) {
+      clearInterval(pendingPollTimer);
+      pendingPollTimer = undefined;
+    }
+  };
+
+  /** One poll pass: request every pending album whose metadata has appeared,
+   *  expire entries older than PENDING_MAX_AGE_MS, stop when none remain. */
+  const processPending = async (): Promise<void> => {
+    const pending = await readPending();
+    if (Object.keys(pending).length === 0) {
+      stopPendingPoller();
+      return;
+    }
+    // Unconfigured: skip the Lidarr calls but keep the timer armed (and let
+    // age-out below still run) so entries resolve once config returns.
+    const c = await client();
+    let changed = false;
+    for (const [foreignAlbumId, entry] of Object.entries(pending)) {
+      const label = entry.title ?? "the album";
+      if (Date.now() - entry.addedAt > PENDING_MAX_AGE_MS) {
+        delete pending[foreignAlbumId];
+        changed = true;
+        ctx.ui.notify(`Couldn't request ${label} — Lidarr never produced its metadata`, "error");
+        continue;
+      }
+      if (!c) continue;
+      try {
+        const albums = await c.get<LidarrAlbum[]>("/api/v1/album", { foreignAlbumId });
+        const album = albums.find((a) => a.foreignAlbumId === foreignAlbumId);
+        if (album === undefined) continue; // still refreshing — next pass
+        await requestAlbum(c, album);
+        delete pending[foreignAlbumId];
+        changed = true;
+      } catch (err) {
+        ctx.log(`pending album poll failed for ${label}:`, errText(err));
+      }
+    }
+    if (changed) await ctx.storage.set(PENDING_KEY, pending);
+    if (Object.keys(pending).length === 0) stopPendingPoller();
+  };
+
+  const armPendingPoller = (): void => {
+    if (pendingPollTimer !== undefined) return;
+    pendingPollTimer = setInterval(() => {
+      processPending().catch((err) => ctx.log("pending album poll pass failed:", errText(err)));
+    }, PENDING_POLL_MS);
+  };
+
+  // Resume polling for any albums deferred in a previous session.
+  if (Object.keys(await readPending()).length > 0) armPendingPoller();
 
   // ── Test connection ─────────────────────────────────────────────────────
   ctx.onSettingsAction("test", async () => {
@@ -201,6 +384,7 @@ export async function activate(ctx: PluginContext): Promise<void> {
         foreignAlbumId: album.foreignAlbumId,
         foreignArtistId: fallback.foreignArtistId,
         artistName: fallback.artistName,
+        title: album.title,
       };
       out.push({
         title: album.title,
@@ -281,44 +465,8 @@ export async function activate(ctx: PluginContext): Promise<void> {
           throw new Error("Invalid acquisition reference");
         }
 
-        // 1. Ensure the artist exists in Lidarr.
-        const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
-        let artist = artists.find((a) => a.foreignArtistId === ref.foreignArtistId);
-        if (artist === undefined) {
-          const [qualityProfiles, metadataProfiles, rootFolders] = await Promise.all([
-            c.get<LidarrProfile[]>("/api/v1/qualityprofile"),
-            c.get<LidarrProfile[]>("/api/v1/metadataprofile"),
-            c.get<LidarrRootFolder[]>("/api/v1/rootfolder"),
-          ]);
-          const quality = qualityProfiles[0];
-          const metadata = metadataProfiles[0];
-          const root = rootFolders[0];
-          if (quality === undefined) {
-            throw new Error("Lidarr has no quality profiles — create one in Lidarr first");
-          }
-          if (metadata === undefined) {
-            throw new Error("Lidarr has no metadata profiles — create one in Lidarr first");
-          }
-          if (root === undefined || !root.path) {
-            throw new Error("Lidarr has no root folders — add one in Lidarr first");
-          }
-          ctx.log(
-            `adding artist "${ref.artistName}" with quality profile "${quality.name ?? quality.id}", ` +
-              `metadata profile "${metadata.name ?? metadata.id}", root folder "${root.path}"`,
-          );
-          // monitored: true (the artist participates in monitoring) but
-          // addOptions.monitor "none" → no albums auto-monitored; we monitor
-          // exactly the requested album below.
-          artist = await c.post<LidarrArtist>("/api/v1/artist", {
-            artistName: ref.artistName,
-            foreignArtistId: ref.foreignArtistId,
-            qualityProfileId: quality.id,
-            metadataProfileId: metadata.id,
-            rootFolderPath: root.path,
-            monitored: true,
-            addOptions: { monitor: "none", searchForMissingAlbums: false },
-          });
-        }
+        // 1. Ensure the artist exists in Lidarr (deduped + race-proof).
+        await ensureArtist(c, ref, ctx.log);
 
         // 2. Find the album. After a fresh artist add, Lidarr populates album
         // metadata asynchronously — retry briefly.
@@ -332,17 +480,26 @@ export async function activate(ctx: PluginContext): Promise<void> {
           if (album !== undefined) break;
         }
         if (album === undefined) {
-          throw new Error(
-            "Album metadata is not in Lidarr yet — it may still be refreshing; try again shortly",
+          // Lidarr's artist refresh (often 30–60s) hasn't produced the album
+          // yet — defer to the background poller instead of failing; the
+          // artist add itself succeeded.
+          const pending = await readPending();
+          pending[ref.foreignAlbumId] = {
+            foreignArtistId: ref.foreignArtistId,
+            artistName: ref.artistName,
+            ...(ref.title !== undefined ? { title: ref.title } : {}),
+            addedAt: Date.now(),
+          };
+          await ctx.storage.set(PENDING_KEY, pending);
+          armPendingPoller();
+          ctx.ui.notify(
+            `Artist added — ${ref.title ?? "the album"} will be requested when Lidarr finishes fetching metadata`,
           );
+          return;
         }
 
         // 3. Monitor it and kick off a search.
-        if (!album.monitored) {
-          await c.put("/api/v1/album/monitor", { albumIds: [album.id], monitored: true });
-        }
-        await c.post("/api/v1/command", { name: "AlbumSearch", albumIds: [album.id] });
-        ctx.ui.notify(`Requested ${album.title ?? "album"} on Lidarr`);
+        await requestAlbum(c, album);
       } catch (err) {
         ctx.log("acquireAlbum failed:", errText(err));
         throw err;
@@ -355,6 +512,17 @@ export async function activate(ctx: PluginContext): Promise<void> {
       try {
         const items: AcquisitionStatusItem[] = [];
         const queuedAlbumIds = new Set<number>();
+
+        // Albums deferred until Lidarr's artist refresh produces metadata —
+        // not in Lidarr's queue/wanted yet, so list them first.
+        for (const entry of Object.values(await readPending())) {
+          items.push({
+            title: entry.title ?? "(album)",
+            artistName: entry.artistName,
+            state: "requested",
+            detail: "waiting for Lidarr metadata",
+          });
+        }
 
         // Active downloads (queue embeds artist/album with the include flags).
         const queue = await fetchQueue(c, true);
