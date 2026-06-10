@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { Library, Server } from "../models/index";
-import { PlexAuthError } from "../ports/plex-gateway";
 import { FakePlexGateway } from "../testing/fakes";
 import { discoverMusicLibraries } from "./discover-libraries";
 
@@ -39,11 +38,20 @@ describe("discoverMusicLibraries", () => {
     expect(result.unreachable.map((s) => s.id)).toEqual(["b"]);
   });
 
-  it("re-throws auth errors instead of marking the server unreachable", async () => {
+  it("skips a server that rejects the token (shared server) instead of failing discovery", async () => {
+    // Regression: a fresh laptop sign-in failed entirely because ONE server in
+    // the account (shared, not honoring the account token) 401'd — the user's
+    // own server was fine. Per-server auth failures are skipped like
+    // connectivity failures; only listServers-level auth errors are fatal.
     const gateway = new FakePlexGateway();
-    gateway.servers = [server("a")];
+    gateway.servers = [server("a"), server("b")];
+    gateway.libraries.set("b", [
+      { id: "b1", serverId: "b", serverName: "Server b", title: "Music", type: "music" },
+    ]);
     gateway.authErrorServerIds.add("a");
 
-    await expect(discoverMusicLibraries(gateway, "tok")).rejects.toBeInstanceOf(PlexAuthError);
+    const result = await discoverMusicLibraries(gateway, "tok");
+    expect(result.libraries.map((l) => l.id)).toEqual(["b1"]);
+    expect(result.unreachable.map((s) => s.id)).toEqual(["a"]);
   });
 });

@@ -484,7 +484,10 @@ export class PlexapiGateway implements PlexGateway {
     if (!resource) throw new Error(`Plex server ${serverId} not found for this account`);
     const discovered = await resource.connect(null, CONNECT_TIMEOUT_MS);
     this.urlCache?.set(serverId, discovered.baseurl);
-    const server = new PlexServer(discovered.baseurl, token); // default timeout for real queries
+    // Servers SHARED with the account don't honor the account token — they need
+    // the resource's per-server accessToken (owned servers accept either).
+    const serverToken = resource.accessToken || token;
+    const server = new PlexServer(discovered.baseurl, serverToken); // default timeout for real queries
     this.serverCache.set(serverId, server);
     return server;
   }
