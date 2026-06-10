@@ -50,6 +50,19 @@ textarea {
   user-select: text;
 }
 
+/* App chrome, not a web page: suppress Chromium's tab-focus rings on rows,
+   cards and buttons. Text inputs keep a visible focus treatment via their
+   border-color rules (e.g. the search box turns green). */
+:focus,
+:focus-visible {
+  outline: none;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--green);
+}
+
 /* ---- Brand / wordmark ---- */
 
 .brand {
