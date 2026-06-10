@@ -4,6 +4,7 @@ import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
+import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
 import { Shell } from "./ui/Shell";
@@ -31,6 +32,7 @@ function Inner() {
       <PlaylistsProvider>
         <SelectionProvider>
           <RatingsProvider>
+            <KeyboardShortcuts toggleQueue={() => setQueueOpen((o) => !o)} />
             <div className="app-root">
               <TopBar />
               <Shell />

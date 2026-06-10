@@ -18,6 +18,7 @@ export function TopBar() {
       <div className="topbar-search">
         <Search size={16} className="topbar-search-icon" />
         <input
+          id="topbar-search-input"
           className="topbar-search-input"
           type="text"
           placeholder="What do you want to listen to?"

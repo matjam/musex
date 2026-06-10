@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import type {
   CacheStats,
   PluginInfo,
@@ -8,6 +8,7 @@ import type {
 } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { formatBytes } from "../../util/format";
+import { SHORTCUT_GROUPS } from "../hooks/useKeyboardShortcuts";
 
 const GiB = 1024 ** 3;
 
@@ -152,6 +153,8 @@ export function SettingsView() {
 
       <PluginsSection />
 
+      <KeyboardShortcutsSection />
+
       <div className="settings-section">
         <div className="settings-section-title">Account</div>
         <div className="settings-row">
@@ -163,6 +166,27 @@ export function SettingsView() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function KeyboardShortcutsSection() {
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Keyboard Shortcuts</div>
+      {SHORTCUT_GROUPS.map((group) => (
+        <Fragment key={group.title}>
+          <div className="settings-kbd-group-title">{group.title}</div>
+          {group.items.map((item) => (
+            <div className="settings-row settings-kbd-row" key={item.combo}>
+              <div className="settings-row-text">
+                <div className="settings-row-label">{item.label}</div>
+              </div>
+              <kbd className="settings-kbd">{item.combo}</kbd>
+            </div>
+          ))}
+        </Fragment>
+      ))}
     </div>
   );
 }
