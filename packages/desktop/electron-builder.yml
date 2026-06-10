@@ -18,8 +18,13 @@ directories:
 files:
   - "out/**/*"
 mac:
+  # zip is REQUIRED alongside dmg: electron-updater on macOS (Squirrel.Mac)
+  # updates from the zip; latest-mac.yml points at it.
   target:
     - target: dmg
+      arch:
+        - arm64
+    - target: zip
       arch:
         - arm64
   category: public.app-category.music
@@ -32,6 +37,16 @@ mac:
   # nested binaries.
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+# Auto-update feed (electron-updater). Having a `publish` config makes
+# electron-builder embed app-update.yml into the .app (Resources/) and emit
+# latest-mac.yml into release/ even with --publish never (CI uploads artifacts
+# itself via `gh release upload`). GitHub provider expects v-prefixed release
+# tags (vX.Y.Z) — release-please is configured with include-component-in-tag:
+# false accordingly.
+publish:
+  provider: github
+  owner: matjam
+  repo: musex
 extraResources:
   # `from` resolves relative to the project directory (packages/desktop) — vendor/
   # and plugins/ live at the repo root.

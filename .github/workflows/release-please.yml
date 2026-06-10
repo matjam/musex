@@ -75,11 +75,16 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm --filter @musex/desktop run package
 
-      - name: Upload DMG to release
+      # zip + latest-mac.yml are the electron-updater feed: the updater reads
+      # latest-mac.yml from the release assets and downloads the zip.
+      - name: Upload artifacts to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
         run: |
           gh release upload "$TAG_NAME" \
             packages/desktop/release/*.dmg \
+            packages/desktop/release/*.zip \
+            packages/desktop/release/*.blockmap \
+            packages/desktop/release/latest-mac.yml \
             --clobber

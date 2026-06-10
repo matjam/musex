@@ -5,6 +5,7 @@ import { IPC, type NavigateToPayload } from "../shared/ipc-contract.js";
 import { registerIpc } from "./ipc.js";
 import { buildAppMenu } from "./menu.js";
 import { Runtime } from "./runtime.js";
+import { setupAutoUpdater } from "./updater.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -62,11 +63,19 @@ app.whenReady().then(async () => {
           if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);
         },
         openLogsFolder: () => void shell.openPath(app.getPath("userData")),
+        checkForUpdates: updater.checkForUpdatesInteractive,
       }),
     );
   };
 
-  wireEngineEvents(createWindow());
+  const firstWindow = createWindow();
+  // After window creation: kicks off the silent update check (launch + every
+  // 4h) and provides the menu's interactive "Check for Updates…" handler.
+  // Dialogs parent on the current window (getWindow handles none-open).
+  const updater = setupAutoUpdater({
+    getWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
+  });
+  wireEngineEvents(firstWindow);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) wireEngineEvents(createWindow());
   });

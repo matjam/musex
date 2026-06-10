@@ -5,6 +5,8 @@ export interface AppMenuDeps {
   showShortcuts: () => void;
   /** Reveal the app's logs/data folder in Finder. */
   openLogsFolder: () => void;
+  /** Interactive update check (dialogs for result). */
+  checkForUpdates: () => void;
 }
 
 /** Application menu: standard mac roles plus a Help submenu (shortcuts,
@@ -22,7 +24,26 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
       ];
 
   const template: MenuItemConstructorOptions[] = [
-    { role: "appMenu" },
+    // The appMenu role expanded by hand so "Check for Updates…" can sit
+    // under About (same items/roles the built-in appMenu provides).
+    {
+      role: "appMenu",
+      submenu: [
+        { role: "about" },
+        {
+          label: "Check for Updates…",
+          click: () => deps.checkForUpdates(),
+        },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
     // editMenu is required so ⌘C/⌘V/⌘X/⌘A keep working in inputs.
     { role: "editMenu" },
     {
