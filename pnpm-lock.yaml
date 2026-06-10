@@ -90,6 +90,18 @@ importers:
         specifier: ^0.28.0
         version: 0.28.0
 
+  plugins/lidarr:
+    devDependencies:
+      '@musex/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+      '@types/node':
+        specifier: ^25.0.0
+        version: 25.9.2
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.0
+
 packages:
 
   '@babel/code-frame@7.29.7':

@@ -1,0 +1,16 @@
+{
+  "name": "@musex/plugin-lidarr",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@musex/plugin-api": "workspace:*",
+    "@types/node": "^25.0.0",
+    "esbuild": "^0.28.0"
+  }
+}
