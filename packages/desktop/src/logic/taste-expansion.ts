@@ -74,6 +74,10 @@ export interface ExpansionEntry {
   albumTitle: string;
   /** Acquisition handle once resolved against the provider. */
   providerRef?: string;
+  /** Plugin that took the acquisition (routes retries/cancels back to it). */
+  providerId?: string;
+  /** Human-readable annotation for the feed (e.g. why it was abandoned). */
+  note?: string;
   state: ExpansionEntryState;
   /** One re-search has already been issued. */
   retried: boolean;

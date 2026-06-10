@@ -96,6 +96,13 @@ export const IPC = {
   logsGet: "musex:logs:get", // -> LogEntryDto[] (snapshot of the in-memory ring buffer)
   logsAppend: "musex:logs:append", // (RendererLogEntry[]) -> void (renderer console forwarding)
   logsEvent: "musex:logs:event", // push: main -> renderer LogEntryDto (live viewer updates)
+  expansionGetState: "musex:expansion:getState", // -> ExpansionStateDto
+  expansionSetPrefs: "musex:expansion:setPrefs", // (ExpansionPrefsDto) -> void
+  expansionRunNow: "musex:expansion:runNow", // -> ExpansionStateDto (after the cycle)
+  expansionReject: "musex:expansion:reject", // (artistName) -> void ("Not for me")
+  newReleaseWatchGet: "musex:watch:get", // (artistName) -> boolean | null (null = unsupported)
+  newReleaseWatchSet: "musex:watch:set", // (artistName, enabled) -> void
+  newReleaseWatchList: "musex:watch:list", // -> string[] (watched artist names)
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -213,6 +220,42 @@ export interface RendererLogEntry {
   level: LogLevel;
   text: string;
 }
+
+// ---- Taste expansion (optimistic acquisition) ----
+
+export type ExpansionPrefsDto = {
+  enabled: boolean;
+  /** Weekly acquisition budget (albums). */
+  albumsPerWeek: number;
+  /** Conservative → aggressive slider, 0–100. */
+  aggressiveness: number;
+};
+
+export type ExpansionEntryDto = {
+  artistName: string;
+  albumTitle: string;
+  state: "suggested" | "requested" | "landed" | "abandoned" | "rejected";
+  deepening: boolean;
+  retried: boolean;
+  provenance: { seed: string; match: number; hop: 1 | 2; via?: string };
+  note?: string;
+  createdAt: number;
+  requestedAt?: number;
+  landedAt?: number;
+  abandonedAt?: number;
+  rejectedAt?: number;
+};
+
+export type ExpansionStateDto = {
+  prefs: ExpansionPrefsDto;
+  running: boolean;
+  lastRunAt: number | null;
+  lastSummary: string | null;
+  /** Which provider capabilities are present (drives the status line). */
+  available: { similar: boolean; acquisition: boolean };
+  /** Newest first. */
+  entries: ExpansionEntryDto[];
+};
 
 export type PluginNotification = {
   pluginId: string;
@@ -391,4 +434,15 @@ export interface MusexApi {
   logsAppend(entries: RendererLogEntry[]): Promise<void>;
   /** Subscribe to live log appends; returns an unsubscribe function. */
   onLogsEvent(cb: (e: LogEntryDto) => void): () => void;
+  /** Taste expansion: prefs + status + the attempt ledger feed. */
+  expansionGetState(): Promise<ExpansionStateDto>;
+  expansionSetPrefs(prefs: ExpansionPrefsDto): Promise<void>;
+  /** Run a cycle immediately (budget still applies); resolves when done. */
+  expansionRunNow(): Promise<ExpansionStateDto>;
+  /** "Not for me": blacklist the artist + unmonitor whatever was requested. */
+  expansionReject(artistName: string): Promise<void>;
+  /** Per-artist "fetch new releases" watch; null = no provider supports it. */
+  newReleaseWatchGet(artistName: string): Promise<boolean | null>;
+  newReleaseWatchSet(artistName: string, enabled: boolean): Promise<void>;
+  newReleaseWatchList(): Promise<string[]>;
 }

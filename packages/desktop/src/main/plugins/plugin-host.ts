@@ -428,6 +428,114 @@ export class PluginHost {
     return results.flat();
   }
 
+  // ── taste expansion + new-release watching ────────────────────────────────
+
+  /** What the expansion coordinator needs: a scored similar source and an
+   *  acquisition provider. */
+  expansionCapabilities(): { similar: boolean; acquisition: boolean } {
+    return {
+      similar: this.registry.similarProviders.some((p) => p.provider.similarArtists !== undefined),
+      acquisition: this.registry.acquisitionProviders.length > 0,
+    };
+  }
+
+  /** Raw similar-artist list (with match scores) from the FIRST provider
+   *  implementing it — expansion needs one coherent scoring source, not the
+   *  merged/deduped panel view. [] on failure/none. */
+  async similarArtistsScored(artistName: string): Promise<SimilarItem[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
+    for (const p of this.registry.similarProviders) {
+      if (p.provider.similarArtists === undefined) continue;
+      try {
+        const items = await withTimeout(p.provider.similarArtists(artistName), timeoutMs);
+        if (Array.isArray(items) && items.length > 0) return items;
+      } catch (err) {
+        console.error(`[plugins] ${p.pluginId} similarArtists failed for expansion:`, err);
+      }
+    }
+    return [];
+  }
+
+  /** An artist's most popular albums (best first) from the first provider
+   *  implementing topAlbums. [] on failure/none. */
+  async topAlbums(artistName: string): Promise<{ title: string }[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
+    for (const p of this.registry.similarProviders) {
+      if (p.provider.topAlbums === undefined) continue;
+      try {
+        const items = await withTimeout(p.provider.topAlbums(artistName), timeoutMs);
+        if (Array.isArray(items)) {
+          return items.filter((a) => typeof a?.title === "string" && a.title.length > 0);
+        }
+      } catch (err) {
+        console.error(`[plugins] ${p.pluginId} topAlbums failed:`, err);
+      }
+    }
+    return [];
+  }
+
+  /** Unmonitor a previously acquired album (abandon / "Not for me"). Routed
+   *  to the provider that took the acquire; no-op if it can't cancel. */
+  async cancelAlbum(providerId: string, providerRef: string): Promise<void> {
+    const entry = this.registry.acquisitionProviders.find((p) => p.pluginId === providerId);
+    const cancel = entry?.provider.cancelAlbum;
+    if (entry === undefined || cancel === undefined) return;
+    try {
+      await cancel.call(entry.provider, providerRef);
+    } catch (err) {
+      console.error(`[plugins] ${entry.pluginId} cancelAlbum failed:`, err);
+    }
+  }
+
+  /** Per-artist "fetch new releases" watch — first provider implementing it. */
+  async watchNewReleases(artistName: string, enabled: boolean): Promise<void> {
+    for (const p of this.registry.acquisitionProviders) {
+      const watch = p.provider.watchNewReleases;
+      if (watch === undefined) continue;
+      try {
+        await watch.call(p.provider, artistName, enabled);
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`[plugin:${p.pluginId}] watch failed: ${msg}`);
+      }
+    }
+    throw new Error("No acquisition provider supports new-release watching");
+  }
+
+  /** null = no provider supports watching (renderer hides the toggle). */
+  async isWatchingNewReleases(artistName: string): Promise<boolean | null> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? ACQUISITION_TIMEOUT_MS;
+    for (const p of this.registry.acquisitionProviders) {
+      const probe = p.provider.isWatchingNewReleases;
+      if (probe === undefined) continue;
+      try {
+        return await withTimeout(probe.call(p.provider, artistName), timeoutMs);
+      } catch (err) {
+        console.error(`[plugins] ${p.pluginId} isWatchingNewReleases failed:`, err);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  async listWatchedArtists(): Promise<string[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? ACQUISITION_TIMEOUT_MS;
+    for (const p of this.registry.acquisitionProviders) {
+      const list = p.provider.listWatchedArtists;
+      if (list === undefined) continue;
+      try {
+        const names = await withTimeout(list.call(p.provider), timeoutMs);
+        if (Array.isArray(names)) {
+          return names.filter((n): n is string => typeof n === "string" && n.length > 0);
+        }
+      } catch (err) {
+        console.error(`[plugins] ${p.pluginId} listWatchedArtists failed:`, err);
+      }
+    }
+    return [];
+  }
+
   listTrackActions(): { pluginId: string; id: string; label: string; icon?: string }[] {
     return this.registry.trackActions.map((r) => ({
       pluginId: r.pluginId,

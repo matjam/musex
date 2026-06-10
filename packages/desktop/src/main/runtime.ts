@@ -15,6 +15,7 @@ import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
+import { ExpansionCoordinator } from "./expansion/coordinator.js";
 import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
 
@@ -45,6 +46,7 @@ export class Runtime {
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
+  expansion!: ExpansionCoordinator;
   /** Constructed in init() — drives the plugin events pipeline (trackStarted/
    *  paused/resumed/trackEnded/scrobble) + the recently-played history. */
   playbackMonitor!: PlaybackMonitor;
@@ -149,6 +151,20 @@ export class Runtime {
       },
     });
     await this.plugins.loadAll();
+
+    // Taste expansion: host-owned coordinator over the plugin providers
+    // (similar/lastfm + acquisition/lidarr). Pure planning lives in
+    // logic/taste-expansion.ts; this just wires its inputs.
+    this.expansion = new ExpansionCoordinator({
+      host: this.plugins,
+      getLibrary: () => this.libraries[0] ?? null,
+      getToken: () => this.token,
+      listArtists: (lib, token) => this.gateway.listArtists(lib, token),
+      listAlbums: (lib, artistId, token) => this.gateway.listAlbums(lib, artistId, token),
+      topArtists: () => this.tasteProfile.topArtists(),
+      trackStats: () => this.tasteProfile.trackStats(),
+    });
+    this.expansion.start();
   }
 
   async restore(): Promise<void> {
