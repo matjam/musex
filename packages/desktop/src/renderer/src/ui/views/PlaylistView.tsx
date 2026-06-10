@@ -194,7 +194,7 @@ export function PlaylistView({ playlist }: Props) {
   return (
     <div className="album-detail">
       <div className="album-header">
-        <AlbumArt thumb={live.thumb} className="album-header-art" />
+        <AlbumArt thumb={live.thumb} className="album-header-art" label={live.title} />
         <div className="album-header-meta">
           <div className="album-meta-label">Playlist</div>
           <h1 className="album-meta-title">{live.title}</h1>

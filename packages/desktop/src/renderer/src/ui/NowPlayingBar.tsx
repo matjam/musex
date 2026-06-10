@@ -64,7 +64,12 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
     <div className="now-playing-bar">
       {/* Left: art + track meta */}
       <div className="np-left">
-        <AlbumArt thumb={track?.thumb} className="np-art" />
+        <AlbumArt
+          thumb={track?.thumb}
+          className="np-art"
+          label={track?.albumTitle ?? track?.title}
+          kind="track"
+        />
         <div className="np-meta">
           <div className="np-title">{track?.title ?? ""}</div>
           <div className="np-sub">{track && <TrackSubLinks track={track} />}</div>

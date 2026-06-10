@@ -29,7 +29,12 @@ export function GridCard({ thumb, title, subtitle, round = false, badge, onOpen,
     // biome-ignore lint/a11y/useSemanticElements: div needed — it contains the play <button> (button-in-button is invalid)
     <div className="grid-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={onKey}>
       <div className="grid-card-artwrap">
-        <AlbumArt thumb={thumb} className={`grid-card-art${round ? " artist-art" : ""}`} />
+        <AlbumArt
+          thumb={thumb}
+          className={`grid-card-art${round ? " artist-art" : ""}`}
+          label={title}
+          kind={round ? "artist" : "album"}
+        />
         {badge && <span className="grid-card-badge">{badge}</span>}
         {onPlay && (
           <button

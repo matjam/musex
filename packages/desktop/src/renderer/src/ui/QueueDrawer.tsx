@@ -66,7 +66,12 @@ function UpcomingRow({
         onKeyDown={handleKeyDown}
         aria-label={`Play ${track.title} by ${track.artistName}`}
       >
-        <AlbumArt thumb={track.thumb} className="queue-row-art" />
+        <AlbumArt
+          thumb={track.thumb}
+          className="queue-row-art"
+          label={track.albumTitle ?? track.title}
+          kind="track"
+        />
         <div className="queue-row-meta">
           <div className="queue-row-title">{track.title}</div>
           <div className="queue-row-sub">
@@ -185,7 +190,12 @@ export function QueueDrawer({ open, onClose }: QueueDrawerProps) {
               <div className="queue-section">
                 <div className="queue-section-label">Now playing</div>
                 <div className="queue-now-playing">
-                  <AlbumArt thumb={nowPlaying.thumb} className="queue-row-art" />
+                  <AlbumArt
+                    thumb={nowPlaying.thumb}
+                    className="queue-row-art"
+                    label={nowPlaying.albumTitle ?? nowPlaying.title}
+                    kind="track"
+                  />
                   <div className="queue-row-meta">
                     <div className="queue-row-title queue-row-title--playing">
                       {nowPlaying.title}

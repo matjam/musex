@@ -82,7 +82,12 @@ export function SearchView() {
                 className="grid-card"
                 onClick={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
               >
-                <AlbumArt thumb={artist.thumb} className="grid-card-art artist-art" />
+                <AlbumArt
+                  thumb={artist.thumb}
+                  className="grid-card-art artist-art"
+                  label={artist.name}
+                  kind="artist"
+                />
                 <div className="grid-card-title">{artist.name}</div>
               </button>
             ))}
@@ -101,7 +106,12 @@ export function SearchView() {
                 className="grid-card"
                 onClick={() => dispatch({ type: "navigate", view: { name: "album", album } })}
               >
-                <AlbumArt thumb={album.thumb} className="grid-card-art" />
+                <AlbumArt
+                  thumb={album.thumb}
+                  className="grid-card-art"
+                  label={album.title}
+                  kind="album"
+                />
                 <div className="grid-card-title">{album.title}</div>
                 {album.year != null && <div className="grid-card-sub">{album.year}</div>}
               </button>

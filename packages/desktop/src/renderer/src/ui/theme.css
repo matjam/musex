@@ -2147,3 +2147,12 @@ img.queue-row-art {
   text-decoration: none;
   opacity: 0.7;
 }
+
+/* ---- Missing-artwork placeholder (AlbumArt fallback) ---- */
+
+.art-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(231, 233, 238, 0.45);
+}

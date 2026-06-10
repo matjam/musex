@@ -81,7 +81,12 @@ export function TrackDetailPanel() {
         </button>
       </div>
 
-      <AlbumArt thumb={track.thumb} className="detail-art" />
+      <AlbumArt
+        thumb={track.thumb}
+        className="detail-art"
+        label={track.albumTitle ?? track.title}
+        kind="track"
+      />
 
       {/* Hierarchy crumb: Artist › Album › Track */}
       <div className="breadcrumb detail-crumb">

@@ -86,7 +86,12 @@ export function AlbumDetailView({ album }: Props) {
       </div>
 
       <div className="album-header">
-        <AlbumArt thumb={album.thumb} className="album-header-art" />
+        <AlbumArt
+          thumb={album.thumb}
+          className="album-header-art"
+          label={album.title}
+          kind="album"
+        />
         <div className="album-header-meta">
           <div className="album-meta-label">Album</div>
           <h1 className="album-meta-title">{album.title}</h1>
