@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  # Manual rebuild of an existing release's DMG (e.g. after a CI-only fix):
+  # runs the build job against main HEAD and uploads to the given tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)build and upload the DMG for"
+        required: true
 
 permissions:
   contents: write
@@ -11,6 +18,7 @@ permissions:
 
 jobs:
   release-please:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -26,7 +34,10 @@ jobs:
 
   build:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    # Runs when release-please just cut a release, or on manual dispatch for an
+    # existing tag (needs.release-please is skipped then — always() lets the
+    # job evaluate its own condition instead of being skipped with it).
+    if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     # macos-latest is arm64 — matches the darwin-arm64 mpv vendor pin.
     runs-on: macos-latest
     steps:
@@ -67,7 +78,7 @@ jobs:
       - name: Upload DMG to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
         run: |
           gh release upload "$TAG_NAME" \
             packages/desktop/release/*.dmg \
