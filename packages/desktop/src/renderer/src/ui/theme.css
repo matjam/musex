@@ -1872,3 +1872,24 @@ img.queue-row-art {
   align-items: center;
   gap: 14px;
 }
+
+/* ---- Quiet inline link (artist/album names in subtitles) ---- */
+
+.link-quiet {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.link-quiet:hover:not(:disabled) {
+  text-decoration: underline;
+  color: var(--text);
+}
+
+.link-quiet:disabled {
+  cursor: default;
+}

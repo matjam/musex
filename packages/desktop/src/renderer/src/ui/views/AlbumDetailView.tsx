@@ -79,10 +79,35 @@ export function AlbumDetailView({ album }: Props) {
           <h1 className="album-meta-title">{album.title}</h1>
           <div className="album-meta-by">
             {fetch.status === "ok" && fetch.tracks.length > 0 && (
-              <span className="album-meta-muted">
-                {album.year != null ? `${album.year} · ` : ""}
-                {tracks.length} song{tracks.length !== 1 ? "s" : ""} · {totalMin} min
-              </span>
+              <>
+                {tracks[0] && tracks[0].artistName !== "" && (
+                  <>
+                    <button
+                      type="button"
+                      className="link-quiet"
+                      disabled={!tracks[0].artistId}
+                      onClick={() => {
+                        const t = tracks[0];
+                        if (!t || !t.artistId) return;
+                        dispatch({
+                          type: "navigate",
+                          view: {
+                            name: "artist",
+                            artist: { id: t.artistId, serverId: t.serverId, name: t.artistName },
+                          },
+                        });
+                      }}
+                    >
+                      {tracks[0].artistName}
+                    </button>
+                    <span className="album-meta-muted">{" · "}</span>
+                  </>
+                )}
+                <span className="album-meta-muted">
+                  {album.year != null ? `${album.year} · ` : ""}
+                  {tracks.length} song{tracks.length !== 1 ? "s" : ""} · {totalMin} min
+                </span>
+              </>
             )}
           </div>
           {fetch.status === "ok" && tracks.length > 0 && (

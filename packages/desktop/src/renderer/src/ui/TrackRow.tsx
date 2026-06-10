@@ -2,6 +2,7 @@ import type { Track } from "@musex/core";
 import { AudioLines, MoreHorizontal } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { formatDuration } from "../util/format";
+import { TrackSubLinks } from "./TrackSubLinks";
 
 interface Props {
   track: Track;
@@ -31,9 +32,6 @@ export function TrackRow({
   onActivate,
   onMenu,
 }: Props) {
-  const subtitle =
-    track.albumTitle != null ? `${track.artistName} · ${track.albumTitle}` : track.artistName;
-
   function activate(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -67,7 +65,11 @@ export function TrackRow({
       </span>
       <span className="track-main">
         <span className="track-title">{track.title}</span>
-        {showSubtitle && <span className="track-rowsub">{subtitle}</span>}
+        {showSubtitle && (
+          <span className="track-rowsub">
+            <TrackSubLinks track={track} />
+          </span>
+        )}
       </span>
       {onMenu && (
         <button

@@ -4,6 +4,7 @@ import type { DragEvent, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { usePlayer } from "../state/player";
 import { AlbumArt } from "./AlbumArt";
+import { TrackSubLinks } from "./TrackSubLinks";
 
 const MAX_UPCOMING_ROWS = 100;
 
@@ -35,9 +36,6 @@ function UpcomingRow({
   onDragLeave,
   onDrop,
 }: UpcomingRowProps) {
-  const sub =
-    track.albumTitle != null ? `${track.artistName} · ${track.albumTitle}` : track.artistName;
-
   function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -71,7 +69,9 @@ function UpcomingRow({
         <AlbumArt thumb={track.thumb} className="queue-row-art" />
         <div className="queue-row-meta">
           <div className="queue-row-title">{track.title}</div>
-          <div className="queue-row-sub">{sub}</div>
+          <div className="queue-row-sub">
+            <TrackSubLinks track={track} />
+          </div>
         </div>
       </div>
       <button
@@ -174,9 +174,7 @@ export function QueueDrawer({ open, onClose }: QueueDrawerProps) {
                       {nowPlaying.title}
                     </div>
                     <div className="queue-row-sub">
-                      {nowPlaying.albumTitle != null
-                        ? `${nowPlaying.artistName} · ${nowPlaying.albumTitle}`
-                        : nowPlaying.artistName}
+                      <TrackSubLinks track={nowPlaying} />
                     </div>
                   </div>
                 </div>

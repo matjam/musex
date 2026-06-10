@@ -14,6 +14,7 @@ import type { KeyboardEvent, MouseEvent } from "react";
 import { usePlayer } from "../state/player";
 import { formatDuration } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
+import { TrackSubLinks } from "./TrackSubLinks";
 
 interface NowPlayingBarProps {
   onToggleQueue?: () => void;
@@ -53,12 +54,6 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
   const shuffle = state.queue?.shuffle ?? false;
   const repeat = state.queue?.repeat ?? "none";
   const repeatActive = repeat === "all" || repeat === "one";
-  const metaSub =
-    track === undefined
-      ? ""
-      : track.albumTitle != null
-        ? `${track.artistName} · ${track.albumTitle}`
-        : track.artistName;
 
   return (
     <div className="now-playing-bar">
@@ -67,7 +62,7 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
         <AlbumArt thumb={track?.thumb} className="np-art" />
         <div className="np-meta">
           <div className="np-title">{track?.title ?? ""}</div>
-          <div className="np-sub">{metaSub}</div>
+          <div className="np-sub">{track && <TrackSubLinks track={track} />}</div>
         </div>
       </div>
 
