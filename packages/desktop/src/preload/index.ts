@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { MusexApi, PlaybackEngineEvent, PluginNotification } from "../shared/ipc-contract.js";
+import type {
+  MusexApi,
+  NavigateToPayload,
+  PlaybackEngineEvent,
+  PluginNotification,
+} from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 
 const api: MusexApi = {
@@ -82,6 +87,11 @@ const api: MusexApi = {
   trackDetailGet: (track) => ipcRenderer.invoke(IPC.trackDetailGet, track),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   radioNext: (args) => ipcRenderer.invoke(IPC.radioNext, args),
+  onNavigateTo: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: NavigateToPayload) => cb(p);
+    ipcRenderer.on(IPC.navigateTo, listener);
+    return () => ipcRenderer.removeListener(IPC.navigateTo, listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("musex", api);

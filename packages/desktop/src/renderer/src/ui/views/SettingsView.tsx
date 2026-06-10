@@ -172,7 +172,8 @@ export function SettingsView() {
 
 function KeyboardShortcutsSection() {
   return (
-    <div className="settings-section">
+    // id is the scroll anchor for ⌘/ + the app menu's Help → Keyboard Shortcuts.
+    <div className="settings-section" id="settings-shortcuts">
       <div className="settings-section-title">Keyboard Shortcuts</div>
       {SHORTCUT_GROUPS.map((group) => (
         <Fragment key={group.title}>

@@ -75,6 +75,7 @@ export const IPC = {
   trackDetailGet: "musex:trackDetail:get", // (trackInfo) -> TrackDetailDto[]
   openExternal: "musex:openExternal", // (url) -> void (http/https only)
   radioNext: "musex:radio:next", // (RadioNextArgs) -> Track[]
+  navigateTo: "musex:navigateTo", // push: main -> renderer NavigateToPayload (app menu navigation)
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -140,6 +141,10 @@ export interface PluginInfo {
   status: PluginStatus;
   error?: string;
 }
+/** Main → renderer navigation push (application menu items). Deliberately a
+ *  narrow union — widen as more menu entries need to deep-link into the UI. */
+export type NavigateToPayload = { view: "settings"; section?: "shortcuts" };
+
 export type PluginNotification = {
   pluginId: string;
   message: string;
@@ -279,4 +284,6 @@ export interface MusexApi {
   /** Radio refill: fan out to plugin recommenders, resolve suggestions against
    *  the library, return playable tracks (proxy-baked thumbs). May be empty. */
   radioNext(args: RadioNextArgs): Promise<Track[]>;
+  /** Subscribe to app-menu navigation pushes; returns an unsubscribe function. */
+  onNavigateTo(cb: (p: NavigateToPayload) => void): () => void;
 }

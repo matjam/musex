@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppProvider, useApp } from "./state/app";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
+import { revealShortcutsSection } from "./ui/hooks/useKeyboardShortcuts";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
@@ -14,8 +15,16 @@ import { TopBar } from "./ui/TopBar";
 import "./ui/theme.css";
 
 function Inner() {
-  const { auth } = useApp();
+  const { auth, dispatch } = useApp();
   const [queueOpen, setQueueOpen] = useState(false);
+
+  // App-menu navigation pushes (Help → Keyboard Shortcuts sends ⌘/'s target).
+  useEffect(() => {
+    return window.musex.onNavigateTo((p) => {
+      dispatch({ type: "navigate", view: { name: "settings" } });
+      if (p.section === "shortcuts") revealShortcutsSection();
+    });
+  }, [dispatch]);
 
   if (auth === "restoring") {
     return (

@@ -25,6 +25,7 @@ export const SHORTCUT_GROUPS: { title: string; items: { combo: string; label: st
     items: [
       { combo: "⌘K", label: "Focus the search box" },
       { combo: "⌘,", label: "Open Settings" },
+      { combo: "⌘/", label: "Help / keyboard shortcuts" },
       { combo: "⌥⇧H", label: "Go to Home" },
       { combo: "⌥⇧0", label: "Go to Tracks" },
       { combo: "⌥⇧3", label: "Go to Artists" },
@@ -45,6 +46,15 @@ export const SHORTCUT_GROUPS: { title: string; items: { combo: string; label: st
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
+}
+
+/** Scroll the Settings "Keyboard Shortcuts" section into view. Call right
+ *  after navigating to settings — the rAF lets the view commit first. Shared
+ *  by the ⌘/ handler here and the app-menu navigateTo push (App.tsx). */
+export function revealShortcutsSection(): void {
+  requestAnimationFrame(() =>
+    document.getElementById("settings-shortcuts")?.scrollIntoView({ behavior: "smooth" }),
+  );
 }
 
 /** App-wide keyboard shortcuts (Spotify mac bindings where they exist, musex
@@ -96,6 +106,12 @@ export function useKeyboardShortcuts(toggleQueue: () => void): void {
         if (e.code === "Comma") {
           handled();
           dispatch({ type: "navigate", view: { name: "settings" } });
+          return;
+        }
+        if (e.code === "Slash") {
+          handled();
+          dispatch({ type: "navigate", view: { name: "settings" } });
+          revealShortcutsSection();
           return;
         }
         if (typing) return; // ⌘+arrows must keep their text-editing meaning

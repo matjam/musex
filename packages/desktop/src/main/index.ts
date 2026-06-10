@@ -1,8 +1,9 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow } from "electron";
-import { IPC } from "../shared/ipc-contract.js";
+import { app, BrowserWindow, Menu, shell } from "electron";
+import { IPC, type NavigateToPayload } from "../shared/ipc-contract.js";
 import { registerIpc } from "./ipc.js";
+import { buildAppMenu } from "./menu.js";
 import { Runtime } from "./runtime.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -51,6 +52,18 @@ app.whenReady().then(async () => {
     runtime.setPluginNotifySink((p) => {
       if (!win.isDestroyed()) win.webContents.send(IPC.pluginsNotify, p);
     });
+    // Rebuilt per window so Help → Keyboard Shortcuts targets the current one
+    // (setApplicationMenu is idempotent; stale closures would hit a destroyed
+    // window after macOS re-activate).
+    Menu.setApplicationMenu(
+      buildAppMenu({
+        showShortcuts: () => {
+          const payload: NavigateToPayload = { view: "settings", section: "shortcuts" };
+          if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);
+        },
+        openLogsFolder: () => void shell.openPath(app.getPath("userData")),
+      }),
+    );
   };
 
   wireEngineEvents(createWindow());
