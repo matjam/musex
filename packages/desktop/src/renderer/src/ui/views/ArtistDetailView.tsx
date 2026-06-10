@@ -7,6 +7,7 @@ import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { AlbumArt } from "../AlbumArt";
 import { StarRating } from "../StarRating";
+import { WatchNewReleasesButton } from "../WatchNewReleasesButton";
 
 type FetchState =
   | { status: "loading" }
@@ -188,6 +189,7 @@ export function ArtistDetailView({ artist }: Props) {
           >
             <Sparkles size={16} />
           </button>
+          <WatchNewReleasesButton artistName={artist.name} />
         </div>
       </div>
 

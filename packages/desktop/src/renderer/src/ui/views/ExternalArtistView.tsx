@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { GridCard } from "../GridCard";
+import { WatchNewReleasesButton } from "../WatchNewReleasesButton";
 
 type FetchState =
   | { status: "loading" }
@@ -147,6 +148,7 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
               ? "Monitoring entire artist"
               : "Monitor entire artist"}
         </span>
+        <WatchNewReleasesButton artistName={artistName} />
       </div>
       <div className="browse-sub">
         Discography via plugins — albums you own open in your library.

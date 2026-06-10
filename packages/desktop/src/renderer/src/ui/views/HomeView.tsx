@@ -40,6 +40,7 @@ export function HomeView() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [mixThumbs, setMixThumbs] = useState<Map<string, string[]>>(new Map());
   const [pluginSections, setPluginSections] = useState<SectionDto[]>([]);
+  const [discoveries, setDiscoveries] = useState<Artist[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +70,29 @@ export function HomeView() {
         if (cancelled) return;
         setArtists(pickRandom(ar, RANDOM_COUNT));
         setAlbums(pickRandom(al, RANDOM_COUNT));
+        // Landed taste-expansion bets from the last 30 days, resolved to
+        // library artists — the row that gets new discoveries listened to.
+        window.musex
+          .expansionGetState()
+          .then((exp) => {
+            if (cancelled) return;
+            const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+            const byKey = new Map(ar.map((a) => [a.name.trim().toLowerCase(), a]));
+            const found: Artist[] = [];
+            const seen = new Set<string>();
+            for (const e of exp.entries) {
+              if (e.state !== "landed" || (e.landedAt ?? 0) < cutoff) continue;
+              const key = e.artistName.trim().toLowerCase();
+              if (seen.has(key)) continue;
+              seen.add(key);
+              const artist = byKey.get(key);
+              if (artist) found.push(artist);
+            }
+            setDiscoveries(found.slice(0, RANDOM_COUNT));
+          })
+          .catch(() => {
+            // expansion is optional — no row when unavailable
+          });
         // Collage art for the mood-mix cards, from the same album fetch.
         setMixThumbs(
           new Map(
@@ -135,6 +159,25 @@ export function HomeView() {
           ))}
         </div>
       </section>
+
+      {discoveries.length > 0 && (
+        <section className="home-row">
+          <h3 className="browse-title">New discoveries</h3>
+          <div className="browse-grid">
+            {discoveries.map((a) => (
+              <GridCard
+                key={a.id}
+                thumb={a.thumb}
+                title={a.name}
+                subtitle="Added for you"
+                round
+                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist: a } })}
+                onPlay={() => void playArtist(a)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {topPlaylists.length > 0 && (
         <section className="home-row">
