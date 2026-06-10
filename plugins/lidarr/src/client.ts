@@ -8,6 +8,21 @@
  * (Lidarr/Lidarr src/Lidarr.Api.V1/openapi.json, 2026-06-09).
  */
 
+/** Minimal response shape the client needs from a transport. */
+export interface HttpResponse {
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+}
+
+/** Minimal fetch-like transport (implementations live in transport.ts). The
+ *  client depends on this instead of global fetch so TLS behavior can be
+ *  swapped (node:https with rejectUnauthorized:false for self-signed certs). */
+export type HttpFn = (
+  url: string,
+  init: { method: string; headers: Record<string, string>; body?: string },
+) => Promise<HttpResponse>;
+
 /** A non-2xx response from Lidarr (HTTP status + body text). */
 export class LidarrError extends Error {
   constructor(
@@ -27,7 +42,7 @@ export class LidarrClient {
     private readonly deps: {
       baseUrl: string;
       apiKey: string;
-      fetchFn: typeof fetch;
+      httpFn: HttpFn;
     },
   ) {
     this.baseUrl = deps.baseUrl.replace(/\/+$/, "");
@@ -51,7 +66,7 @@ export class LidarrClient {
   }
 
   private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
-    const res = await this.deps.fetchFn(url, {
+    const res = await this.deps.httpFn(url, {
       method,
       headers: {
         "X-Api-Key": this.deps.apiKey,

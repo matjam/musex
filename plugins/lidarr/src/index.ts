@@ -23,6 +23,7 @@
 import type { AcquirableAlbum, AcquisitionStatusItem, PluginContext } from "@musex/plugin-api";
 import { LidarrClient } from "./client.js";
 import { deriveAlbumState } from "./state.js";
+import { createNodeTransport, fetchTransport } from "./transport.js";
 
 /** Album metadata may not exist immediately after adding an artist (Lidarr
  *  refreshes it asynchronously) — poll a few times before giving up. */
@@ -115,6 +116,12 @@ export async function activate(ctx: PluginContext): Promise<void> {
       help: "e.g. http://192.168.1.5:8686",
     },
     { kind: "password", key: "apiKey", label: "API key" },
+    {
+      kind: "toggle",
+      key: "allowSelfSigned",
+      label: "Allow self-signed certificates",
+      help: "For Lidarr behind a reverse proxy with an internal/self-signed cert",
+    },
     { kind: "action", key: "test", label: "Test connection" },
     { kind: "status", key: "connection" },
   ]);
@@ -133,7 +140,13 @@ export async function activate(ctx: PluginContext): Promise<void> {
   const client = async (): Promise<LidarrClient | null> => {
     const cfg = await configured();
     if (!cfg) return null;
-    return new LidarrClient({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, fetchFn: ctx.fetch });
+    // Global fetch cannot relax TLS per-request; when the user opts in to
+    // self-signed certs, swap in the node:https transport.
+    const allowSelfSigned = (await ctx.storage.get<boolean>("allowSelfSigned")) === true;
+    const httpFn = allowSelfSigned
+      ? createNodeTransport({ allowSelfSigned: true })
+      : fetchTransport;
+    return new LidarrClient({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, httpFn });
   };
 
   // ── Test connection ─────────────────────────────────────────────────────
