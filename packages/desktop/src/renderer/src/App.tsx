@@ -11,6 +11,7 @@ import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { Shell } from "./ui/Shell";
 import { ShortcutsModal } from "./ui/ShortcutsModal";
 import { SignIn } from "./ui/SignIn";
+import { SplashScreen } from "./ui/SplashScreen";
 import { Toasts } from "./ui/Toasts";
 import { TopBar } from "./ui/TopBar";
 import "./ui/theme.css";
@@ -35,13 +36,10 @@ function Inner() {
 
   if (auth === "restoring") {
     return (
-      <div className="signin-screen">
-        <div className="signin-logo brand">
-          mus<span>ex</span>
-        </div>
-        <div className="signin-tagline">Restoring session…</div>
+      <>
+        <SplashScreen />
         {about}
-      </div>
+      </>
     );
   }
   if (auth === "signed-in") {

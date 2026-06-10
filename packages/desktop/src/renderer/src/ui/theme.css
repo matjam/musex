@@ -105,6 +105,42 @@ textarea:focus {
   color: transparent;
 }
 
+/* ---- Splash (session restore) ---- */
+
+.splash-logo {
+  font-size: 76px;
+  letter-spacing: 0.01em;
+  margin-bottom: 18px;
+  animation: splash-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes splash-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+.splash-line {
+  opacity: 0.55;
+  font-size: 13.5px;
+  animation: splash-line-in 0.35s ease-out;
+}
+
+@keyframes splash-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 0.55;
+    transform: translateY(0);
+  }
+}
+
 /* ---- Window chrome (titlebar) ---- */
 
 .titlebar {
