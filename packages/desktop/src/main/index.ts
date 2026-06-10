@@ -3,9 +3,14 @@ import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, Menu, shell } from "electron";
 import { IPC, type NavigateToPayload } from "../shared/ipc-contract.js";
 import { registerIpc } from "./ipc.js";
+import { installConsoleTee, logBuffer } from "./logging.js";
 import { buildAppMenu } from "./menu.js";
 import { Runtime } from "./runtime.js";
 import { setupAutoUpdater } from "./updater.js";
+
+// First thing, before any startup code logs: tee main's console into the
+// in-memory buffer behind Help → Show Logs.
+installConsoleTee(logBuffer);
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -47,6 +52,13 @@ app.whenReady().then(async () => {
   // guard against a closed-but-not-yet-GCed window (macOS keeps the app alive
   // windowless).
   const wireEngineEvents = (win: BrowserWindow): void => {
+    // Live log streaming to the viewer. Buffer appends triggered by a
+    // renderer logsAppend flow back out here — that's the unified view
+    // (the viewer shows both processes), not a loop: nothing here logs.
+    const offLogs = logBuffer.onAppend((entry) => {
+      if (!win.isDestroyed()) win.webContents.send(IPC.logsEvent, entry);
+    });
+    win.on("closed", offLogs);
     runtime.mpv.setSink((e) => {
       // The playback monitor taps position ticks for scrobble accounting,
       // independent of (and before) the renderer forward.
@@ -71,6 +83,10 @@ app.whenReady().then(async () => {
         },
         showShortcuts: () => {
           const payload: NavigateToPayload = { view: "settings", section: "shortcuts" };
+          if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);
+        },
+        showLogs: () => {
+          const payload: NavigateToPayload = { view: "logs" };
           if (!win.isDestroyed()) win.webContents.send(IPC.navigateTo, payload);
         },
         openLogsFolder: () => void shell.openPath(app.getPath("userData")),

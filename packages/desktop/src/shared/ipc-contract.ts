@@ -93,6 +93,9 @@ export const IPC = {
   openExternal: "musex:openExternal", // (url) -> void (http/https only)
   radioNext: "musex:radio:next", // (RadioNextArgs) -> Track[]
   navigateTo: "musex:navigateTo", // push: main -> renderer NavigateToPayload (app menu navigation)
+  logsGet: "musex:logs:get", // -> LogEntryDto[] (snapshot of the in-memory ring buffer)
+  logsAppend: "musex:logs:append", // (RendererLogEntry[]) -> void (renderer console forwarding)
+  logsEvent: "musex:logs:event", // push: main -> renderer LogEntryDto (live viewer updates)
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -188,7 +191,28 @@ export interface PluginInfo {
 }
 /** Main → renderer navigation push (application menu items). Deliberately a
  *  narrow union — widen as more menu entries need to deep-link into the UI. */
-export type NavigateToPayload = { view: "settings"; section?: "shortcuts" } | { view: "about" };
+export type NavigateToPayload =
+  | { view: "settings"; section?: "shortcuts" }
+  | { view: "about" }
+  | { view: "logs" };
+
+// ---- Unified log buffer (Help → Show Logs) ----
+
+export type LogLevel = "debug" | "log" | "info" | "warn" | "error";
+
+export interface LogEntryDto {
+  ts: number; // epoch ms
+  source: "main" | "renderer";
+  level: LogLevel;
+  text: string;
+}
+
+/** What the renderer's console-forwarder sends; main stamps source. */
+export interface RendererLogEntry {
+  ts: number;
+  level: LogLevel;
+  text: string;
+}
 
 export type PluginNotification = {
   pluginId: string;
@@ -361,4 +385,10 @@ export interface MusexApi {
   radioNext(args: RadioNextArgs): Promise<Track[]>;
   /** Subscribe to app-menu navigation pushes; returns an unsubscribe function. */
   onNavigateTo(cb: (p: NavigateToPayload) => void): () => void;
+  /** Snapshot of the unified in-memory log buffer (main + renderer lines). */
+  logsGet(): Promise<LogEntryDto[]>;
+  /** Forward batched renderer console lines into the main-process buffer. */
+  logsAppend(entries: RendererLogEntry[]): Promise<void>;
+  /** Subscribe to live log appends; returns an unsubscribe function. */
+  onLogsEvent(cb: (e: LogEntryDto) => void): () => void;
 }

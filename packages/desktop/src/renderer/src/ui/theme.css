@@ -2491,6 +2491,116 @@ img.queue-row-art {
   overflow-y: auto;
 }
 
+/* ---- Log viewer (Help → Show Logs) ---- */
+
+.logs-modal {
+  width: min(920px, 92vw);
+  height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.logs-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logs-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.logs-copy-btn:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.logs-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.logs-empty {
+  opacity: 0.5;
+  padding: 10px 4px;
+}
+
+.logs-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 1px 0;
+}
+
+.logs-time {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.logs-source {
+  flex-shrink: 0;
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 0 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.logs-source--main {
+  color: var(--purple);
+  border: 1px solid color-mix(in srgb, var(--purple) 45%, transparent);
+}
+
+.logs-source--renderer {
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+}
+
+.logs-level {
+  flex-shrink: 0;
+  width: 42px;
+  color: var(--muted);
+}
+
+.logs-row--warn .logs-level,
+.logs-row--warn .logs-text {
+  color: var(--yellow);
+}
+
+.logs-row--error .logs-level,
+.logs-row--error .logs-text {
+  color: var(--red);
+}
+
+.logs-row--debug .logs-text {
+  color: var(--muted);
+}
+
+.logs-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-width: 0;
+}
+
 /* Secondary action button in the detail panel (e.g. "Similar Songs") */
 .detail-secondary {
   margin-top: 0;

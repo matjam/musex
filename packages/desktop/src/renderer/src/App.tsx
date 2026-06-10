@@ -7,6 +7,7 @@ import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
 import { AboutModal } from "./ui/AboutModal";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
+import { LogsModal } from "./ui/LogsModal";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { Shell } from "./ui/Shell";
 import { ShortcutsModal } from "./ui/ShortcutsModal";
@@ -21,18 +22,25 @@ function Inner() {
   const { togglePanel } = usePanel();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
 
-  // App-menu pushes (musex → About, Help → Keyboard Shortcuts like ⌘/).
+  // App-menu pushes (musex → About/Settings, Help → Shortcuts/Show Logs).
   useEffect(() => {
     return window.musex.onNavigateTo((p) => {
       if (p.view === "about") setAboutOpen(true);
+      else if (p.view === "logs") setLogsOpen(true);
       else if (p.section === "shortcuts") setShortcutsOpen(true);
       else dispatch({ type: "navigate", view: { name: "settings" } });
     });
   }, [dispatch]);
 
-  // Rendered in every auth state so the menu's About works pre-sign-in too.
-  const about = aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />;
+  // Rendered in every auth state so About / Logs work pre-sign-in too.
+  const about = (
+    <>
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
+      {logsOpen && <LogsModal onClose={() => setLogsOpen(false)} />}
+    </>
+  );
 
   if (auth === "restoring") {
     return (

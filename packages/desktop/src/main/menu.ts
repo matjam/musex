@@ -7,6 +7,8 @@ export interface AppMenuDeps {
   showSettings: () => void;
   /** Navigate the current window to Settings → Keyboard Shortcuts. */
   showShortcuts: () => void;
+  /** Open the unified log viewer (main + renderer console output). */
+  showLogs: () => void;
   /** Reveal the app's logs/data folder in Finder. */
   openLogsFolder: () => void;
   /** Interactive update check (dialogs for result). */
@@ -81,6 +83,10 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
           click: () => void shell.openExternal("https://github.com/matjam/musex/issues"),
         },
         { type: "separator" },
+        {
+          label: "Show Logs",
+          click: () => deps.showLogs(),
+        },
         {
           label: "Open Logs Folder",
           click: () => deps.openLogsFolder(),
