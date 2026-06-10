@@ -114,6 +114,30 @@ any state → rejected                                 ("Not for me": unmonitor 
    rendered as album/artist cards (navigable, playable) — closes the loop so
    bets get listened to and therefore scored by the taste profile.
 
+## New-release watching (per artist)
+
+Independent of (but shipped with) expansion: any artist can be marked
+**"Fetch new releases"** so future albums are downloaded automatically.
+
+- **UI:** a watch toggle on the artist detail page header (owned artists) and
+  on the External Artist view. Watched artists are listed in the Downloads
+  view ("Watching for new releases") with an unwatch action.
+- **Mechanics (Lidarr):** ensure the artist exists in Lidarr (added with
+  `monitor: "future"` if absent — monitors nothing existing), then set
+  `monitored: true` + `monitorNewItems: "all"`. Lidarr auto-monitors and
+  searches new albums as its metadata refresh discovers them. Unwatching sets
+  `monitorNewItems: "none"` ONLY — it never unmonitors albums the user
+  monitored separately.
+- **State:** Lidarr is the source of truth (no host-side copy to drift);
+  the toggle reads current state via the provider. Requires only the
+  acquisition provider — works with taste expansion off.
+- **Plugin API (additive, optional):**
+  `AcquisitionProvider.watchNewReleases?(artistName, enabled)` and
+  `AcquisitionProvider.isWatchingNewReleases?(artistName)`.
+- **IPC:** `newReleaseWatchGet(artistName)` → `boolean | null` (null = no
+  provider/unknown), `newReleaseWatchSet(artistName, enabled)`,
+  `newReleaseWatchList()` for the Downloads section.
+
 ## Feedback loop
 
 - The taste profile already scores plays/skips per artist; landed expansion
