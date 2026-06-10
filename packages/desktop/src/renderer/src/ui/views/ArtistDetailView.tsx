@@ -4,7 +4,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
+import { useRatings } from "../../state/ratings";
 import { AlbumArt } from "../AlbumArt";
+import { StarRating } from "../StarRating";
 
 type FetchState =
   | { status: "loading" }
@@ -18,11 +20,28 @@ interface Props {
 export function ArtistDetailView({ artist }: Props) {
   const { library, dispatch } = useApp();
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd } = usePlayer();
+  const { ratingFor, rate, seed } = useRatings();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
   // "fetching" means we're loading tracks to queue; "idle" otherwise
   const [queueFetch, setQueueFetch] = useState<"idle" | "busy">("idle");
+
+  // Artists navigated from track links lack userRating — fetch the authoritative
+  // value and seed the overlay. seed() is set-only-if-absent, so a rating the
+  // user clicked before this resolves is never clobbered.
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .getUserRating(artist.serverId, artist.id)
+      .then((r) => {
+        if (!cancelled) seed(artist.id, r);
+      })
+      .catch((err) => console.error("[ratings] getUserRating failed:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [artist.id, artist.serverId, seed]);
 
   useEffect(() => {
     if (!library) return;
@@ -115,6 +134,12 @@ export function ArtistDetailView({ artist }: Props) {
 
       <div className="artist-header">
         <h3 className="browse-title">{artist.name}</h3>
+        <StarRating
+          value10={ratingFor(artist.id, artist.userRating)}
+          onRate={(stars) => rate({ serverId: artist.serverId, itemId: artist.id, stars })}
+          size={16}
+          className="artist-stars"
+        />
         {fetch.status === "ok" && fetch.albums.length > 0 && (
           <div className="album-actions">
             <button

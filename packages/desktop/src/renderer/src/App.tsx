@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AppProvider, useApp } from "./state/app";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
+import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
 import { QueueDrawer } from "./ui/QueueDrawer";
@@ -29,13 +30,15 @@ function Inner() {
     return (
       <PlaylistsProvider>
         <SelectionProvider>
-          <div className="app-root">
-            <TopBar />
-            <Shell />
-            <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
-            <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
-            <Toasts />
-          </div>
+          <RatingsProvider>
+            <div className="app-root">
+              <TopBar />
+              <Shell />
+              <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
+              <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
+              <Toasts />
+            </div>
+          </RatingsProvider>
         </SelectionProvider>
       </PlaylistsProvider>
     );

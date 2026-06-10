@@ -11,9 +11,12 @@ import {
   VolumeX,
 } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
+import { useApp } from "../state/app";
 import { usePlayer } from "../state/player";
+import { useRatings } from "../state/ratings";
 import { formatDuration } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
+import { StarRating } from "./StarRating";
 import { TrackSubLinks } from "./TrackSubLinks";
 
 interface NowPlayingBarProps {
@@ -23,6 +26,8 @@ interface NowPlayingBarProps {
 export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
   const { state, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat } =
     usePlayer();
+  const { ratingFor, rate } = useRatings();
+  const { library } = useApp();
 
   const track = state.queue ? state.queue.tracks[state.queue.index] : undefined;
   const hasTrack = track !== undefined;
@@ -63,6 +68,22 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
         <div className="np-meta">
           <div className="np-title">{track?.title ?? ""}</div>
           <div className="np-sub">{track && <TrackSubLinks track={track} />}</div>
+          {track && (
+            <StarRating
+              value10={ratingFor(track.id, track.userRating)}
+              onRate={(stars) =>
+                rate({
+                  serverId: track.serverId,
+                  itemId: track.id,
+                  stars,
+                  albumId: track.albumId || undefined,
+                  libraryId: library?.id,
+                })
+              }
+              size={13}
+              className="np-stars"
+            />
+          )}
         </div>
       </div>
 

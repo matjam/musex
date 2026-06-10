@@ -723,7 +723,7 @@ img.album-header-art {
 
 .track-row {
   display: grid;
-  grid-template-columns: 34px 1fr auto auto;
+  grid-template-columns: 34px 1fr auto auto auto;
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
@@ -2048,4 +2048,58 @@ img.queue-row-art {
 
 .toast-x:hover {
   opacity: 1;
+}
+
+/* ---- Star ratings ---- */
+
+.star-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.star-rating .star {
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0 1px;
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  opacity: 0.35; /* empty stars: dim outline */
+}
+
+.star-rating button.star {
+  cursor: pointer;
+}
+
+.star-rating .star.filled {
+  color: var(--yellow);
+  opacity: 1;
+}
+
+/* Track rows: stars sit right of the title block at a fixed line height so the
+   row never jumps; hidden until row hover unless the track is rated. */
+.track-stars {
+  height: 16px;
+}
+
+.track-row .star-rating {
+  visibility: hidden;
+}
+
+.track-row:hover .star-rating,
+.track-row .star-rating.rated {
+  visibility: visible;
+}
+
+/* Now-playing bar: stars under the title/sub block */
+.np-stars {
+  margin-top: 2px;
+}
+
+/* Track detail panel: stars under the artist/album links (panel is a flex
+   column whose gap provides the spacing; keep the hit area tight). */
+.detail-stars {
+  align-self: flex-start;
 }

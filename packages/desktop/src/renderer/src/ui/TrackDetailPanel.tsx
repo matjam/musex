@@ -3,15 +3,18 @@ import { useEffect, useState } from "react";
 import type { TrackDetailDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
 import { toTrackInfo, usePlayer } from "../state/player";
+import { useRatings } from "../state/ratings";
 import { useSelection } from "../state/selection";
 import { formatDuration } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
+import { StarRating } from "./StarRating";
 
 /** Right-hand panel: details for the currently selected track, with links to its
  *  artist and album. Renders nothing when no track is selected. */
 export function TrackDetailPanel() {
   const { selectedTrack: track, clear } = useSelection();
-  const { dispatch } = useApp();
+  const { dispatch, library } = useApp();
+  const { ratingFor, rate } = useRatings();
   const { playTrackNext } = usePlayer();
   const [pluginDetails, setPluginDetails] = useState<TrackDetailDto[]>([]);
 
@@ -89,6 +92,21 @@ export function TrackDetailPanel() {
           {track.albumTitle}
         </button>
       )}
+
+      <StarRating
+        value10={ratingFor(track.id, track.userRating)}
+        onRate={(stars) =>
+          rate({
+            serverId: track.serverId,
+            itemId: track.id,
+            stars,
+            albumId: track.albumId || undefined,
+            libraryId: library?.id,
+          })
+        }
+        size={15}
+        className="detail-stars"
+      />
 
       <button type="button" className="detail-play" onClick={() => playTrackNext(track)}>
         <Play size={16} />

@@ -1,7 +1,10 @@
 import type { Track } from "@musex/core";
 import { AudioLines, MoreHorizontal } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
+import { useApp } from "../state/app";
+import { useRatings } from "../state/ratings";
 import { formatDuration } from "../util/format";
+import { StarRating } from "./StarRating";
 import { TrackSubLinks } from "./TrackSubLinks";
 
 interface Props {
@@ -32,6 +35,9 @@ export function TrackRow({
   onActivate,
   onMenu,
 }: Props) {
+  const { ratingFor, rate } = useRatings();
+  const { library } = useApp();
+
   function activate(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -71,6 +77,20 @@ export function TrackRow({
           </span>
         )}
       </span>
+      <StarRating
+        value10={ratingFor(track.id, track.userRating)}
+        onRate={(stars) =>
+          rate({
+            serverId: track.serverId,
+            itemId: track.id,
+            stars,
+            albumId: track.albumId || undefined,
+            libraryId: library?.id,
+          })
+        }
+        size={12}
+        className="track-stars"
+      />
       {onMenu && (
         <button
           type="button"
