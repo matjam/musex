@@ -2,10 +2,32 @@ import type { LibrarySort, Queue, Track } from "@musex/core";
 import { createPlaylist, discoverMusicLibraries } from "@musex/core";
 import { ipcMain } from "electron";
 import { parseProxyPath } from "../logic/proxy-url.js";
-import type { LoadPlaybackResult, PlaybackCursorDto } from "../shared/ipc-contract.js";
+import type {
+  LoadPlaybackResult,
+  NowPlayingMsg,
+  PlaybackCursorDto,
+} from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
 import type { Runtime } from "./runtime.js";
+
+/** Light shape check for the fire-and-forget nowPlaying channel — malformed
+ *  messages are dropped with a warning rather than thrown (nobody awaits). */
+function isNowPlayingMsg(msg: unknown): msg is NowPlayingMsg {
+  if (typeof msg !== "object" || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  if (m.kind === "pause" || m.kind === "resume" || m.kind === "stop") return true;
+  if (m.kind !== "start") return false;
+  if (typeof m.atEpochSec !== "number" || !Number.isFinite(m.atEpochSec)) return false;
+  const t = m.track as Record<string, unknown> | null | undefined;
+  return (
+    typeof t === "object" &&
+    t !== null &&
+    typeof t.title === "string" &&
+    typeof t.artistName === "string" &&
+    typeof t.durationMs === "number"
+  );
+}
 
 export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.signInStart, () => rt.signInStart());
@@ -282,6 +304,16 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.playbackSetVolume, (_e, v: number) => {
     if (typeof v !== "number" || v < 0 || v > 1) throw new Error("invalid volume");
     return rt.mpv.setVolume(v);
+  });
+
+  // Playback transitions from the renderer session → PlaybackMonitor → plugin
+  // events. Fire-and-forget (ipcRenderer.send), so ipcMain.on, not handle.
+  ipcMain.on(IPC.playbackNowPlaying, (_e, msg: unknown) => {
+    if (!isNowPlayingMsg(msg)) {
+      console.warn("[playback] ignoring malformed nowPlaying message:", msg);
+      return;
+    }
+    rt.playbackMonitor.handleNowPlaying(msg);
   });
 
   // Plugin host — Settings → Plugins UI.

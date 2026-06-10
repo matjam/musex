@@ -5,6 +5,7 @@ import type {
   Disposable,
   LibrarySearchResult,
   PluginContext,
+  PluginEvents,
   PluginManifest,
   SettingField,
   SettingsActionResult,
@@ -117,6 +118,20 @@ export class PluginHost {
       if (rec.status === "active") await this.deactivatePlugin(rec);
       rec.status = "disabled";
       rec.error = undefined;
+    }
+  }
+
+  /** Fan an event out to every subscriber of that event, isolating failures —
+   *  a throwing plugin handler is logged and never blocks the rest. */
+  emitEvent<K extends keyof PluginEvents>(event: K, payload: PluginEvents[K]): void {
+    // Copy: a handler may dispose (or add) subscriptions while we iterate.
+    for (const sub of [...this.registry.eventSubscribers]) {
+      if (sub.event !== event) continue;
+      try {
+        sub.handler(payload);
+      } catch (err) {
+        console.error(`[plugins] ${sub.pluginId} "${event}" handler threw:`, err);
+      }
     }
   }
 

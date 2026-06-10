@@ -16,8 +16,21 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
+import type { TrackInfo } from "../../../shared/ipc-contract";
 import { IpcPlaybackEngine } from "../audio/ipc-playback-engine";
 import { IpcStreamResolver } from "../audio/ipc-stream-resolver";
+
+/** Strip a track down to what plugins are allowed to see — title/artist/album/
+ *  duration/track number only. NO ids, URLs, or thumbs cross this boundary. */
+function toTrackInfo(t: Track): TrackInfo {
+  return {
+    title: t.title,
+    artistName: t.artistName,
+    albumTitle: t.albumTitle,
+    durationMs: t.durationMs,
+    trackNumber: t.trackNumber,
+  };
+}
 
 interface PlayerApi {
   state: PlaybackState;
@@ -144,6 +157,60 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       repeat: q.repeat,
     });
   }, [state.queue, state.positionSec]);
+
+  // ── Now-playing notifications → main's PlaybackMonitor (plugin events) ────
+  // "start" means THIS track began AUDIBLY playing for the first time: a track
+  // restored paused (or switched to while paused) sends nothing until the user
+  // presses play. The ref tracks what we last told main so each transition is
+  // sent exactly once.
+  const nowPlayingRef = useRef<{ trackId: string | null; started: boolean; playing: boolean }>({
+    trackId: null,
+    started: false, // a "start" was sent for trackId
+    playing: false,
+  });
+  useEffect(() => {
+    const q = state.queue;
+    const track = q ? (q.tracks[q.index] ?? null) : null;
+    const trackId = track?.id ?? null;
+    const playing = state.status === "playing";
+    const prev = nowPlayingRef.current;
+
+    // Queue gone or playback ran out → close the play-through (once).
+    if (!track || state.status === "ended") {
+      if (prev.started) window.musex.playbackNowPlaying({ kind: "stop" });
+      nowPlayingRef.current = { trackId, started: false, playing: false };
+      return;
+    }
+
+    const sendStart = () =>
+      window.musex.playbackNowPlaying({
+        kind: "start",
+        track: toTrackInfo(track),
+        atEpochSec: Math.floor(Date.now() / 1000),
+      });
+
+    if (trackId !== prev.trackId) {
+      // New current track. Audible already → start now; paused (restore, or
+      // skipping while paused) → wait; the same-id branch below sends the
+      // deferred start when it first plays. Main closes the previous
+      // play-through itself on the next "start", so no "stop" is needed here.
+      if (playing) sendStart();
+      nowPlayingRef.current = { trackId, started: playing, playing };
+      return;
+    }
+
+    if (playing && !prev.started) {
+      // Same track, first time it's audible — the deferred start.
+      sendStart();
+      nowPlayingRef.current = { trackId, started: true, playing };
+      return;
+    }
+
+    if (prev.started && playing !== prev.playing) {
+      window.musex.playbackNowPlaying({ kind: playing ? "resume" : "pause" });
+    }
+    nowPlayingRef.current = { trackId, started: prev.started, playing };
+  }, [state.queue, state.status]);
 
   const api: PlayerApi = {
     state,

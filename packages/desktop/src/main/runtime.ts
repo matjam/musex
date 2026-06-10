@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Library, Pin } from "@musex/core";
+import type { Library, Pin, Track } from "@musex/core";
+import type { TrackInfo } from "@musex/plugin-api";
 import { app, safeStorage, shell } from "electron";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
@@ -12,6 +13,7 @@ import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
+import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
 
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
@@ -39,6 +41,9 @@ export class Runtime {
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
+  /** Constructed in init() — drives the plugin events pipeline (trackStarted/
+   *  paused/resumed/trackEnded/scrobble) + the recently-played history. */
+  playbackMonitor!: PlaybackMonitor;
   token: string | null = null;
   libraries: Library[] = [];
 
@@ -62,6 +67,14 @@ export class Runtime {
     await this.artCache.init();
     this.proxy.setArtCache(this.artCache, ART_CACHE_MAX_BYTES);
     await this.proxy.start();
+
+    // Playback monitor: emits into the plugin host's event registry (lazily —
+    // this.plugins is assigned just below, before any playback can happen).
+    this.playbackMonitor = new PlaybackMonitor({
+      emit: (event, payload) => this.plugins.emitEvent(event, payload),
+      loadHistory: () => persistence.getRecentlyPlayed(),
+      saveHistory: (h) => persistence.setRecentlyPlayed(h),
+    });
 
     // Plugin host: userData/plugins always; in dev also <repo>/plugins (the
     // scan helper handles the <name>/dist/plugin.json build-output layout).
@@ -91,11 +104,25 @@ export class Runtime {
           console.error(`[plugins] blocked openExternal for non-http(s) URL: ${url}`);
         }
       },
-      // v1 stubs — Task 2 (events pipeline) swaps in real implementations
-      // backed by the gateway + the playback monitor's history.
+      // Read-only library access for plugins, mapped down to the plugin-api
+      // shapes (never core Track — no ids/URLs/tokens cross into plugin land
+      // except the search ids needed for matching).
       library: {
-        search: async () => ({ artists: [], albums: [], tracks: [] }),
-        recentlyPlayed: async () => [],
+        search: async (query) => {
+          // Not signed in / no library selected yet: plugins may search at any
+          // time (e.g. on activate), so return empty rather than throwing.
+          const lib = this.libraries[0];
+          if (!lib || !this.token) return { artists: [], albums: [], tracks: [] };
+          const r = await this.gateway.search(lib, query, this.token);
+          return {
+            artists: r.artists.map((a) => ({ id: a.id, name: a.name })),
+            // Core Album carries no artist name (only artistId) — empty string
+            // by contract until a need justifies the extra lookup.
+            albums: r.albums.map((a) => ({ id: a.id, title: a.title, artistName: "" })),
+            tracks: r.tracks.map(toPluginTrackInfo),
+          };
+        },
+        recentlyPlayed: async (limit) => this.playbackMonitor.history(limit),
       },
     });
     await this.plugins.loadAll();
@@ -143,4 +170,16 @@ export class Runtime {
     if (!lib) throw new Error(`unknown library ${libraryId}`);
     return lib;
   }
+}
+
+/** Strip a core Track down to the plugin-facing TrackInfo (the renderer's
+ *  toTrackInfo equivalent for main): no ids, URLs, or thumbs. */
+function toPluginTrackInfo(t: Track): TrackInfo {
+  return {
+    title: t.title,
+    artistName: t.artistName,
+    albumTitle: t.albumTitle,
+    durationMs: t.durationMs,
+    trackNumber: t.trackNumber,
+  };
 }

@@ -47,6 +47,9 @@ const api: MusexApi = {
   savePlaybackQueue: (tracks) => ipcRenderer.invoke(IPC.savePlaybackQueue, tracks),
   savePlaybackCursor: (cursor) => ipcRenderer.invoke(IPC.savePlaybackCursor, cursor),
   loadPlayback: () => ipcRenderer.invoke(IPC.loadPlayback),
+  // Fire-and-forget notification (send, not invoke): playback transitions
+  // feed the plugin events pipeline; the renderer never waits on it.
+  playbackNowPlaying: (msg) => ipcRenderer.send(IPC.playbackNowPlaying, msg),
   playbackLoad: (args) => ipcRenderer.invoke(IPC.playbackLoad, args),
   playbackPreload: (url) => ipcRenderer.invoke(IPC.playbackPreload, url),
   playbackPlay: () => ipcRenderer.invoke(IPC.playbackPlay),

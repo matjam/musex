@@ -164,6 +164,36 @@ describe("PluginHost", () => {
     expect((globalThis as Record<string, unknown>).__deactivated).toBe(true);
   });
 
+  it("emitEvent fans out per subscriber, isolating a throwing handler", async () => {
+    await writePlugin(
+      "thrower",
+      `export function activate(ctx) {
+        ctx.events.on("trackStarted", () => { throw new Error("handler boom"); });
+      }`,
+    );
+    await writePlugin(
+      "listener",
+      `export function activate(ctx) {
+        globalThis.__seen = [];
+        ctx.events.on("trackStarted", (p) => globalThis.__seen.push(p));
+        ctx.events.on("scrobble", (p) => globalThis.__seen.push(p));
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+
+    const track = { title: "T", artistName: "A", durationMs: 200_000 };
+    host.emitEvent("trackStarted", { track, startedAtEpochSec: 1 });
+    host.emitEvent("paused", { track }); // nobody subscribed — must not throw
+    host.emitEvent("scrobble", { track, startedAtEpochSec: 1 });
+
+    // thrower's failure didn't stop listener from receiving both events
+    expect((globalThis as Record<string, unknown>).__seen).toEqual([
+      { track, startedAtEpochSec: 1 },
+      { track, startedAtEpochSec: 1 },
+    ]);
+  });
+
   it("reloadAll re-imports fresh module instances and re-activates", async () => {
     await writePlugin("good", GOOD_ENTRY);
     const { host } = makeHost();

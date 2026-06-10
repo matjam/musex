@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Library, RepeatMode, Track } from "@musex/core";
+import type { TrackInfo } from "@musex/plugin-api";
 import Store from "electron-store";
 
 export interface PersistedState {
@@ -15,6 +16,9 @@ export interface PersistedState {
   // Plugins the user switched off (enabled is the default, so we store the
   // exceptions — an unknown/new plugin id is enabled without a write).
   disabledPlugins: string[];
+  // Recently-played history (most recent first, capped by the PlaybackMonitor)
+  // — TrackInfo only (no ids/URLs/tokens); backs ctx.library.recentlyPlayed.
+  recentlyPlayed: TrackInfo[];
 }
 
 /** Default local-cache cap: 5 GiB. */
@@ -29,6 +33,7 @@ const store = new Store<PersistedState>({
     cacheMaxBytes: DEFAULT_CACHE_MAX_BYTES,
     serverUrls: {},
     disabledPlugins: [],
+    recentlyPlayed: [],
   },
 });
 
@@ -108,6 +113,12 @@ export const persistence = {
     const all = { ...store.get("serverUrls") };
     delete all[serverId];
     store.set("serverUrls", all);
+  },
+  getRecentlyPlayed(): TrackInfo[] {
+    return store.get("recentlyPlayed");
+  },
+  setRecentlyPlayed(history: TrackInfo[]): void {
+    store.set("recentlyPlayed", history);
   },
   isPluginEnabled(id: string): boolean {
     return !store.get("disabledPlugins").includes(id);

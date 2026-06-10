@@ -43,6 +43,9 @@ app.whenReady().then(async () => {
   // windowless).
   const wireEngineEvents = (win: BrowserWindow): void => {
     runtime.mpv.setSink((e) => {
+      // The playback monitor taps position ticks for scrobble accounting,
+      // independent of (and before) the renderer forward.
+      if (e.type === "position") runtime.playbackMonitor.handleEnginePosition(e.sec);
       if (!win.isDestroyed()) win.webContents.send(IPC.playbackEvent, e);
     });
     runtime.setPluginNotifySink((p) => {

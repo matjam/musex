@@ -12,7 +12,7 @@ import type {
   StreamRef,
   Track,
 } from "@musex/core";
-import type { SettingField, SettingsActionResult } from "@musex/plugin-api";
+import type { SettingField, SettingsActionResult, TrackInfo } from "@musex/plugin-api";
 
 export const IPC = {
   signInStart: "musex:signIn:start", // -> { code: string; authUrl: string }
@@ -47,6 +47,7 @@ export const IPC = {
   savePlaybackQueue: "musex:playback:saveQueue", // (tracks: Track[]) -> void
   savePlaybackCursor: "musex:playback:saveCursor", // (cursor: PlaybackCursorDto) -> void
   loadPlayback: "musex:playback:load", // -> LoadPlaybackResult
+  playbackNowPlaying: "musex:playback:nowPlaying", // fire-and-forget renderer -> main NowPlayingMsg
   // mpv playback engine (main-process audio). NOTE: namespaced playbackEngine:*
   // because musex:playback:* is taken by queue/cursor persistence above.
   playbackLoad: "musex:playbackEngine:load", // ({ url, startSec? }) -> void (resolves on file-loaded)
@@ -93,7 +94,17 @@ export type PlaybackEngineEvent =
 
 // Plugin host surface. Settings vocabulary types come straight from the
 // plugin API package; the contract only adds the IPC-specific shapes.
-export type { SettingField, SettingsActionResult } from "@musex/plugin-api";
+export type { SettingField, SettingsActionResult, TrackInfo } from "@musex/plugin-api";
+
+/** Playback transitions the renderer session reports to main (fire-and-forget),
+ *  feeding the PlaybackMonitor → plugin events pipeline. "start" means the
+ *  track began *audibly* playing — a restore-paused track sends nothing until
+ *  the user actually plays it. Carries only TrackInfo (no ids/URLs/tokens). */
+export type NowPlayingMsg =
+  | { kind: "start"; track: TrackInfo; atEpochSec: number }
+  | { kind: "pause" }
+  | { kind: "resume" }
+  | { kind: "stop" };
 
 export type PluginStatus = "active" | "error" | "disabled" | "incompatible";
 export interface PluginInfo {
@@ -164,6 +175,8 @@ export interface MusexApi {
   savePlaybackQueue(tracks: Track[]): Promise<void>;
   savePlaybackCursor(cursor: PlaybackCursorDto): Promise<void>;
   loadPlayback(): Promise<LoadPlaybackResult>;
+  /** Fire-and-forget (ipcRenderer.send) — playback transition notification. */
+  playbackNowPlaying(msg: NowPlayingMsg): void;
   playbackLoad(args: { url: string; startSec?: number }): Promise<void>;
   playbackPreload(url: string): Promise<void>;
   playbackPlay(): Promise<void>;
