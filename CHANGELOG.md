@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/matjam/musex/compare/v0.1.2...v0.1.3) (2026-06-10)
+
+
+### Features
+
+* **ui:** About window with full dependency attribution; add README + MIT LICENSE ([8982bf0](https://github.com/matjam/musex/commit/8982bf08b4ae239ea7e4bd4921e4720b5a767e4f))
+
 ## [0.1.2](https://github.com/matjam/musex/compare/v0.1.1...v0.1.2) (2026-06-10)
 
 
