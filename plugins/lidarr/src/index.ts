@@ -270,8 +270,30 @@ export async function activate(ctx: PluginContext): Promise<void> {
   const readPending = async (): Promise<PendingAlbums> =>
     (await ctx.storage.get<PendingAlbums>(PENDING_KEY)) ?? {};
 
+  /** Lidarr bug (Lidarr/Lidarr#3597): POST artist with addOptions.monitor
+   *  "none" DISREGARDS monitored:true and adds the artist unmonitored — which
+   *  silently disables RSS/upgrades for everything under it. Re-assert artist
+   *  monitoring whenever we request an album. Non-fatal: the explicit
+   *  AlbumSearch works either way. */
+  const ensureArtistMonitored = async (
+    c: LidarrClient,
+    artistId: number | undefined,
+  ): Promise<void> => {
+    if (artistId === undefined) return;
+    try {
+      // PUT wants the full resource — round-trip it with only `monitored` changed.
+      const artist = await c.get<Record<string, unknown>>(`/api/v1/artist/${artistId}`);
+      if (artist.monitored === true) return;
+      await c.put(`/api/v1/artist/${artistId}`, { ...artist, monitored: true });
+      ctx.log(`re-monitored artist #${artistId} (Lidarr#3597 workaround)`);
+    } catch (err) {
+      ctx.log("ensureArtistMonitored failed (non-fatal):", errText(err));
+    }
+  };
+
   /** Monitor the album and kick off a search (shared by acquire + poller). */
   const requestAlbum = async (c: LidarrClient, album: LidarrAlbum): Promise<void> => {
+    await ensureArtistMonitored(c, album.artistId);
     if (!album.monitored) {
       await c.put("/api/v1/album/monitor", { albumIds: [album.id], monitored: true });
     }
