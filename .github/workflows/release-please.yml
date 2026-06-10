@@ -1,0 +1,74 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      # Manifest mode (no release-type input): reads release-please-config.json
+      # + .release-please-manifest.json at the repo root.
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    # macos-latest is arm64 — matches the darwin-arm64 mpv vendor pin.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        # version read from package.json "packageManager"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Vendor mpv
+        run: pnpm vendor
+
+      - name: Build plugins
+        run: pnpm build:plugins
+
+      - name: Check (typecheck + lint + tests)
+        run: pnpm check
+
+      - name: Package (sign + notarize + staple)
+        env:
+          # electron-builder signing: CSC_LINK accepts a base64-encoded .p12.
+          CSC_LINK: ${{ secrets.DEVELOPER_ID_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.DEVELOPER_ID_PASSWORD }}
+          # electron-builder notarization (@electron/notarize: notarizes and
+          # staples the .app before the dmg is built).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm --filter @musex/desktop run package
+
+      - name: Upload DMG to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          gh release upload "$TAG_NAME" \
+            packages/desktop/release/*.dmg \
+            --clobber

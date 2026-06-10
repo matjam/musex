@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  check:
+    # ubuntu is fine: `pnpm check` (typecheck + biome + vitest) runs node-side —
+    # no mpv binary (vendor is darwin-arm64-only) and no Electron runtime needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        # version read from package.json "packageManager"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build plugins
+        run: pnpm build:plugins
+
+      - name: Check (typecheck + lint + tests)
+        run: pnpm check

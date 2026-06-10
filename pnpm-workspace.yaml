@@ -2,6 +2,12 @@ packages:
   - "packages/*"
   - "plugins/*"
 
+# electron-builder needs a flat node_modules to collect the app's production
+# dependencies into the packaged app; pnpm's default isolated layout breaks
+# that. pnpm reads this from pnpm-workspace.yaml ONLY (silently ignored in
+# .npmrc).
+nodeLinker: hoisted
+
 # pnpm 11 gates dependency build scripts; allowlist the ones that need them.
 allowBuilds:
   esbuild: true

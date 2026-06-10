@@ -30,3 +30,6 @@ vendor/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# electron-builder buildResources (entitlements etc.) — source, not build output
+!packages/desktop/build/

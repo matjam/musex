@@ -91,10 +91,17 @@ export class Runtime {
       },
     });
 
-    // Plugin host: userData/plugins always; in dev also <repo>/plugins (the
-    // scan helper handles the <name>/dist/plugin.json build-output layout).
+    // Plugin host: userData/plugins always FIRST (user plugins win duplicate
+    // ids — first scan dir wins); then the bundled plugins — packaged builds
+    // ship them in Resources/plugins (see electron-builder.yml extraResources),
+    // dev scans <repo>/plugins (the scan helper handles the <name>/dist/
+    // plugin.json build-output layout).
     const scanDirs = [path.join(app.getPath("userData"), "plugins")];
-    if (!app.isPackaged) scanDirs.push(path.join(__dirname, "../../../../plugins"));
+    scanDirs.push(
+      app.isPackaged
+        ? path.join(process.resourcesPath, "plugins")
+        : path.join(__dirname, "../../../../plugins"),
+    );
     this.plugins = new PluginHost({
       scanDirs,
       dataDir: path.join(app.getPath("userData"), "plugin-data"),

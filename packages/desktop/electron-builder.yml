@@ -1,14 +1,46 @@
-appId: com.musex.desktop
+# electron-builder 26 configuration (verified against installed app-builder-lib 26.15.2).
+#
+# Signing: identity comes from env in CI — CSC_LINK (base64 .p12) + CSC_KEY_PASSWORD.
+# Local unsigned builds: CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @musex/desktop run package
+#
+# Notarization: `notarize: true` + env APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID.
+# @electron/notarize notarizes AND staples the .app before the dmg is built.
+#
+# Nested binaries: @electron/osx-sign walks the whole Contents/ tree (including
+# Resources/) and signs every Mach-O it finds plus nested .app/.framework bundles
+# inside-out — so the vendored mpv.app and all its dylibs are signed automatically;
+# no `binaries` list needed.
+appId: net.stupendous.musex
 productName: musex
 directories:
   output: release
   buildResources: build
 files:
-  - out/**/*
+  - "out/**/*"
 mac:
-  category: public.app-category.music
   target:
     - target: dmg
-      arch: [arm64]
-    - target: zip
-      arch: [arm64]
+      arch:
+        - arm64
+  category: public.app-category.music
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  notarize: true
+  # Standard Electron hardened-runtime entitlements (same set as electron-builder's
+  # built-in template, pinned explicitly). disable-library-validation also lets the
+  # vendored mpv load its bundled dylibs. Applied to the app and inherited by
+  # nested binaries.
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+extraResources:
+  # `from` resolves relative to the project directory (packages/desktop) — vendor/
+  # and plugins/ live at the repo root.
+  # mpv lands at Resources/mpv/mpv.app/Contents/MacOS/mpv (matches mpv-paths.ts).
+  - from: ../../vendor/mpv/darwin-arm64/
+    to: mpv/
+  # Plugins land at Resources/plugins/<id>/plugin.json (PluginHost scans both the
+  # direct and the dev `<id>/dist/` layouts).
+  - from: ../../plugins/lastfm/dist/
+    to: plugins/lastfm/
+  - from: ../../plugins/lidarr/dist/
+    to: plugins/lidarr/
