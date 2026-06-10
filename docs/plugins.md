@@ -104,25 +104,34 @@ ids, stream URLs, or tokens ever cross the plugin boundary.**
 - `ctx.ui.contributeTrackDetail(provider)` — `getDetail(track)` returns
   `{title, rows: [{label, value}]} | null`; rendered as an extra section in the
   track slide-out panel.
-- `ctx.ui.registerSimilarProvider({id, similarArtists?, similarTracks?})` —
+- `ctx.ui.registerSimilarProvider({id, similarArtists?, similarTracks?, topAlbums?})` —
   powers the Similar side panel ("Similar Artists" on artist pages, "Similar
-  Songs" in the track panel). Return `SimilarItem[]` (`{name, artistName?,
-  imageUrl?, externalUrl?}`); the host matches items against the library
-  (owned artists navigate; owned tracks become playable tiles) and proxies/
-  caches external images. Same 8s timeout + isolation as sections.
+  Songs" in the track panel) and host-side taste expansion. Return
+  `SimilarItem[]` (`{name, artistName?, imageUrl?, externalUrl?, match?}`;
+  `match` is the 0..1 similarity score — taste expansion uses it, the panel
+  ignores it); the host matches items against the library (owned artists
+  navigate; owned tracks become playable tiles) and proxies/caches external
+  images. Same 8s timeout + isolation as sections. The optional
+  `topAlbums(artistName)` returns an artist's most popular albums best-first
+  (taste expansion acquires the top one as a new artist's entry point).
 - `ctx.registerTrackRecommender({id, recommend})` — feeds radio: given seeds +
   excludes, return `RecommendedTrack[]` (`{artistName, title?}`; no title =
   artist-level). The host resolves suggestions against the library and appends
   real tracks to the queue.
-- `ctx.registerAcquisitionProvider({id, lookupArtistAlbums, acquireAlbum, status, searchArtists?, acquireArtist?})`
+- `ctx.registerAcquisitionProvider({id, lookupArtistAlbums, acquireAlbum, status, searchArtists?, acquireArtist?, cancelAlbum?, watchNewReleases?, isWatchingNewReleases?, listWatchedArtists?})`
   — powers the External Artist view (an unowned artist's discography with
   per-album `state`: downloaded/downloading/requested/available/unavailable;
   the host adds `owned` by cross-checking the library) and the Downloads view
   (merged `status()` items, polled while open). The optional `searchArtists`
   feeds the federated search's "Not in your library" section, and
   `acquireArtist` implements "monitor everything by this artist". `providerRef`
-  is opaque to the host — encode whatever your acquire needs. See
-  `plugins/lidarr` for the reference implementation.
+  is opaque to the host — encode whatever your acquire needs. Taste expansion
+  additionally uses `cancelAlbum` (unmonitor an abandoned/rejected album —
+  never delete files) and the new-release watch trio: `watchNewReleases(name,
+  enabled)` must not monitor existing albums when enabling nor unmonitor
+  separately-monitored albums when disabling; `isWatchingNewReleases` and
+  `listWatchedArtists` read the state back (the provider is the source of
+  truth). See `plugins/lidarr` for the reference implementation.
 
 ### Settings — declarative, host-rendered
 
