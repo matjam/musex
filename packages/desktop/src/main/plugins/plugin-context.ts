@@ -1,4 +1,5 @@
 import type {
+  AcquisitionProvider,
   Disposable,
   LibrarySearchResult,
   PluginContext,
@@ -42,6 +43,10 @@ export interface RegisteredSimilarProvider {
   pluginId: string;
   provider: SimilarProvider;
 }
+export interface RegisteredAcquisitionProvider {
+  pluginId: string;
+  provider: AcquisitionProvider;
+}
 
 /** Registrations from all active plugins. Stored now; consumed by the events
  *  pipeline (Task 2) and the sections/actions/detail surfaces (Task 4). */
@@ -52,6 +57,7 @@ export interface PluginRegistry {
   trackDetailProviders: RegisteredTrackDetailProvider[];
   trackRecommenders: RegisteredTrackRecommender[];
   similarProviders: RegisteredSimilarProvider[];
+  acquisitionProviders: RegisteredAcquisitionProvider[];
 }
 
 export function createPluginRegistry(): PluginRegistry {
@@ -62,6 +68,7 @@ export function createPluginRegistry(): PluginRegistry {
     trackDetailProviders: [],
     trackRecommenders: [],
     similarProviders: [],
+    acquisitionProviders: [],
   };
 }
 
@@ -161,6 +168,13 @@ export function buildPluginContext(
       return register(
         registry.trackRecommenders,
         { pluginId: manifest.id, recommender },
+        trackDisposable,
+      );
+    },
+    registerAcquisitionProvider(provider) {
+      return register(
+        registry.acquisitionProviders,
+        { pluginId: manifest.id, provider },
         trackDisposable,
       );
     },

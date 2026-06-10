@@ -2,6 +2,8 @@ import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  AcquirableAlbum,
+  AcquisitionStatusItem,
   Disposable,
   LibrarySearchResult,
   PluginContext,
@@ -47,6 +49,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 /** Cap on merged Similar-panel results across all providers. */
 const SIMILAR_ITEMS_MAX = 24;
+
+/** Acquisition lookups (Lidarr metadata searches) are slow — a bigger budget
+ *  than the section/detail fan-outs. Tests override via providerTimeoutMs. */
+const ACQUISITION_TIMEOUT_MS = 15_000;
 
 /** Dedupe/exclusion key for recommendations: lower(artist)␟lower(title ?? "").
  *  The same artist+title join key the taste profile and smart playlists use. */
@@ -273,6 +279,83 @@ export class PluginHost {
       merged.push(item);
     }
     return merged;
+  }
+
+  // ── acquisition (e.g. Lidarr) ─────────────────────────────────────────────
+
+  /** True when any plugin registered an AcquisitionProvider — the renderer
+   *  uses this to reroute external-artist clicks into the in-app view. */
+  acquisitionAvailable(): boolean {
+    return this.registry.acquisitionProviders.length > 0;
+  }
+
+  /** Ask providers for an artist's acquirable discography, SEQUENTIALLY in
+   *  registration order: the first provider returning a non-empty (post
+   *  junk-filter) array wins. Throwing/slow providers are logged and skipped.
+   *  Items are tagged with the owning pluginId so acquire can route back. */
+  async lookupArtistAlbums(
+    artistName: string,
+  ): Promise<(AcquirableAlbum & { providerId: string })[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? ACQUISITION_TIMEOUT_MS;
+    for (const p of this.registry.acquisitionProviders) {
+      let items: AcquirableAlbum[];
+      try {
+        const res = await withTimeout(p.provider.lookupArtistAlbums(artistName), timeoutMs);
+        items = Array.isArray(res) ? res : [];
+      } catch (err) {
+        console.error(
+          `[plugins] ${p.pluginId} acquisition provider "${p.provider.id}" lookup failed:`,
+          err,
+        );
+        continue;
+      }
+      const tagged: (AcquirableAlbum & { providerId: string })[] = [];
+      for (const item of items) {
+        // Full-trust, but a provider can still return junk — drop it here.
+        if (typeof item?.title !== "string" || item.title.length === 0) continue;
+        if (typeof item.artistName !== "string" || item.artistName.length === 0) continue;
+        if (typeof item.providerRef !== "string" || item.providerRef.length === 0) continue;
+        tagged.push({ ...item, providerId: p.pluginId });
+      }
+      if (tagged.length > 0) return tagged;
+    }
+    return [];
+  }
+
+  /** Route an acquire to the provider that produced the lookup item. Unknown
+   *  providerId → throw; provider failures are rethrown with the plugin id
+   *  prefixed so the renderer's error surface says who failed. */
+  async acquireAlbum(providerId: string, providerRef: string): Promise<void> {
+    const entry = this.registry.acquisitionProviders.find((p) => p.pluginId === providerId);
+    if (!entry) throw new Error(`unknown acquisition provider "${providerId}"`);
+    try {
+      await entry.provider.acquireAlbum(providerRef);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`[plugin:${entry.pluginId}] acquire failed: ${msg}`);
+    }
+  }
+
+  /** Fan out to EVERY acquisition provider for Downloads-view status rows,
+   *  isolating throwing/slow providers; merge, tagging each row's pluginId. */
+  async acquisitionStatus(): Promise<(AcquisitionStatusItem & { providerId: string })[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? ACQUISITION_TIMEOUT_MS;
+    const results = await Promise.all(
+      this.registry.acquisitionProviders.map(async (p) => {
+        try {
+          const items = await withTimeout(p.provider.status(), timeoutMs);
+          if (!Array.isArray(items)) return [];
+          return items.map((item) => ({ ...item, providerId: p.pluginId }));
+        } catch (err) {
+          console.error(
+            `[plugins] ${p.pluginId} acquisition provider "${p.provider.id}" status failed:`,
+            err,
+          );
+          return [];
+        }
+      }),
+    );
+    return results.flat();
   }
 
   listTrackActions(): { pluginId: string; id: string; label: string; icon?: string }[] {

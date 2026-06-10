@@ -116,6 +116,51 @@ export interface SimilarProvider {
   similarTracks?(seed: { title: string; artist: string }): Promise<SimilarItem[]>;
 }
 
+/** Where an album sits in the acquisition pipeline. Providers report
+ *  everything except "owned" — the HOST adds "owned" by cross-checking lookup
+ *  results against the user's Plex library. */
+export type AcquisitionState =
+  | "owned"
+  | "downloaded"
+  | "downloading"
+  | "requested"
+  | "available"
+  | "unavailable";
+
+/** One album in an artist's acquirable discography. */
+export interface AcquirableAlbum {
+  title: string;
+  artistName: string;
+  year?: number;
+  imageUrl?: string;
+  /** Opaque — pass back to acquireAlbum. */
+  providerRef: string;
+  /** Host adds "owned" by library cross-check. */
+  state: Exclude<AcquisitionState, "owned">;
+  /** e.g. "7/12 tracks", "no release found" */
+  detail?: string;
+}
+
+/** One row in the Downloads status view. */
+export interface AcquisitionStatusItem {
+  title: string;
+  artistName: string;
+  state: AcquisitionState;
+  /** 0..1 */
+  progress?: number;
+  detail?: string;
+}
+
+/** Acquires music via an external service (e.g. Lidarr): discography lookup,
+ *  album acquisition, and download status. */
+export interface AcquisitionProvider {
+  id: string;
+  /** [] = artist unknown to the provider. */
+  lookupArtistAlbums(artistName: string): Promise<AcquirableAlbum[]>;
+  acquireAlbum(providerRef: string): Promise<void>;
+  status(): Promise<AcquisitionStatusItem[]>;
+}
+
 export interface TrackDetailProvider {
   id: string;
   /** Key-value rows / short text for the selected track's panel (playcount, tags, …). */
@@ -184,6 +229,10 @@ export interface PluginContext {
 
   /** Radio: suggest tracks when the host's auto-extending queue runs low. */
   registerTrackRecommender(recommender: TrackRecommender): Disposable;
+
+  /** Acquisition (e.g. Lidarr): discography lookup + album acquisition.
+   *  Top-level (not under ui) — it's a service, not a UI contribution. */
+  registerAcquisitionProvider(provider: AcquisitionProvider): Disposable;
 
   /** Declarative settings; the host renders the form. */
   registerSettings(schema: SettingField[]): void;

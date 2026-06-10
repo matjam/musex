@@ -1,10 +1,11 @@
-import type { Artist, LibrarySort, Queue, Track } from "@musex/core";
+import type { Album, Artist, LibrarySort, Queue, Track } from "@musex/core";
 import { createPlaylist, discoverMusicLibraries } from "@musex/core";
 import type { SectionContext } from "@musex/plugin-api";
 import { ipcMain, shell } from "electron";
 import { isHttpUrl } from "../logic/external-url.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
+  AcquirableAlbumDto,
   LoadPlaybackResult,
   NowPlayingMsg,
   PlaybackCursorDto,
@@ -549,6 +550,81 @@ export function registerIpc(rt: Runtime): void {
     }
     throw new Error("invalid similarGet kind");
   });
+  // Acquisition (e.g. Lidarr): external-artist discography lookup with an
+  // owned cross-check against the library, acquire routing, download status.
+  ipcMain.handle(IPC.acquisitionAvailable, () => rt.plugins.acquisitionAvailable());
+
+  ipcMain.handle(
+    IPC.acquisitionLookupArtist,
+    async (_e, artistName: unknown): Promise<AcquirableAlbumDto[]> => {
+      if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+      const items = await rt.plugins.lookupArtistAlbums(artistName);
+      // Owned cross-check: find the artist in the library (case-insensitive
+      // exact name via search), then mark lookup items whose title matches an
+      // owned album. Best-effort — signed out / lookup failure means items
+      // simply keep their provider-reported state.
+      const lib = rt.libraries[0];
+      const token = rt.token;
+      let ownedArtist: Artist | undefined;
+      let ownedAlbums: Album[] = [];
+      if (lib && token && items.length > 0) {
+        try {
+          const results = await rt.gateway.search(lib, artistName, token);
+          const lower = artistName.toLowerCase();
+          ownedArtist = results.artists.find((a) => a.name.toLowerCase() === lower);
+          if (ownedArtist) {
+            ownedAlbums = await rt.gateway.listAlbums(lib, ownedArtist.id, token);
+          }
+        } catch (err) {
+          console.error("[plugins] acquisition owned cross-check failed:", err);
+        }
+      }
+      const ownedByTitle = new Map<string, Album>();
+      for (const a of ownedAlbums) {
+        const key = a.title.toLowerCase();
+        if (!ownedByTitle.has(key)) ownedByTitle.set(key, a);
+      }
+      return items.map((item): AcquirableAlbumDto => {
+        const owned = ownedArtist ? ownedByTitle.get(item.title.toLowerCase()) : undefined;
+        if (owned && ownedArtist) {
+          return {
+            ...item,
+            state: "owned",
+            albumId: owned.id,
+            artistId: ownedArtist.id,
+            serverId: owned.serverId,
+          };
+        }
+        // Non-owned: bake plugin-supplied artwork through the proxy's /ext
+        // endpoint (disk-cached, loads offline); unbakeable URLs are dropped.
+        if (item.imageUrl !== undefined) {
+          const proxied = rt.proxy.externalArtUrl(item.imageUrl);
+          if (proxied === undefined) {
+            const { imageUrl: _dropped, ...rest } = item;
+            return rest;
+          }
+          return { ...item, imageUrl: proxied };
+        }
+        return item;
+      });
+    },
+  );
+
+  ipcMain.handle(
+    IPC.acquisitionAcquire,
+    (_e, args: { providerId?: unknown; providerRef?: unknown } | null | undefined) => {
+      if (typeof args?.providerId !== "string" || !args.providerId) {
+        throw new Error("invalid providerId");
+      }
+      if (typeof args.providerRef !== "string" || !args.providerRef) {
+        throw new Error("invalid providerRef");
+      }
+      return rt.plugins.acquireAlbum(args.providerId, args.providerRef);
+    },
+  );
+
+  ipcMain.handle(IPC.acquisitionStatus, () => rt.plugins.acquisitionStatus());
+
   ipcMain.handle(IPC.trackActionsList, () => rt.plugins.listTrackActions());
   ipcMain.handle(IPC.trackActionsInvoke, (_e, actionId: string, track: unknown) => {
     if (typeof actionId !== "string" || !actionId) throw new Error("invalid action id");

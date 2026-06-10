@@ -12,7 +12,14 @@ import type {
   StreamRef,
   Track,
 } from "@musex/core";
-import type { SettingField, SettingsActionResult, TrackInfo } from "@musex/plugin-api";
+import type {
+  AcquirableAlbum,
+  AcquisitionState,
+  AcquisitionStatusItem,
+  SettingField,
+  SettingsActionResult,
+  TrackInfo,
+} from "@musex/plugin-api";
 
 export const IPC = {
   signInStart: "musex:signIn:start", // -> { code: string; authUrl: string }
@@ -74,6 +81,11 @@ export const IPC = {
   trackActionsInvoke: "musex:trackActions:invoke", // (actionId, trackInfo) -> void
   trackDetailGet: "musex:trackDetail:get", // (trackInfo) -> TrackDetailDto[]
   similarGet: "musex:similar:get", // (SimilarGetArgs) -> SectionItemDto[]
+  // Acquisition (e.g. Lidarr): external-artist discography + Downloads view
+  acquisitionAvailable: "musex:acquisition:available", // -> boolean
+  acquisitionLookupArtist: "musex:acquisition:lookupArtist", // (artistName) -> AcquirableAlbumDto[]
+  acquisitionAcquire: "musex:acquisition:acquire", // ({ providerId, providerRef }) -> void
+  acquisitionStatus: "musex:acquisition:status", // -> AcquisitionStatusDto[]
   openExternal: "musex:openExternal", // (url) -> void (http/https only)
   radioNext: "musex:radio:next", // (RadioNextArgs) -> Track[]
   navigateTo: "musex:navigateTo", // push: main -> renderer NavigateToPayload (app menu navigation)
@@ -122,7 +134,28 @@ export type PlaybackEngineEvent =
 
 // Plugin host surface. Settings vocabulary types come straight from the
 // plugin API package; the contract only adds the IPC-specific shapes.
-export type { SettingField, SettingsActionResult, TrackInfo } from "@musex/plugin-api";
+export type {
+  AcquisitionState,
+  SettingField,
+  SettingsActionResult,
+  TrackInfo,
+} from "@musex/plugin-api";
+
+/** A plugin-api AcquirableAlbum + the host's enrichment: every item carries
+ *  the providerId that produced it (acquire routes back to it); state is
+ *  widened to include "owned" (host library cross-check), and owned items
+ *  gain albumId/artistId/serverId so the renderer can navigate into the
+ *  library. Non-owned imageUrls are baked through the proxy's /ext endpoint. */
+export type AcquirableAlbumDto = Omit<AcquirableAlbum, "state"> & {
+  state: AcquisitionState;
+  providerId: string;
+  albumId?: string;
+  artistId?: string;
+  serverId?: string;
+};
+
+/** One Downloads-view row, tagged with the providing plugin. */
+export type AcquisitionStatusDto = AcquisitionStatusItem & { providerId: string };
 
 /** Playback transitions the renderer session reports to main (fire-and-forget),
  *  feeding the PlaybackMonitor → plugin events pipeline. "start" means the
@@ -293,6 +326,15 @@ export interface MusexApi {
   /** Similar panel: fan out to plugin similar-providers, match/resolve items
    *  against the library (owned items navigate/play; the rest are external). */
   similarGet(args: SimilarGetArgs): Promise<SectionItemDto[]>;
+  /** True when any plugin registered an AcquisitionProvider. */
+  acquisitionAvailable(): Promise<boolean>;
+  /** External-artist discography: first provider with results wins; items are
+   *  owned-cross-checked against the library and art is proxy-baked. */
+  acquisitionLookupArtist(artistName: string): Promise<AcquirableAlbumDto[]>;
+  /** Request an album from the provider that produced the lookup item. */
+  acquisitionAcquire(args: { providerId: string; providerRef: string }): Promise<void>;
+  /** Downloads view: merged status rows from every acquisition provider. */
+  acquisitionStatus(): Promise<AcquisitionStatusDto[]>;
   /** Open an http(s) URL in the system browser (validated in main). */
   openExternal(url: string): Promise<void>;
   /** Radio refill: fan out to plugin recommenders, resolve suggestions against

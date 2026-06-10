@@ -474,6 +474,231 @@ describe("PluginHost", () => {
     expect(items[0]).toEqual({ name: "Artist 0" });
   });
 
+  it("lookupArtistAlbums: first provider returning a non-empty array wins, items tagged + junk-filtered", async () => {
+    // Registration order = readdir order: acq-a (empty) before acq-b (results).
+    await writePlugin(
+      "acq-a",
+      `export function activate(ctx) {
+        globalThis.__lookups = [];
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async (name) => { globalThis.__lookups.push("a:" + name); return []; },
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    await writePlugin(
+      "acq-b",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "b",
+          lookupArtistAlbums: async (name) => [
+            { title: "Fear of Fours", artistName: name, year: 1999, providerRef: "mb-1", state: "available" },
+            { title: "", artistName: name, providerRef: "mb-2", state: "available" }, // junk — dropped
+            { title: "Debut", artistName: name, providerRef: "", state: "available" }, // junk — dropped
+          ],
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.registry.acquisitionProviders).toHaveLength(2);
+    expect(host.acquisitionAvailable()).toBe(true);
+
+    const albums = await host.lookupArtistAlbums("Lamb");
+    // acq-a was asked first (sequential), returned [], so acq-b's results won.
+    expect((globalThis as Record<string, unknown>).__lookups).toEqual(["a:Lamb"]);
+    expect(albums).toEqual([
+      {
+        title: "Fear of Fours",
+        artistName: "Lamb",
+        year: 1999,
+        providerRef: "mb-1",
+        state: "available",
+        providerId: "acq-b",
+      },
+    ]);
+  });
+
+  it("lookupArtistAlbums skips throwing and slow providers (timeout respected)", async () => {
+    await writePlugin(
+      "acq-boom",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "boom",
+          lookupArtistAlbums: async () => { throw new Error("lookup boom"); },
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    await writePlugin(
+      "acq-slow",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "slow",
+          lookupArtistAlbums: () => new Promise(() => {}), // never resolves
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    await writePlugin(
+      "acq-z-good",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "good",
+          lookupArtistAlbums: async (name) => [
+            { title: "What Sound", artistName: name, providerRef: "mb-3", state: "requested" },
+          ],
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    const { host } = makeHost({ providerTimeoutMs: 50 });
+    await host.loadAll();
+
+    const albums = await host.lookupArtistAlbums("Lamb");
+    expect(albums).toEqual([
+      {
+        title: "What Sound",
+        artistName: "Lamb",
+        providerRef: "mb-3",
+        state: "requested",
+        providerId: "acq-z-good",
+      },
+    ]);
+  });
+
+  it("acquireAlbum routes by providerId; unknown ids and failures throw with context", async () => {
+    await writePlugin(
+      "acq-a",
+      `export function activate(ctx) {
+        globalThis.__acquired = [];
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async (ref) => { globalThis.__acquired.push(ref); },
+          status: async () => [],
+        });
+      }`,
+    );
+    await writePlugin(
+      "acq-boom",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "boom",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => { throw new Error("acquire boom"); },
+          status: async () => [],
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+
+    await host.acquireAlbum("acq-a", "mb-1");
+    expect((globalThis as Record<string, unknown>).__acquired).toEqual(["mb-1"]);
+
+    await expect(host.acquireAlbum("nope", "mb-1")).rejects.toThrow(/unknown acquisition provider/);
+    // rethrown with the plugin id so the renderer knows who failed
+    await expect(host.acquireAlbum("acq-boom", "mb-1")).rejects.toThrow(
+      /\[plugin:acq-boom\].*acquire boom/,
+    );
+  });
+
+  it("acquisitionStatus merges all providers, isolating throwing and slow ones", async () => {
+    await writePlugin(
+      "acq-a",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [
+            { title: "Fear of Fours", artistName: "Lamb", state: "downloading", progress: 0.5 },
+          ],
+        });
+      }`,
+    );
+    await writePlugin(
+      "acq-b",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "b",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [
+            { title: "Homogenic", artistName: "Björk", state: "requested" },
+          ],
+        });
+      }`,
+    );
+    await writePlugin(
+      "acq-boom",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "boom",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => { throw new Error("status boom"); },
+        });
+      }`,
+    );
+    await writePlugin(
+      "acq-slow",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "slow",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: () => new Promise(() => {}), // never resolves
+        });
+      }`,
+    );
+    const { host } = makeHost({ providerTimeoutMs: 50 });
+    await host.loadAll();
+    expect(host.registry.acquisitionProviders).toHaveLength(4);
+
+    const status = await host.acquisitionStatus();
+    expect(status).toEqual([
+      {
+        title: "Fear of Fours",
+        artistName: "Lamb",
+        state: "downloading",
+        progress: 0.5,
+        providerId: "acq-a",
+      },
+      { title: "Homogenic", artistName: "Björk", state: "requested", providerId: "acq-b" },
+    ]);
+  });
+
+  it("acquisitionAvailable is false with no providers, and registrations dispose", async () => {
+    await writePlugin(
+      "acq-a",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.acquisitionAvailable()).toBe(true);
+
+    await host.setEnabled("acq-a", false);
+    expect(host.acquisitionAvailable()).toBe(false);
+    expect(await host.lookupArtistAlbums("Lamb")).toEqual([]);
+    expect(await host.acquisitionStatus()).toEqual([]);
+  });
+
   it("lists and invokes track actions; unknown ids and failures throw with context", async () => {
     await writePlugin(
       "actions",

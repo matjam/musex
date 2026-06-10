@@ -86,6 +86,11 @@ const api: MusexApi = {
     ipcRenderer.invoke(IPC.trackActionsInvoke, actionId, track),
   trackDetailGet: (track) => ipcRenderer.invoke(IPC.trackDetailGet, track),
   similarGet: (args) => ipcRenderer.invoke(IPC.similarGet, args),
+  acquisitionAvailable: () => ipcRenderer.invoke(IPC.acquisitionAvailable),
+  acquisitionLookupArtist: (artistName) =>
+    ipcRenderer.invoke(IPC.acquisitionLookupArtist, artistName),
+  acquisitionAcquire: (args) => ipcRenderer.invoke(IPC.acquisitionAcquire, args),
+  acquisitionStatus: () => ipcRenderer.invoke(IPC.acquisitionStatus),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   radioNext: (args) => ipcRenderer.invoke(IPC.radioNext, args),
   onNavigateTo: (cb) => {
