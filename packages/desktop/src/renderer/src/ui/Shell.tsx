@@ -20,7 +20,7 @@ import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
-import { TrackDetailPanel } from "./TrackDetailPanel";
+import { SidePanelHost } from "./SidePanel";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
@@ -261,7 +261,7 @@ export function Shell() {
 
       <main className="content-area">{renderContent()}</main>
 
-      <TrackDetailPanel />
+      <SidePanelHost />
     </div>
   );
 }

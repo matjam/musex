@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { smartTrackKey } from "../../../logic/smart-playlists";
 import type { TrackDetailDto, TrackStatDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
+import { usePanel } from "../state/panel";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { useRatings } from "../state/ratings";
 import { useSelection } from "../state/selection";
@@ -13,7 +14,8 @@ import { StarRating } from "./StarRating";
 /** Right-hand panel: details for the currently selected track, with links to its
  *  artist and album. Renders nothing when no track is selected. */
 export function TrackDetailPanel() {
-  const { selectedTrack: track, clear } = useSelection();
+  const { selectedTrack: track } = useSelection();
+  const { closePanel } = usePanel();
   const { dispatch, library } = useApp();
   const { ratingFor, rate } = useRatings();
   const { playTrackNext } = usePlayer();
@@ -96,7 +98,14 @@ export function TrackDetailPanel() {
     <aside className="detail-panel">
       <div className="detail-head">
         <span className="detail-head-label">Track</span>
-        <button type="button" className="detail-close" title="Close" onClick={clear}>
+        {/* Close hides the panel but keeps the selection, so the slide-out
+            animation still has content to show. */}
+        <button
+          type="button"
+          className="detail-close"
+          title="Close"
+          onClick={() => closePanel("track")}
+        >
           <X size={16} />
         </button>
       </div>

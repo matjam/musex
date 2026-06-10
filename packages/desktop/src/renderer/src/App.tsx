@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppProvider, useApp } from "./state/app";
+import { PanelProvider, usePanel } from "./state/panel";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { RatingsProvider } from "./state/ratings";
@@ -7,7 +8,6 @@ import { SelectionProvider } from "./state/selection";
 import { AboutModal } from "./ui/AboutModal";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { NowPlayingBar } from "./ui/NowPlayingBar";
-import { QueueDrawer } from "./ui/QueueDrawer";
 import { Shell } from "./ui/Shell";
 import { ShortcutsModal } from "./ui/ShortcutsModal";
 import { SignIn } from "./ui/SignIn";
@@ -17,7 +17,7 @@ import "./ui/theme.css";
 
 function Inner() {
   const { auth, dispatch } = useApp();
-  const [queueOpen, setQueueOpen] = useState(false);
+  const { togglePanel } = usePanel();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
 
@@ -50,14 +50,13 @@ function Inner() {
         <SelectionProvider>
           <RatingsProvider>
             <KeyboardShortcuts
-              toggleQueue={() => setQueueOpen((o) => !o)}
+              toggleQueue={() => togglePanel("queue")}
               toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
             />
             <div className="app-root">
               <TopBar />
               <Shell />
-              <NowPlayingBar onToggleQueue={() => setQueueOpen((o) => !o)} />
-              <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} />
+              <NowPlayingBar onToggleQueue={() => togglePanel("queue")} />
               <Toasts />
               {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
               {about}
@@ -79,7 +78,9 @@ export function App() {
   return (
     <AppProvider>
       <PlayerProvider>
-        <Inner />
+        <PanelProvider>
+          <Inner />
+        </PanelProvider>
       </PlayerProvider>
     </AppProvider>
   );
