@@ -28,6 +28,7 @@ export interface Artist {
   thumb?: string;
   updatedAt?: number; // epoch ms, for cache validation
   userRating?: number; // Plex user rating, 0–10 (one star = 2 points)
+  genres?: string[]; // from Plex Genre tags; omitted when untagged
 }
 
 export interface Album {
@@ -39,6 +40,7 @@ export interface Album {
   thumb?: string;
   updatedAt?: number; // epoch ms, for cache validation
   userRating?: number; // Plex user rating, 0–10 (one star = 2 points)
+  genres?: string[]; // from Plex Genre tags; album-level is the join key for genre playlists
 }
 
 export interface MediaInfo {

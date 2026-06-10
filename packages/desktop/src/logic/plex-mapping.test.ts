@@ -36,6 +36,24 @@ describe("plex-mapping", () => {
     const unrated = toArtist({ ratingKey: "11", title: "Boards of Canada" }, "srv-1");
     expect(unrated.userRating).toBeUndefined();
   });
+  it("maps artist genres to tag strings, filtering empties", () => {
+    const a = toArtist(
+      {
+        ratingKey: "10",
+        title: "Radiohead",
+        genres: [{ tag: "Alternative Rock" }, { tag: "" }, { tag: null }, { tag: "Electronic" }],
+      },
+      "srv-1",
+    );
+    expect(a.genres).toEqual(["Alternative Rock", "Electronic"]);
+  });
+  it("omits artist genres when absent or empty after filtering", () => {
+    expect(toArtist({ ratingKey: "10", title: "X" }, "srv-1").genres).toBeUndefined();
+    expect(toArtist({ ratingKey: "10", title: "X", genres: [] }, "srv-1").genres).toBeUndefined();
+    expect(
+      toArtist({ ratingKey: "10", title: "X", genres: [{ tag: "" }] }, "srv-1").genres,
+    ).toBeUndefined();
+  });
   it("maps an album with year + parent artist id", () => {
     const al = toAlbum(
       { ratingKey: "20", title: "In Rainbows", year: 2007, thumb: "/a.jpg", parentRatingKey: "10" },
@@ -72,6 +90,22 @@ describe("plex-mapping", () => {
     expect(rated.userRating).toBe(8);
     const unrated = toAlbum({ ratingKey: "21", title: "OK Computer" }, "srv-1");
     expect(unrated.userRating).toBeUndefined();
+  });
+  it("maps album genres to tag strings, filtering empties", () => {
+    const al = toAlbum(
+      {
+        ratingKey: "20",
+        title: "In Rainbows",
+        genres: [{ tag: "Art Rock" }, { tag: null }, { tag: "Indie" }],
+      },
+      "srv-1",
+    );
+    expect(al.genres).toEqual(["Art Rock", "Indie"]);
+  });
+  it("omits album genres when absent or empty after filtering", () => {
+    expect(toAlbum({ ratingKey: "20", title: "X" }, "srv-1").genres).toBeUndefined();
+    expect(toAlbum({ ratingKey: "20", title: "X", genres: [] }, "srv-1").genres).toBeUndefined();
+    expect(toAlbum({ ratingKey: "20", title: "X", genres: null }, "srv-1").genres).toBeUndefined();
   });
   it("maps a track with media/part and denormalized titles", () => {
     const t = toTrack(

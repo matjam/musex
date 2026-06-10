@@ -539,6 +539,8 @@ function toArtistSafe(a: PlexArtist, serverId: string): Artist {
       thumb: a.thumb,
       updatedAt: a.updatedAt ? a.updatedAt.getTime() : undefined,
       userRating: a.userRating,
+      // Genre extends MediaTag; .tag is the genre name (verified in media.d.ts).
+      genres: a.genres?.map((g) => ({ tag: g.tag })),
     },
     serverId,
   );
@@ -554,6 +556,8 @@ function toAlbumSafe(al: PlexAlbum, serverId: string): Album {
       parentRatingKey: al.parentRatingKey !== undefined ? String(al.parentRatingKey) : undefined,
       updatedAt: al.updatedAt ? al.updatedAt.getTime() : undefined,
       userRating: al.userRating,
+      // Genre extends MediaTag; .tag is the genre name (verified in media.d.ts).
+      genres: al.genres?.map((g) => ({ tag: g.tag })),
     },
     serverId,
   );

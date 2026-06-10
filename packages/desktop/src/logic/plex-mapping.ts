@@ -6,6 +6,7 @@ interface RawArtist {
   thumb?: string;
   updatedAt?: number;
   userRating?: number; // 0–10
+  genres?: { tag?: string | null }[] | null; // Plex Genre tags
 }
 interface RawAlbum {
   ratingKey: string;
@@ -15,6 +16,7 @@ interface RawAlbum {
   parentRatingKey?: string;
   updatedAt?: number;
   userRating?: number; // 0–10
+  genres?: { tag?: string | null }[] | null; // Plex Genre tags
 }
 interface RawPart {
   id: string | number;
@@ -56,6 +58,12 @@ export function thumbPath(thumb: string | undefined): string | undefined {
   }
 }
 
+/** Plex Genre tags -> non-empty string[] (or undefined when none survive filtering). */
+function genreTags(genres: { tag?: string | null }[] | null | undefined): string[] | undefined {
+  const tags = (genres ?? []).map((g) => g.tag).filter((t): t is string => Boolean(t));
+  return tags.length > 0 ? tags : undefined;
+}
+
 export function toArtist(raw: RawArtist, serverId: string): Artist {
   return {
     id: raw.ratingKey,
@@ -64,6 +72,7 @@ export function toArtist(raw: RawArtist, serverId: string): Artist {
     thumb: thumbPath(raw.thumb),
     updatedAt: raw.updatedAt,
     userRating: raw.userRating,
+    genres: genreTags(raw.genres),
   };
 }
 
@@ -77,6 +86,7 @@ export function toAlbum(raw: RawAlbum, serverId: string): Album {
     thumb: thumbPath(raw.thumb),
     updatedAt: raw.updatedAt,
     userRating: raw.userRating,
+    genres: genreTags(raw.genres),
   };
 }
 

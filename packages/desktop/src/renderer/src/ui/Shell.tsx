@@ -10,6 +10,7 @@ import {
   Music,
   Settings,
   Star,
+  Tags,
 } from "lucide-react";
 import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
@@ -25,6 +26,8 @@ import { ArtistsView } from "./views/ArtistsView";
 import { DiscoverView } from "./views/DiscoverView";
 import { DownloadsView } from "./views/DownloadsView";
 import { ExternalArtistView } from "./views/ExternalArtistView";
+import { GenresView } from "./views/GenresView";
+import { GenreView } from "./views/GenreView";
 import { HomeView } from "./views/HomeView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
@@ -53,6 +56,8 @@ export function Shell() {
   const downloadsActive = view.name === "downloads";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
+  // The per-genre drill-down keeps the Genres nav highlighted.
+  const genresActive = view.name === "genres" || view.name === "genre";
   const tracksActive = view.name === "tracks";
   const settingsActive = view.name === "settings";
 
@@ -74,6 +79,10 @@ export function Shell() {
         return <SettingsView />;
       case "search":
         return <SearchView />;
+      case "genres":
+        return <GenresView />;
+      case "genre":
+        return <GenreView genre={view.genre} />;
       case "tracks":
         return <TracksView />;
       case "playlist":
@@ -135,6 +144,15 @@ export function Shell() {
         >
           <Mic2 size={16} />
           Artists
+        </button>
+
+        <button
+          type="button"
+          className={`nav-item${genresActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "genres" } })}
+        >
+          <Tags size={16} />
+          Genres
         </button>
 
         <button

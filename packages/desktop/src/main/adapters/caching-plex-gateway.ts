@@ -119,9 +119,10 @@ export class CachingPlexGateway implements PlexGateway {
    *  changes — versioning the key makes corrected data flow immediately).
    *  v2: Track.artistId (2026-06-09).
    *  v3: userRating on Track/Artist (2026-06-09).
-   *  v4: Album.userRating (2026-06-09). */
+   *  v4: Album.userRating (2026-06-09).
+   *  v5: genres on Album/Artist (2026-06-10). */
   private vkey(key: string): string {
-    return `v4:${key}`;
+    return `v5:${key}`;
   }
 
   private async cached<T>(

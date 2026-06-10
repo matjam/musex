@@ -8,6 +8,8 @@ export type View =
   | { name: "discover" }
   | { name: "albums" }
   | { name: "artists" }
+  | { name: "genres" }
+  | { name: "genre"; genre: string }
   | { name: "tracks" }
   | { name: "album"; album: Album }
   | { name: "artist"; artist: Artist }
