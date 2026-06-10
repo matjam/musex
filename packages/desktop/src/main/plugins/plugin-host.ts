@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
@@ -280,9 +280,11 @@ export class PluginHost {
         continue;
       }
       for (const sub of subs) {
-        // Direct layout (userData/plugins/<id>/plugin.json) or the dev repo
-        // convention (<repo>/plugins/<name>/dist/plugin.json).
-        for (const dir of [join(scanDir, sub), join(scanDir, sub, "dist")]) {
+        // Dev repo convention FIRST (<repo>/plugins/<name>/dist/plugin.json —
+        // source packages also keep plugin.json at their root, which must NOT
+        // win or the entry resolves beside the source instead of the bundle),
+        // then the direct layout (userData/plugins/<id>/plugin.json).
+        for (const dir of [join(scanDir, sub, "dist"), join(scanDir, sub)]) {
           const manifestPath = join(dir, "plugin.json");
           let raw: string;
           try {
@@ -293,12 +295,30 @@ export class PluginHost {
             }
             continue; // try the next candidate layout
           }
+          let json: unknown;
           try {
-            found.push({ dir, json: JSON.parse(raw) });
+            json = JSON.parse(raw);
           } catch (err) {
             console.error(`[plugins] malformed JSON in ${manifestPath}:`, err);
+            break; // manifest found but unusable — don't fall through to another layout
           }
-          break; // manifest found (even if malformed) — don't also scan dist/
+          // A manifest whose entry file is absent is not a usable candidate
+          // (e.g. a source-tree plugin.json before `pnpm build:plugins` ran) —
+          // keep looking rather than failing at import time.
+          const entry = (json as Record<string, unknown>).entry;
+          if (typeof entry === "string" && entry.length > 0) {
+            try {
+              await access(join(dir, entry));
+            } catch {
+              console.error(
+                `[plugins] ${manifestPath}: entry "${entry}" not found next to the manifest` +
+                  ` (unbuilt plugin? run pnpm build:plugins)`,
+              );
+              continue;
+            }
+          }
+          found.push({ dir, json });
+          break;
         }
       }
     }

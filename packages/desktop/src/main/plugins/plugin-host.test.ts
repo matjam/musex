@@ -105,6 +105,46 @@ describe("PluginHost", () => {
     expect(host.list()[0]?.status).toBe("active");
   });
 
+  it("prefers dist/ over a root source manifest (real first-party package layout)", async () => {
+    // Source packages keep plugin.json at the package root (no entry beside it)
+    // AND ship the built dist/{plugin.json,index.mjs}. The root manifest must
+    // not win — regression for lastfm failing with ERR_MODULE_NOT_FOUND.
+    await writePlugin("pkg", GOOD_ENTRY, undefined, { dist: true });
+    const rootDir = join(root, "scan", "pkg");
+    await writeFile(
+      join(rootDir, "plugin.json"),
+      JSON.stringify({
+        id: "pkg",
+        name: "pkg",
+        version: "1.0.0",
+        apiVersion: 1,
+        entry: "index.mjs",
+      }),
+    );
+    // note: no index.mjs at the package root
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.list()[0]?.status).toBe("active");
+  });
+
+  it("skips a manifest whose entry file is missing (unbuilt source tree)", async () => {
+    const dir = join(root, "scan", "unbuilt");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "plugin.json"),
+      JSON.stringify({
+        id: "unbuilt",
+        name: "u",
+        version: "1.0.0",
+        apiVersion: 1,
+        entry: "index.mjs",
+      }),
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+    expect(host.list()).toHaveLength(0); // not listed as errored — just not a usable candidate
+  });
+
   it("isolates a throwing plugin: it errors, others stay active", async () => {
     await writePlugin("bad", `export function activate() { throw new Error("boom"); }`);
     await writePlugin("good", GOOD_ENTRY);
