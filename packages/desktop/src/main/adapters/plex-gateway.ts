@@ -456,14 +456,21 @@ export class PlexapiGateway implements PlexGateway {
   }
 
   private async doConnect(serverId: string, token: string): Promise<PlexServer> {
+    // The PlexServer constructor TIMEOUT governs EVERY query made through that
+    // instance — so the short connect timeout is used only on throwaway probe
+    // instances, and the CACHED server is always built with the default (30s)
+    // timeout. (Caching a 4s-timeout instance made heavy queries like the
+    // all-tracks listing abort mid-flight.)
+
     // Fast path: reuse the last working base URL (skips the ~10s probe). Validate
     // with one cheap, timeout-bounded query; if it's stale (e.g. network changed)
     // drop it and fall through to full discovery.
     const cachedUrl = this.urlCache?.get(serverId);
     if (cachedUrl) {
-      const server = new PlexServer(cachedUrl, token, CONNECT_TIMEOUT_MS);
+      const probe = new PlexServer(cachedUrl, token, CONNECT_TIMEOUT_MS);
       try {
-        await server.query({ path: "/" }); // cheap, timeout-bounded reachability check
+        await probe.query({ path: "/" }); // cheap, timeout-bounded reachability check
+        const server = new PlexServer(cachedUrl, token); // default timeout for real queries
         this.serverCache.set(serverId, server);
         return server;
       } catch {
@@ -475,10 +482,11 @@ export class PlexapiGateway implements PlexGateway {
     const resources = await account.resources();
     const resource = resources.find((r) => r.clientIdentifier === serverId);
     if (!resource) throw new Error(`Plex server ${serverId} not found for this account`);
-    const plexServer = await resource.connect(null, CONNECT_TIMEOUT_MS);
-    this.urlCache?.set(serverId, plexServer.baseurl);
-    this.serverCache.set(serverId, plexServer);
-    return plexServer;
+    const discovered = await resource.connect(null, CONNECT_TIMEOUT_MS);
+    this.urlCache?.set(serverId, discovered.baseurl);
+    const server = new PlexServer(discovered.baseurl, token); // default timeout for real queries
+    this.serverCache.set(serverId, server);
+    return server;
   }
 
   private async musicSection(library: Library, token: string): Promise<MusicSection> {
