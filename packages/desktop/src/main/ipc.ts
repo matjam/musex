@@ -108,6 +108,10 @@ export function registerIpc(rt: Runtime): void {
     const tracks = persistence.getPlaybackQueue();
     const cursor = persistence.getPlaybackCursor();
     if (!tracks || tracks.length === 0 || !cursor) return null;
+    // Discard queues persisted before Track gained artistId (2026-06-09): their
+    // tracks would render dead artist links in the player bar. One-time reset —
+    // the next play re-persists with full data.
+    if (tracks.some((t) => (t as Partial<Track>).artistId == null)) return null;
 
     const servers = new Set(tracks.map((t) => t.serverId));
     for (const serverId of servers) {

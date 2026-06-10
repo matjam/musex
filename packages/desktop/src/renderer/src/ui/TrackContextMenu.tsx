@@ -1,8 +1,9 @@
 import type { Playlist, Track } from "@musex/core";
-import { ListEnd, ListPlus } from "lucide-react";
+import { ChevronRight, Disc3, ListEnd, ListPlus, Mic2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePlayer } from "../state/player";
 import { usePlaylists } from "../state/playlists";
+import { useEntityNav } from "./hooks/useEntityNav";
 
 const VIEWPORT_MARGIN = 8;
 const SUBMENU_WIDTH = 200;
@@ -29,6 +30,7 @@ interface Props {
 export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: Props) {
   const { playlists, addTo, remove } = usePlaylists();
   const { enqueueNext, enqueueEnd } = usePlayer();
+  const { goArtist, goAlbum } = useEntityNav();
   const [submenu, setSubmenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   // Start at the click point; clamp into the viewport before paint (below).
@@ -111,6 +113,31 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
         Add to queue
       </button>
       <div className="ctx-sep" />
+      <button
+        type="button"
+        className="ctx-item ctx-item--icon"
+        disabled={!target.track.artistId}
+        onClick={() => {
+          goArtist(target.track);
+          onClose();
+        }}
+      >
+        <Mic2 size={14} />
+        Go to artist
+      </button>
+      <button
+        type="button"
+        className="ctx-item ctx-item--icon"
+        disabled={!target.track.albumId}
+        onClick={() => {
+          goAlbum(target.track);
+          onClose();
+        }}
+      >
+        <Disc3 size={14} />
+        Go to album
+      </button>
+      <div className="ctx-sep" />
       <div
         className="ctx-item ctx-haschild"
         role="menuitem"
@@ -119,7 +146,9 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
         onMouseLeave={() => setSubmenu(false)}
       >
         <span>Add to playlist</span>
-        <span className="ctx-arrow">▸</span>
+        <span className="ctx-arrow">
+          <ChevronRight size={13} />
+        </span>
         {submenu && (
           <div className={`ctx-submenu${submenuLeft ? " ctx-submenu--left" : ""}`}>
             <button

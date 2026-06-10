@@ -1248,6 +1248,17 @@ img.np-art {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.ctx-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: none;
+}
+
+.ctx-arrow {
+  display: flex;
+  align-items: center;
+}
+
 .ctx-accent {
   color: var(--green);
 }
