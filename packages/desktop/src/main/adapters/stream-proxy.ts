@@ -163,20 +163,10 @@ export class StreamProxy {
       }
     }
 
-    // TEMP DIAGNOSTIC (playback-stall investigation): audio request lifecycle.
-    const ts = () => new Date().toISOString().slice(11, 23);
-    const isAudio = !art && isCacheablePath(plexPath);
-    const tag = isAudio ? `${plexPath.split("/").slice(-2).join("/")}` : null;
-    if (tag) {
-      console.log(`[musex proxy ${ts()}] → GET …${tag} range=${req.headers.range ?? "none"}`);
-      res.on("finish", () => console.log(`[musex proxy ${ts()}] ✓ finished …${tag}`));
-    }
-
     // Serve from disk if we have a complete copy (works for full + range, even offline).
     if (cachingOn && this.cache && key) {
       const hit = await this.cache.pathIfPresent(key);
       if (hit) {
-        if (tag) console.log(`[musex proxy ${ts()}]   cache hit …${tag}`);
         await this.serveFromFile(req, res, hit, contentTypeForPath(plexPath));
         return;
       }
@@ -225,11 +215,6 @@ export class StreamProxy {
         const v = upstreamRes.headers[k];
         if (v) h[k] = v;
       }
-      if (tag) {
-        console.log(
-          `[musex proxy ${ts()}]   upstream ${upstreamRes.statusCode} len=${upstreamRes.headers["content-length"] ?? "?"} …${tag}`,
-        );
-      }
       res.writeHead(upstreamRes.statusCode ?? 502, h);
 
       if (writer && upstreamRes.statusCode === 200) {
@@ -268,11 +253,6 @@ export class StreamProxy {
     // commit/abort decision.
     req.on("close", () => {
       if (res.writableFinished) return;
-      if (tag) {
-        console.log(
-          `[musex proxy ${ts()}] ✕ client closed early (${res.socket?.bytesWritten ?? "?"} bytes sent) …${tag}`,
-        );
-      }
       upstreamReq.destroy();
       finishCache(false);
     });

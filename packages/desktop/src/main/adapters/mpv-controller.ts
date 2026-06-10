@@ -98,9 +98,9 @@ export class MpvController {
       [
         ...SPAWN_ARGS,
         `--input-ipc-server=${this.paths.socketPath}`,
-        // TEMP DIAGNOSTIC (playback-stall investigation): verbose mpv log —
-        // demuxer/cache/network state will show exactly why playback stops.
-        `--log-file=${this.paths.socketPath}.log`,
+        // Opt-in verbose mpv log (demuxer/cache/network state) — invaluable for
+        // diagnosing playback issues: MUSEX_MPV_LOG=1 writes <socket>.log.
+        ...(process.env.MUSEX_MPV_LOG ? [`--log-file=${this.paths.socketPath}.log`] : []),
       ],
       { stdio: "ignore" },
     );

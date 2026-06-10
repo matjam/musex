@@ -42,14 +42,6 @@ app.whenReady().then(async () => {
   // closed-but-not-yet-GCed window (macOS keeps the app alive windowless).
   const wireEngineEvents = (win: BrowserWindow): void => {
     runtime.mpv.setSink((e) => {
-      // TEMP DIAGNOSTIC (playback-stall investigation): engine events with
-      // timestamps, in the same stream as the ui/proxy logs (positions omitted).
-      if (e.type !== "position") {
-        const ts = new Date().toISOString().slice(11, 23);
-        console.log(
-          `[musex mpv ${ts}] event: ${e.type}${e.type === "error" ? ` ${e.message}` : ""}`,
-        );
-      }
       if (!win.isDestroyed()) win.webContents.send(IPC.playbackEvent, e);
     });
   };
