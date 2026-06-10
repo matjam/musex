@@ -2283,3 +2283,115 @@ img.queue-row-art {
   color: var(--green);
   border-color: var(--green);
 }
+
+/* ---- Acquisition (External Artist + Downloads views) ---- */
+
+/* Badge state variants: color-only, shared by the grid-card corner badge and
+   the Downloads-row .dl-chip. */
+.grid-card-badge--owned {
+  background: var(--green);
+  border-color: transparent;
+  color: var(--bg);
+}
+
+.grid-card-badge--downloaded {
+  background: rgba(0, 0, 0, 0.65);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.grid-card-badge--downloading {
+  background: rgba(0, 0, 0, 0.65);
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.grid-card-badge--requested {
+  background: rgba(0, 0, 0, 0.65);
+  border-color: var(--purple);
+  color: #b9a8ff;
+}
+
+.grid-card-badge--unavailable {
+  background: rgba(0, 0, 0, 0.65);
+  border-color: rgba(255, 95, 87, 0.45);
+  color: rgba(255, 95, 87, 0.75);
+}
+
+/* Dimmed card (unavailable acquisition albums) */
+.grid-card--dim {
+  opacity: 0.45;
+}
+
+/* Downloads view rows */
+.dl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 640px;
+}
+
+.dl-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dl-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.dl-row-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dl-row-artist {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.dl-row-detail {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* Same look as the np-seek bar, non-interactive */
+.dl-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  position: relative;
+  margin-top: 7px;
+  overflow: hidden;
+}
+
+.dl-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: var(--green);
+}
+
+/* Static pill chip; state colors come from the shared badge variants above */
+.dl-chip {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+}

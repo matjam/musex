@@ -1,9 +1,11 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { SectionItemDto } from "../../../shared/ipc-contract";
+import { useApp } from "../state/app";
 import { usePlayer } from "../state/player";
 import { type SimilarTarget, useSimilar } from "../state/similar";
 import { GridCard } from "./GridCard";
+import { useAcquisitionAvailable } from "./hooks/useAcquisitionAvailable";
 import { useEntityNav } from "./hooks/useEntityNav";
 
 type FetchState =
@@ -17,8 +19,10 @@ type FetchState =
  *  no similar target is open. */
 export function SimilarPanel() {
   const { target, close } = useSimilar();
+  const { dispatch } = useApp();
   const { playTrackNext } = usePlayer();
   const { goArtist, goAlbum } = useEntityNav();
+  const acquisitionAvailable = useAcquisitionAvailable();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   // Refetched per target. The cancelled flag guards against a stale (slower)
@@ -59,8 +63,14 @@ export function SimilarPanel() {
       close();
       return;
     }
+    if (t.kind === "artist" && acquisitionAvailable) {
+      // External artist + acquisition provider registered → in-app discography.
+      dispatch({ type: "navigate", view: { name: "external-artist", artistName: item.name } });
+      close();
+      return;
+    }
     if (item.externalUrl) void window.musex.openExternal(item.externalUrl);
-    // External item without a URL: nothing sensible to open — no-op.
+    // External item without a URL or acquisition provider: no-op.
   }
 
   return (

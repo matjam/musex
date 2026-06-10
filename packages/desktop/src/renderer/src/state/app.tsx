@@ -14,7 +14,9 @@ export type View =
   | { name: "settings" }
   | { name: "search" }
   | { name: "playlist"; playlist: Playlist }
-  | { name: "smart"; kind: SmartKind };
+  | { name: "smart"; kind: SmartKind }
+  | { name: "external-artist"; artistName: string }
+  | { name: "downloads" };
 
 interface AppState {
   auth: AuthState;

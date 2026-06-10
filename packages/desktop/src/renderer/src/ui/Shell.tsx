@@ -1,6 +1,7 @@
 import {
   Compass,
   Disc3,
+  Download,
   Flame,
   History,
   Home,
@@ -22,6 +23,8 @@ import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
 import { DiscoverView } from "./views/DiscoverView";
+import { DownloadsView } from "./views/DownloadsView";
+import { ExternalArtistView } from "./views/ExternalArtistView";
 import { HomeView } from "./views/HomeView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
@@ -47,6 +50,7 @@ export function Shell() {
   // artist/album drill-downs keep the Artists nav highlighted.
   const homeActive = view.name === "home";
   const discoverActive = view.name === "discover";
+  const downloadsActive = view.name === "downloads";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   const tracksActive = view.name === "tracks";
@@ -76,6 +80,10 @@ export function Shell() {
         return <PlaylistView playlist={view.playlist} />;
       case "smart":
         return <SmartPlaylistView kind={view.kind} />;
+      case "external-artist":
+        return <ExternalArtistView artistName={view.artistName} />;
+      case "downloads":
+        return <DownloadsView />;
     }
   }
 
@@ -98,6 +106,15 @@ export function Shell() {
         >
           <Compass size={16} />
           Discover
+        </button>
+
+        <button
+          type="button"
+          className={`nav-item${downloadsActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "downloads" } })}
+        >
+          <Download size={16} />
+          Downloads
         </button>
 
         <div className="nav-section">Library</div>
