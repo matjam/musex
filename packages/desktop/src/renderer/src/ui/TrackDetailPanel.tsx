@@ -1,12 +1,13 @@
 import { Play, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { TrackDetailDto } from "../../../shared/ipc-contract";
+import { smartTrackKey } from "../../../logic/smart-playlists";
+import type { TrackDetailDto, TrackStatDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { useRatings } from "../state/ratings";
 import { useSelection } from "../state/selection";
 import { useSimilar } from "../state/similar";
-import { formatDuration } from "../util/format";
+import { formatDuration, relativeTime } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
 import { StarRating } from "./StarRating";
 
@@ -19,6 +20,7 @@ export function TrackDetailPanel() {
   const { playTrackNext } = usePlayer();
   const { open: openSimilar } = useSimilar();
   const [pluginDetails, setPluginDetails] = useState<TrackDetailDto[]>([]);
+  const [listenStat, setListenStat] = useState<TrackStatDto | null>(null);
 
   // Plugin-contributed detail sections; refetched per selection. The cancelled
   // flag guards against a stale (slower) response landing after the selection
@@ -33,6 +35,24 @@ export function TrackDetailPanel() {
         if (!cancelled) setPluginDetails(details);
       })
       .catch((err) => console.error("[plugins] trackDetailGet failed:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [track]);
+
+  // Listening stats from the taste profile, joined by artist+title key.
+  // Point-in-time per selection is fine — it's a local IPC, no live updates.
+  useEffect(() => {
+    setListenStat(null);
+    if (!track) return;
+    let cancelled = false;
+    const key = smartTrackKey(track);
+    window.musex
+      .getTasteSnapshot()
+      .then((snapshot) => {
+        if (!cancelled) setListenStat(snapshot.stats.find((s) => s.key === key) ?? null);
+      })
+      .catch((err) => console.error("[taste] getTasteSnapshot failed:", err));
     return () => {
       cancelled = true;
     };
@@ -160,6 +180,30 @@ export function TrackDetailPanel() {
           <div className="detail-meta-row">
             <span>Container</span>
             <span>{track.media.container.toUpperCase()}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="detail-meta detail-plugin">
+        <div className="detail-plugin-title">Listening</div>
+        {listenStat ? (
+          <>
+            <div className="detail-meta-row">
+              <span>Plays</span>
+              <span>{listenStat.plays}</span>
+            </div>
+            <div className="detail-meta-row">
+              <span>Skips</span>
+              <span>{listenStat.skips}</span>
+            </div>
+            <div className="detail-meta-row">
+              <span>Last played</span>
+              <span>{relativeTime(listenStat.lastPlayedMs, Date.now())}</span>
+            </div>
+          </>
+        ) : (
+          <div className="detail-meta-row">
+            <span>Not played yet</span>
           </div>
         )}
       </div>

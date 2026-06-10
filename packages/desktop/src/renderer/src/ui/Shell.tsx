@@ -11,6 +11,7 @@ import {
   Settings,
   Star,
   Tags,
+  Wand2,
 } from "lucide-react";
 import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
@@ -37,6 +38,7 @@ import { TracksView } from "./views/TracksView";
 
 /** Sidebar entries for the Smart section, in display order. */
 const SMART_NAV: { kind: SmartKind; Icon: typeof Star }[] = [
+  { kind: "for-you", Icon: Wand2 },
   { kind: "top-rated", Icon: Star },
   { kind: "heavy-rotation", Icon: Flame },
   { kind: "rediscover", Icon: History },

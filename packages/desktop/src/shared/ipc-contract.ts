@@ -116,6 +116,8 @@ export type TrackStatDto = {
   skips: number;
   lastPlayedMs: number;
   decayedPlays: number;
+  /** Last track rating (1–5 stars); null = unrated. */
+  ratingStars: number | null;
 };
 /** Taste profile snapshot for the renderer's smart playlists. */
 export type TasteSnapshotDto = {

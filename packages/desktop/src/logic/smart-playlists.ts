@@ -1,10 +1,11 @@
 import type { Track } from "@musex/core";
 import { KEY_SEPARATOR } from "./taste-profile";
 
-/** The three canned smart playlists (sidebar "Smart" section). */
-export type SmartKind = "top-rated" | "heavy-rotation" | "rediscover";
+/** The canned smart playlists (sidebar "Smart" section). */
+export type SmartKind = "for-you" | "top-rated" | "heavy-rotation" | "rediscover";
 
 export const SMART_TITLES: Record<SmartKind, string> = {
+  "for-you": "For You",
   "top-rated": "Top Rated",
   "heavy-rotation": "Heavy Rotation",
   rediscover: "Rediscover",
@@ -37,10 +38,11 @@ export interface SmartTrackStat {
 /**
  * Pure smart-playlist rules: select + order library tracks for one canned
  * kind, joining main's taste-profile stats by artist+title key. No I/O, no
- * clock — `nowMs` is injected.
+ * clock — `nowMs` is injected. "for-you" is NOT handled here — it has its own
+ * multi-source composer (`logic/for-you.ts`) and the view branches to it.
  */
 export function computeSmartPlaylist(
-  kind: SmartKind,
+  kind: Exclude<SmartKind, "for-you">,
   tracks: Track[],
   stats: SmartTrackStat[],
   artistScores: { name: string; score: number }[],

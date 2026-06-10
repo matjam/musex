@@ -407,6 +407,7 @@ export function registerIpc(rt: Runtime): void {
       skips: s.skips,
       lastPlayedMs: s.lastPlayedMs,
       decayedPlays: s.decayedPlays,
+      ratingStars: s.ratingStars,
     })),
     topArtists: rt.tasteProfile.topArtists(),
   }));

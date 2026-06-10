@@ -45,8 +45,9 @@ describe("smartTrackKey", () => {
 });
 
 describe("SMART_TITLES", () => {
-  it("names all three kinds", () => {
+  it("names all four kinds", () => {
     expect(SMART_TITLES).toEqual({
+      "for-you": "For You",
       "top-rated": "Top Rated",
       "heavy-rotation": "Heavy Rotation",
       rediscover: "Rediscover",
