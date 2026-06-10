@@ -107,6 +107,7 @@ textarea:focus {
 /* ---- Top bar (drag region + persistent search) ---- */
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -127,12 +128,16 @@ textarea:focus {
   flex-shrink: 0;
 }
 
+/* Absolutely centered so the box centers on the WINDOW, not on the space
+   left over after the traffic lights + logo (flex would sit it off-center). */
 .topbar-search {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   width: 360px;
-  max-width: 42%;
+  max-width: 38%;
   -webkit-app-region: no-drag;
 }
 

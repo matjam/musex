@@ -15,7 +15,10 @@ function createWindow(): BrowserWindow {
     height: 820,
     minWidth: 940,
     minHeight: 600,
-    titleBarStyle: "hiddenInset",
+    // "hidden" + explicit traffic-light position: vertically centered in the
+    // 52px topbar, in line with the logo and search box (Spotify-style).
+    titleBarStyle: "hidden",
+    trafficLightPosition: { x: 18, y: 20 },
     backgroundColor: "#0d0e12",
     webPreferences: {
       preload: join(__dirname, "../preload/index.cjs"),
