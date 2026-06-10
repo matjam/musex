@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/matjam/musex/compare/musex-v0.1.0...musex-v0.1.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* **plex:** one bad server must not fail sign-in; use per-server access tokens ([c27b873](https://github.com/matjam/musex/commit/c27b873f7fcb550554e18ccd58d2e4467d7125e7))
+* **release:** pin electron exactly for electron-builder; drop spent release-as; manual DMG rebuild dispatch ([bdc9177](https://github.com/matjam/musex/commit/bdc9177578f508ac89dc964271e3c56c9ad5560b))
+
 ## 0.1.0 (2026-06-10)
 
 
