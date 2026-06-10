@@ -56,17 +56,30 @@ export function AlbumDetailView({ album }: Props) {
   const totalMs = tracks.reduce((sum, t) => sum + t.durationMs, 0);
   const totalMin = Math.round(totalMs / 60000);
 
-  // Navigate back to artist (we need the artist — album has artistId but not the full Artist object)
-  // We'll navigate to artists list since we don't have the artist object here
-  function goBack() {
-    dispatch({ type: "navigate", view: { name: "artists" } });
+  // The hierarchy crumb is Artist › Album. The artist NAME comes from the first
+  // loaded track (Album carries only artistId); until tracks load, fall back to
+  // the Artists list as the root.
+  const crumbArtist = tracks[0];
+  function goToArtist() {
+    const t = crumbArtist;
+    if (t?.artistId) {
+      dispatch({
+        type: "navigate",
+        view: {
+          name: "artist",
+          artist: { id: t.artistId, serverId: t.serverId, name: t.artistName },
+        },
+      });
+    } else {
+      dispatch({ type: "navigate", view: { name: "artists" } });
+    }
   }
 
   return (
     <div className="album-detail">
       <div className="breadcrumb">
-        <button type="button" className="breadcrumb-link" onClick={goBack}>
-          Artists
+        <button type="button" className="breadcrumb-link" onClick={goToArtist}>
+          {crumbArtist?.artistName ? crumbArtist.artistName : "Artists"}
         </button>
         {" › "}
         <span className="breadcrumb-current">{album.title}</span>

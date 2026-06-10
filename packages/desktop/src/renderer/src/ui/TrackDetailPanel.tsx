@@ -83,15 +83,24 @@ export function TrackDetailPanel() {
 
       <AlbumArt thumb={track.thumb} className="detail-art" />
 
-      <div className="detail-title">{track.title}</div>
-      <button type="button" className="detail-link" onClick={goArtist} disabled={!goArtist}>
-        {track.artistName}
-      </button>
-      {track.albumTitle && (
-        <button type="button" className="detail-link dim" onClick={goAlbum} disabled={!goAlbum}>
-          {track.albumTitle}
+      {/* Hierarchy crumb: Artist › Album › Track */}
+      <div className="breadcrumb detail-crumb">
+        <button type="button" className="breadcrumb-link" onClick={goArtist} disabled={!goArtist}>
+          {track.artistName}
         </button>
-      )}
+        {track.albumTitle && (
+          <>
+            {" › "}
+            <button type="button" className="breadcrumb-link" onClick={goAlbum} disabled={!goAlbum}>
+              {track.albumTitle}
+            </button>
+          </>
+        )}
+        {" › "}
+        <span className="breadcrumb-current">{track.title}</span>
+      </div>
+
+      <div className="detail-title">{track.title}</div>
 
       <StarRating
         value10={ratingFor(track.id, track.userRating)}

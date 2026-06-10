@@ -2133,3 +2133,17 @@ img.queue-row-art {
   border-color: rgba(255, 255, 255, 0.3);
   color: var(--text);
 }
+
+/* ---- Track panel crumb ---- */
+
+.detail-crumb {
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.detail-crumb .breadcrumb-link:disabled {
+  cursor: default;
+  text-decoration: none;
+  opacity: 0.7;
+}
