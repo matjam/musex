@@ -1,9 +1,13 @@
 import type { SearchResults } from "@musex/core";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ExternalArtistResultDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
+import { GridCard } from "../GridCard";
+import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
@@ -17,8 +21,11 @@ export function SearchView() {
   const { library, dispatch, searchQuery: query } = useApp();
   const { state, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
+  const acquisitionAvailable = useAcquisitionAvailable();
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [external, setExternal] = useState<ExternalArtistResultDto[]>([]);
+  const [externalLoading, setExternalLoading] = useState(false);
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
 
@@ -56,18 +63,81 @@ export function SearchView() {
     };
   }, [query, library]);
 
+  // Federated external search (acquisition plugin, e.g. Lidarr) — a second
+  // debounced fetch, independent loading flag, never blocks library results.
+  useEffect(() => {
+    if (!acquisitionAvailable) return;
+    const q = query.trim();
+    if (q === "") {
+      setExternal([]);
+      setExternalLoading(false);
+      return;
+    }
+    setExternalLoading(true);
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      window.musex
+        .acquisitionSearchArtists(q)
+        .then((r) => {
+          if (!cancelled) {
+            setExternal(r);
+            setExternalLoading(false);
+          }
+        })
+        .catch((err: unknown) => {
+          console.error("[acquisition] searchArtists failed:", err);
+          if (!cancelled) {
+            setExternal([]);
+            setExternalLoading(false);
+          }
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [query, acquisitionAvailable]);
+
+  // Optimistic flip to "monitored"; revert + log on failure (the plugin
+  // itself toasts success/failure — no extra toast here).
+  function monitorArtist(artist: ExternalArtistResultDto) {
+    const flip = (monitored: boolean) =>
+      setExternal((prev) =>
+        prev.map((a) =>
+          a.providerId === artist.providerId && a.providerRef === artist.providerRef
+            ? { ...a, monitored }
+            : a,
+        ),
+      );
+    flip(true);
+    window.musex
+      .acquisitionAcquireArtist({ providerId: artist.providerId, providerRef: artist.providerRef })
+      .catch((err: unknown) => {
+        console.error("[acquisition] acquireArtist failed:", err);
+        flip(false);
+      });
+  }
+
   const playingTrackId =
     state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
 
+  // External results duplicating a library artist hit are noise — hide them.
+  const libraryArtistNames = new Set(results.artists.map((a) => a.name.toLowerCase()));
+  const externalArtists = external.filter((a) => !libraryArtistNames.has(a.name.toLowerCase()));
+
   const hasQuery = query.trim() !== "";
   const empty =
-    results.artists.length === 0 && results.albums.length === 0 && results.tracks.length === 0;
+    results.artists.length === 0 &&
+    results.albums.length === 0 &&
+    results.tracks.length === 0 &&
+    externalArtists.length === 0;
+  const anyLoading = loading || externalLoading;
 
   return (
     <div className="search-page">
       {!hasQuery && <div className="content-placeholder">Search artists, albums and songs.</div>}
-      {hasQuery && loading && empty && <div className="content-placeholder">Searching…</div>}
-      {hasQuery && !loading && empty && (
+      {hasQuery && anyLoading && empty && <div className="content-placeholder">Searching…</div>}
+      {hasQuery && !anyLoading && empty && (
         <div className="content-placeholder">No results for "{query.trim()}".</div>
       )}
 
@@ -149,6 +219,35 @@ export function SearchView() {
               );
             }}
           />
+        </div>
+      )}
+
+      {externalArtists.length > 0 && (
+        <div className="browse-section">
+          <h3 className="browse-title">Not in your library</h3>
+          <div className="browse-sub">via your acquisition plugin — monitor to download</div>
+          <div className="browse-grid">
+            {externalArtists.map((artist) => (
+              <GridCard
+                key={`${artist.providerId}:${artist.providerRef}`}
+                round
+                thumb={artist.imageUrl}
+                title={artist.name}
+                subtitle={artist.disambiguation}
+                badge={artist.monitored ? "monitored" : undefined}
+                badgeVariant={artist.monitored ? "monitored" : undefined}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "external-artist", artistName: artist.name },
+                  })
+                }
+                actionIcon={artist.monitored ? undefined : Download}
+                actionTitle="Monitor artist — download everything"
+                onAction={artist.monitored ? undefined : () => monitorArtist(artist)}
+              />
+            ))}
+          </div>
         </div>
       )}
 

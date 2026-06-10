@@ -151,6 +151,20 @@ export interface AcquisitionStatusItem {
   detail?: string;
 }
 
+/** One artist from an acquisition provider's external (MusicBrainz-backed)
+ *  search — federated into the app's search view. */
+export interface ExternalArtistResult {
+  name: string;
+  /** Opaque — pass back to acquireArtist. */
+  providerRef: string;
+  imageUrl?: string;
+  externalUrl?: string;
+  /** e.g. "UK trip-hop duo" — disambiguates same-named artists. */
+  disambiguation?: string;
+  /** Already fully monitored in the provider. */
+  monitored?: boolean;
+}
+
 /** Acquires music via an external service (e.g. Lidarr): discography lookup,
  *  album acquisition, and download status. */
 export interface AcquisitionProvider {
@@ -159,6 +173,10 @@ export interface AcquisitionProvider {
   lookupArtistAlbums(artistName: string): Promise<AcquirableAlbum[]>;
   acquireAlbum(providerRef: string): Promise<void>;
   status(): Promise<AcquisitionStatusItem[]>;
+  /** OPTIONAL: external artist search (federated into the app's search view). */
+  searchArtists?(term: string): Promise<ExternalArtistResult[]>;
+  /** OPTIONAL: monitor EVERYTHING by the artist + kick off a search. */
+  acquireArtist?(providerRef: string): Promise<void>;
 }
 
 export interface TrackDetailProvider {

@@ -5,6 +5,7 @@ import type {
   AcquirableAlbum,
   AcquisitionStatusItem,
   Disposable,
+  ExternalArtistResult,
   LibrarySearchResult,
   PluginContext,
   PluginEvents,
@@ -53,6 +54,9 @@ const SIMILAR_ITEMS_MAX = 24;
 /** Acquisition lookups (Lidarr metadata searches) are slow — a bigger budget
  *  than the section/detail fan-outs. Tests override via providerTimeoutMs. */
 const ACQUISITION_TIMEOUT_MS = 15_000;
+
+/** Cap on federated external artist search results (one search section). */
+const EXTERNAL_ARTIST_RESULTS_MAX = 10;
 
 /** Dedupe/exclusion key for recommendations: lower(artist)␟lower(title ?? "").
  *  The same artist+title join key the taste profile and smart playlists use. */
@@ -334,6 +338,72 @@ export class PluginHost {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`[plugin:${entry.pluginId}] acquire failed: ${msg}`);
     }
+  }
+
+  /** Federated external artist search: ask providers implementing
+   *  searchArtists, SEQUENTIALLY in registration order — the first provider
+   *  returning a non-empty (post junk-filter) array wins. Throwing/slow
+   *  providers are logged and skipped. Items are tagged with the owning
+   *  pluginId (acquireArtist routes back) and capped. */
+  async searchExternalArtists(
+    term: string,
+  ): Promise<(ExternalArtistResult & { providerId: string })[]> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? ACQUISITION_TIMEOUT_MS;
+    for (const p of this.registry.acquisitionProviders) {
+      const search = p.provider.searchArtists;
+      if (search === undefined) continue;
+      let items: ExternalArtistResult[];
+      try {
+        const res = await withTimeout(search.call(p.provider, term), timeoutMs);
+        items = Array.isArray(res) ? res : [];
+      } catch (err) {
+        console.error(
+          `[plugins] ${p.pluginId} acquisition provider "${p.provider.id}" artist search failed:`,
+          err,
+        );
+        continue;
+      }
+      const tagged: (ExternalArtistResult & { providerId: string })[] = [];
+      for (const item of items) {
+        if (tagged.length >= EXTERNAL_ARTIST_RESULTS_MAX) break;
+        // Full-trust, but a provider can still return junk — drop it here.
+        if (typeof item?.name !== "string" || item.name.length === 0) continue;
+        if (typeof item.providerRef !== "string" || item.providerRef.length === 0) continue;
+        tagged.push({ ...item, providerId: p.pluginId });
+      }
+      if (tagged.length > 0) return tagged;
+    }
+    return [];
+  }
+
+  /** Route a monitor-entire-artist request to the provider that produced the
+   *  search result. Unknown providerId / provider without acquireArtist →
+   *  throw; provider failures are rethrown with the plugin id prefixed. */
+  async acquireArtist(providerId: string, providerRef: string): Promise<void> {
+    const entry = this.registry.acquisitionProviders.find((p) => p.pluginId === providerId);
+    if (!entry) throw new Error(`unknown acquisition provider "${providerId}"`);
+    const acquire = entry.provider.acquireArtist;
+    if (acquire === undefined) {
+      throw new Error(`acquisition provider "${providerId}" cannot monitor artists`);
+    }
+    try {
+      await acquire.call(entry.provider, providerRef);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`[plugin:${entry.pluginId}] monitor artist failed: ${msg}`);
+    }
+  }
+
+  /** Monitor an entire artist by NAME (e.g. from the External Artist view,
+   *  which only knows the name): search the external sources, prefer a
+   *  case-insensitive exact name match (else the first result), and route to
+   *  its provider's acquireArtist. */
+  async acquireArtistByName(name: string): Promise<void> {
+    const results = await this.searchExternalArtists(name);
+    const lower = name.toLowerCase();
+    const match = results.find((r) => r.name.toLowerCase() === lower) ?? results[0];
+    if (match === undefined) throw new Error("No acquisition source knows this artist");
+    await this.acquireArtist(match.providerId, match.providerRef);
   }
 
   /** Fan out to EVERY acquisition provider for Downloads-view status rows,

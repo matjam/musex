@@ -34,9 +34,13 @@ function badgeFor(album: AcquirableAlbumDto): { badge: string; variant: string }
 export function ExternalArtistView({ artistName }: { artistName: string }) {
   const { dispatch } = useApp();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  const [monitorState, setMonitorState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [monitorError, setMonitorError] = useState<string | null>(null);
 
   useEffect(() => {
     setFetch({ status: "loading" });
+    setMonitorState("idle");
+    setMonitorError(null);
     let cancelled = false;
     window.musex
       .acquisitionLookupArtist(artistName)
@@ -108,12 +112,46 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
       });
   }
 
+  // Monitor the WHOLE artist (downloads everything). No optimistic state on
+  // the album grid — states refresh on the next visit; the plugin toasts.
+  function monitorEntireArtist() {
+    setMonitorState("busy");
+    setMonitorError(null);
+    window.musex
+      .acquisitionAcquireArtistByName(artistName)
+      .then(() => setMonitorState("done"))
+      .catch((err: unknown) => {
+        console.error("[acquisition] acquireArtistByName failed:", err);
+        setMonitorState("error");
+        setMonitorError(err instanceof Error ? err.message : "Failed to monitor artist");
+      });
+  }
+
   return (
     <div className="browse-section external-artist-view">
-      <h3 className="browse-title">{artistName}</h3>
+      <div className="artist-header">
+        <h3 className="browse-title">{artistName}</h3>
+        <button
+          type="button"
+          className="shuffle-btn"
+          title="Monitor entire artist — download everything"
+          disabled={monitorState === "busy" || monitorState === "done"}
+          onClick={monitorEntireArtist}
+        >
+          <Download size={16} />
+        </button>
+        <span className="album-meta-muted">
+          {monitorState === "busy"
+            ? "Monitoring…"
+            : monitorState === "done"
+              ? "Monitoring entire artist"
+              : "Monitor entire artist"}
+        </span>
+      </div>
       <div className="browse-sub">
         Discography via plugins — albums you own open in your library.
       </div>
+      {monitorError !== null && <div className="browse-sub error-text">{monitorError}</div>}
 
       {fetch.status === "loading" && (
         <div className="content-placeholder">Looking up discography…</div>

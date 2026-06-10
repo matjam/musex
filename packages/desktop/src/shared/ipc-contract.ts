@@ -16,6 +16,7 @@ import type {
   AcquirableAlbum,
   AcquisitionState,
   AcquisitionStatusItem,
+  ExternalArtistResult,
   SettingField,
   SettingsActionResult,
   TrackInfo,
@@ -86,6 +87,9 @@ export const IPC = {
   acquisitionLookupArtist: "musex:acquisition:lookupArtist", // (artistName) -> AcquirableAlbumDto[]
   acquisitionAcquire: "musex:acquisition:acquire", // ({ providerId, providerRef }) -> void
   acquisitionStatus: "musex:acquisition:status", // -> AcquisitionStatusDto[]
+  acquisitionSearchArtists: "musex:acquisition:searchArtists", // (term) -> ExternalArtistResultDto[]
+  acquisitionAcquireArtist: "musex:acquisition:acquireArtist", // ({ providerId, providerRef }) -> void
+  acquisitionAcquireArtistByName: "musex:acquisition:acquireArtistByName", // (artistName) -> void
   openExternal: "musex:openExternal", // (url) -> void (http/https only)
   radioNext: "musex:radio:next", // (RadioNextArgs) -> Track[]
   navigateTo: "musex:navigateTo", // push: main -> renderer NavigateToPayload (app menu navigation)
@@ -138,6 +142,7 @@ export type PlaybackEngineEvent =
 // plugin API package; the contract only adds the IPC-specific shapes.
 export type {
   AcquisitionState,
+  ExternalArtistResult,
   SettingField,
   SettingsActionResult,
   TrackInfo,
@@ -158,6 +163,10 @@ export type AcquirableAlbumDto = Omit<AcquirableAlbum, "state"> & {
 
 /** One Downloads-view row, tagged with the providing plugin. */
 export type AcquisitionStatusDto = AcquisitionStatusItem & { providerId: string };
+
+/** A plugin-api ExternalArtistResult + the host's providerId tag (monitor
+ *  routes back to it). imageUrls are baked through the proxy's /ext endpoint. */
+export type ExternalArtistResultDto = ExternalArtistResult & { providerId: string };
 
 /** Playback transitions the renderer session reports to main (fire-and-forget),
  *  feeding the PlaybackMonitor → plugin events pipeline. "start" means the
@@ -337,6 +346,14 @@ export interface MusexApi {
   acquisitionAcquire(args: { providerId: string; providerRef: string }): Promise<void>;
   /** Downloads view: merged status rows from every acquisition provider. */
   acquisitionStatus(): Promise<AcquisitionStatusDto[]>;
+  /** Federated external artist search: first provider with results wins;
+   *  artwork is proxy-baked. */
+  acquisitionSearchArtists(term: string): Promise<ExternalArtistResultDto[]>;
+  /** Monitor EVERYTHING by the artist (whole discography + search) via the
+   *  provider that produced the search result. */
+  acquisitionAcquireArtist(args: { providerId: string; providerRef: string }): Promise<void>;
+  /** Monitor an entire artist by name (External Artist view — name only). */
+  acquisitionAcquireArtistByName(artistName: string): Promise<void>;
   /** Open an http(s) URL in the system browser (validated in main). */
   openExternal(url: string): Promise<void>;
   /** Radio refill: fan out to plugin recommenders, resolve suggestions against

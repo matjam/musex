@@ -16,11 +16,22 @@
  * - GET  /api/v1/album/lookup?term=           → metadata search; AlbumResource embeds artist
  * - PUT  /api/v1/album/monitor                → { albumIds, monitored } (202 Accepted)
  * - POST /api/v1/command                      → { name: "AlbumSearch", albumIds: number[] }
+ *                                             | { name: "ArtistSearch", artistId: number }
+ *   (command names verified against Lidarr source: src/NzbDrone.Core/
+ *   IndexerSearch/ArtistSearchCommand.cs — name = class minus "Command",
+ *   ArtistSearch carries `artistId` and searches the artist's monitored albums)
+ * - POST /api/v1/artist addOptions.monitor: MonitorTypes enum incl. "all";
+ *   addOptions.searchForMissingAlbums: boolean (AddArtistOptions schema)
  * - GET  /api/v1/queue?includeArtist&includeAlbum → paged { records: QueueResource[] }
  * - GET  /api/v1/wanted/missing?includeArtist → paged monitored-but-missing albums
  * - GET  /api/v1/qualityprofile, /api/v1/metadataprofile, /api/v1/rootfolder
  */
-import type { AcquirableAlbum, AcquisitionStatusItem, PluginContext } from "@musex/plugin-api";
+import type {
+  AcquirableAlbum,
+  AcquisitionStatusItem,
+  ExternalArtistResult,
+  PluginContext,
+} from "@musex/plugin-api";
 import { LidarrClient, LidarrError } from "./client.js";
 import { deriveAlbumState } from "./state.js";
 import { createNodeTransport, fetchTransport } from "./transport.js";
@@ -49,6 +60,10 @@ type LidarrArtist = {
   artistName?: string | null;
   foreignArtistId?: string | null;
   images?: LidarrImage[] | null;
+  /** Lookup results embed the full resource for already-added artists
+   *  (id > 0); not-added results carry metadata-server defaults only. */
+  monitored?: boolean;
+  disambiguation?: string | null;
 };
 
 type LidarrAlbum = {
@@ -89,6 +104,13 @@ type ProviderRef = {
   foreignArtistId: string;
   artistName: string;
   title?: string;
+};
+
+/** providerRef payload for whole-ARTIST monitoring (searchArtists →
+ *  acquireArtist) — opaque to the host. */
+type ArtistProviderRef = {
+  foreignArtistId: string;
+  artistName: string;
 };
 
 /** An album whose acquisition is deferred until Lidarr's async artist refresh
@@ -163,7 +185,21 @@ async function doEnsureArtist(
   const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
   const existing = artists.find((a) => a.foreignArtistId === ref.foreignArtistId);
   if (existing !== undefined) return existing;
+  // addOptions.monitor "none" → no albums auto-monitored; the caller (album
+  // flow) monitors exactly the requested album.
+  return addArtist(c, ref, { monitor: "none", searchForMissingAlbums: false }, log);
+}
 
+/** POST a new artist to Lidarr with the server's first quality/metadata
+ *  profile + root folder (shared by the album flow's ensureArtist and the
+ *  whole-artist acquireArtist). A POST losing an add race
+ *  (400 ArtistExistsValidator) resolves to the already-added artist. */
+async function addArtist(
+  c: LidarrClient,
+  ref: { foreignArtistId: string; artistName: string },
+  addOptions: { monitor: "all" | "none"; searchForMissingAlbums: boolean },
+  log: LogFn,
+): Promise<LidarrArtist> {
   const [qualityProfiles, metadataProfiles, rootFolders] = await Promise.all([
     c.get<LidarrProfile[]>("/api/v1/qualityprofile"),
     c.get<LidarrProfile[]>("/api/v1/metadataprofile"),
@@ -186,9 +222,8 @@ async function doEnsureArtist(
       `metadata profile "${metadata.name ?? metadata.id}", root folder "${root.path}"`,
   );
   try {
-    // monitored: true (the artist participates in monitoring) but
-    // addOptions.monitor "none" → no albums auto-monitored; the caller
-    // monitors exactly the requested album.
+    // monitored: true — the artist participates in monitoring; addOptions
+    // decides which of its albums get monitored on add.
     return await c.post<LidarrArtist>("/api/v1/artist", {
       artistName: ref.artistName,
       foreignArtistId: ref.foreignArtistId,
@@ -196,7 +231,7 @@ async function doEnsureArtist(
       metadataProfileId: metadata.id,
       rootFolderPath: root.path,
       monitored: true,
-      addOptions: { monitor: "none", searchForMissingAlbums: false },
+      addOptions,
     });
   } catch (err) {
     // Someone (another acquire, the Lidarr UI) added the artist between our
@@ -470,6 +505,85 @@ export async function activate(ctx: PluginContext): Promise<void> {
       } catch (err) {
         ctx.log(`lookupArtistAlbums failed for "${artistName}":`, errText(err));
         return [];
+      }
+    },
+
+    searchArtists: async (term) => {
+      const c = await client();
+      if (!c) return [];
+      try {
+        const results = await c.get<LidarrArtist[]>("/api/v1/artist/lookup", { term });
+        const out: ExternalArtistResult[] = [];
+        for (const a of results) {
+          if (out.length >= 10) break;
+          const name = a.artistName;
+          const foreignArtistId = a.foreignArtistId;
+          if (typeof name !== "string" || name.length === 0) continue;
+          if (typeof foreignArtistId !== "string" || foreignArtistId.length === 0) continue;
+          const ref: ArtistProviderRef = { foreignArtistId, artistName: name };
+          const imageUrl = pickImageUrl(a.images);
+          out.push({
+            name,
+            providerRef: JSON.stringify(ref),
+            ...(imageUrl !== undefined ? { imageUrl } : {}),
+            ...(a.disambiguation ? { disambiguation: a.disambiguation } : {}),
+            // Lookup embeds the full resource for already-added artists
+            // (id > 0); only those can be "monitored".
+            monitored: a.id > 0 && a.monitored === true,
+          });
+        }
+        return out;
+      } catch (err) {
+        ctx.log(`searchArtists failed for "${term}":`, errText(err));
+        return [];
+      }
+    },
+
+    acquireArtist: async (providerRef) => {
+      try {
+        const c = await client();
+        if (!c) throw new Error("Lidarr is not configured");
+        let ref: ArtistProviderRef;
+        try {
+          ref = JSON.parse(providerRef) as ArtistProviderRef;
+        } catch {
+          throw new Error("Invalid acquisition reference");
+        }
+        if (!ref.foreignArtistId || !ref.artistName) {
+          throw new Error("Invalid acquisition reference");
+        }
+
+        const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
+        const existing = artists.find((a) => a.foreignArtistId === ref.foreignArtistId);
+
+        if (existing === undefined) {
+          // Not in Lidarr yet: one POST does it all — monitor "all" + search.
+          const added = await addArtist(
+            c,
+            ref,
+            { monitor: "all", searchForMissingAlbums: true },
+            ctx.log,
+          );
+          // Lidarr#3597: addOptions.monitor can disregard the monitored flag —
+          // assert the artist ended up monitored.
+          await ensureArtistMonitored(c, added.id);
+        } else {
+          // Already in Lidarr (e.g. added unmonitored by the album flow):
+          // monitor the artist + ALL its albums, then an artist-wide search.
+          await ensureArtistMonitored(c, existing.id);
+          const albums = await c.get<LidarrAlbum[]>("/api/v1/album", {
+            artistId: String(existing.id),
+          });
+          const albumIds = albums.map((a) => a.id);
+          if (albumIds.length > 0) {
+            await c.put("/api/v1/album/monitor", { albumIds, monitored: true });
+          }
+          await c.post("/api/v1/command", { name: "ArtistSearch", artistId: existing.id });
+        }
+        ctx.ui.notify(`Monitoring everything by ${ref.artistName} on Lidarr`);
+      } catch (err) {
+        ctx.log("acquireArtist failed:", errText(err));
+        throw err;
       }
     },
 

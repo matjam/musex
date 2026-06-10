@@ -699,6 +699,213 @@ describe("PluginHost", () => {
     expect(await host.acquisitionStatus()).toEqual([]);
   });
 
+  it("searchExternalArtists: first provider with results wins, items tagged + junk-filtered + capped", async () => {
+    // Registration order = readdir order: ext-a (empty) before ext-b (results).
+    await writePlugin(
+      "ext-a",
+      `export function activate(ctx) {
+        globalThis.__artistSearches = [];
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          searchArtists: async (term) => { globalThis.__artistSearches.push("a:" + term); return []; },
+        });
+      }`,
+    );
+    await writePlugin(
+      "ext-b",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "b",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          searchArtists: async (term) => [
+            { name: term, providerRef: "ar-1", monitored: true },
+            { name: "", providerRef: "ar-2" }, // junk — dropped
+            { name: "Lamb of God", providerRef: "" }, // junk — dropped
+            ...Array.from({ length: 12 }, (_, i) => ({ name: "Filler " + i, providerRef: "f-" + i })),
+          ],
+        });
+      }`,
+    );
+    // No searchArtists at all — must be skipped, not crash.
+    await writePlugin(
+      "ext-c",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "c",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+
+    const artists = await host.searchExternalArtists("Lamb");
+    // ext-a was asked first (sequential), returned [], so ext-b's results won.
+    expect((globalThis as Record<string, unknown>).__artistSearches).toEqual(["a:Lamb"]);
+    expect(artists).toHaveLength(10); // capped
+    expect(artists[0]).toEqual({
+      name: "Lamb",
+      providerRef: "ar-1",
+      monitored: true,
+      providerId: "ext-b",
+    });
+    expect(artists.every((a) => a.providerId === "ext-b")).toBe(true);
+  });
+
+  it("searchExternalArtists skips throwing and slow providers (timeout respected)", async () => {
+    await writePlugin(
+      "ext-boom",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "boom",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          searchArtists: async () => { throw new Error("search boom"); },
+        });
+      }`,
+    );
+    await writePlugin(
+      "ext-slow",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "slow",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          searchArtists: () => new Promise(() => {}), // never resolves
+        });
+      }`,
+    );
+    await writePlugin(
+      "ext-z-good",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "good",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          searchArtists: async (term) => [{ name: term, providerRef: "ar-9" }],
+        });
+      }`,
+    );
+    const { host } = makeHost({ providerTimeoutMs: 50 });
+    await host.loadAll();
+
+    const artists = await host.searchExternalArtists("Lamb");
+    expect(artists).toEqual([{ name: "Lamb", providerRef: "ar-9", providerId: "ext-z-good" }]);
+  });
+
+  it("acquireArtist routes by providerId; unknown/unsupporting providers and failures throw", async () => {
+    await writePlugin(
+      "ext-a",
+      `export function activate(ctx) {
+        globalThis.__monitored = [];
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          acquireArtist: async (ref) => { globalThis.__monitored.push(ref); },
+        });
+      }`,
+    );
+    await writePlugin(
+      "ext-boom",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "boom",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          acquireArtist: async () => { throw new Error("monitor boom"); },
+        });
+      }`,
+    );
+    // No acquireArtist — routing to it must throw, not crash.
+    await writePlugin(
+      "ext-noop",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "noop",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+
+    await host.acquireArtist("ext-a", "ar-1");
+    expect((globalThis as Record<string, unknown>).__monitored).toEqual(["ar-1"]);
+
+    await expect(host.acquireArtist("nope", "ar-1")).rejects.toThrow(
+      /unknown acquisition provider/,
+    );
+    await expect(host.acquireArtist("ext-noop", "ar-1")).rejects.toThrow(/cannot monitor artists/);
+    // rethrown with the plugin id so the renderer knows who failed
+    await expect(host.acquireArtist("ext-boom", "ar-1")).rejects.toThrow(
+      /\[plugin:ext-boom\].*monitor boom/,
+    );
+  });
+
+  it("acquireArtistByName prefers the case-insensitive exact match, else the first result", async () => {
+    await writePlugin(
+      "ext-a",
+      `export function activate(ctx) {
+        globalThis.__monitored = [];
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          searchArtists: async () => [
+            { name: "Lamb of God", providerRef: "ar-log" },
+            { name: "LAMB", providerRef: "ar-lamb" },
+          ],
+          acquireArtist: async (ref) => { globalThis.__monitored.push(ref); },
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+
+    // exact (case-insensitive) match wins over the first result
+    await host.acquireArtistByName("lamb");
+    // no exact match → first result
+    await host.acquireArtistByName("La");
+    expect((globalThis as Record<string, unknown>).__monitored).toEqual(["ar-lamb", "ar-log"]);
+  });
+
+  it("acquireArtistByName throws when no source knows the artist", async () => {
+    await writePlugin(
+      "ext-a",
+      `export function activate(ctx) {
+        ctx.registerAcquisitionProvider({
+          id: "a",
+          lookupArtistAlbums: async () => [],
+          acquireAlbum: async () => {},
+          status: async () => [],
+          searchArtists: async () => [],
+          acquireArtist: async () => {},
+        });
+      }`,
+    );
+    const { host } = makeHost();
+    await host.loadAll();
+    await expect(host.acquireArtistByName("Nobody")).rejects.toThrow(
+      /No acquisition source knows this artist/,
+    );
+  });
+
   it("lists and invokes track actions; unknown ids and failures throw with context", async () => {
     await writePlugin(
       "actions",

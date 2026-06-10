@@ -2293,6 +2293,12 @@ img.queue-row-art {
   color: #b9a8ff;
 }
 
+.grid-card-badge--monitored {
+  background: rgba(0, 0, 0, 0.65);
+  border-color: var(--green);
+  color: var(--green);
+}
+
 .grid-card-badge--unavailable {
   background: rgba(0, 0, 0, 0.65);
   border-color: rgba(255, 95, 87, 0.45);

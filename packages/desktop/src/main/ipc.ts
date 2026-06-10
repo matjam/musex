@@ -6,6 +6,7 @@ import { isHttpUrl } from "../logic/external-url.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
   AcquirableAlbumDto,
+  ExternalArtistResultDto,
   LoadPlaybackResult,
   NowPlayingMsg,
   PlaybackCursorDto,
@@ -625,6 +626,44 @@ export function registerIpc(rt: Runtime): void {
   );
 
   ipcMain.handle(IPC.acquisitionStatus, () => rt.plugins.acquisitionStatus());
+
+  // Federated external artist search (SearchView's "Not in your library"
+  // section). Artwork is baked through the proxy's /ext endpoint like every
+  // other plugin-supplied image; unbakeable URLs are dropped.
+  ipcMain.handle(
+    IPC.acquisitionSearchArtists,
+    async (_e, term: unknown): Promise<ExternalArtistResultDto[]> => {
+      if (typeof term !== "string" || !term) throw new Error("invalid search term");
+      const items = await rt.plugins.searchExternalArtists(term);
+      return items.map((item): ExternalArtistResultDto => {
+        if (item.imageUrl === undefined) return item;
+        const proxied = rt.proxy.externalArtUrl(item.imageUrl);
+        if (proxied === undefined) {
+          const { imageUrl: _dropped, ...rest } = item;
+          return rest;
+        }
+        return { ...item, imageUrl: proxied };
+      });
+    },
+  );
+
+  ipcMain.handle(
+    IPC.acquisitionAcquireArtist,
+    (_e, args: { providerId?: unknown; providerRef?: unknown } | null | undefined) => {
+      if (typeof args?.providerId !== "string" || !args.providerId) {
+        throw new Error("invalid providerId");
+      }
+      if (typeof args.providerRef !== "string" || !args.providerRef) {
+        throw new Error("invalid providerRef");
+      }
+      return rt.plugins.acquireArtist(args.providerId, args.providerRef);
+    },
+  );
+
+  ipcMain.handle(IPC.acquisitionAcquireArtistByName, (_e, artistName: unknown) => {
+    if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+    return rt.plugins.acquireArtistByName(artistName);
+  });
 
   ipcMain.handle(IPC.trackActionsList, () => rt.plugins.listTrackActions());
   ipcMain.handle(IPC.trackActionsInvoke, (_e, actionId: string, track: unknown) => {
