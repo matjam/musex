@@ -541,6 +541,8 @@ function toTrackSafe(t: PlexTrack, serverId: string): Track {
       duration: t.duration,
       parentRatingKey: t.parentRatingKey !== undefined ? String(t.parentRatingKey) : undefined,
       parentTitle: t.parentTitle,
+      grandparentRatingKey:
+        t.grandparentRatingKey !== undefined ? String(t.grandparentRatingKey) : undefined,
       grandparentTitle: t.grandparentTitle,
       thumb: t.thumb,
       // MediaPart.key (from PlexObject.key) is the Plex server-relative path.

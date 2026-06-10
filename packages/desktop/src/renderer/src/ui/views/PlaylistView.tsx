@@ -263,6 +263,7 @@ export function PlaylistView({ playlist }: Props) {
               <TrackRow
                 track={pt.track}
                 leading={i + 1}
+                showSubtitle
                 isPlaying={pt.track.id === playingTrackId}
                 selected={pt.track.id === selectedTrack?.id}
                 onSelect={() => select(pt.track)}

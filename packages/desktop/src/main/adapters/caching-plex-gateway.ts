@@ -114,17 +114,26 @@ export class CachingPlexGateway implements PlexGateway {
     return this.inner.listAllTracksPage(library, sort, start, size, token);
   }
 
+  /** Bump when the MAPPED shape changes (cached entries hold mapper OUTPUT, so a
+   *  mapper fix is invisible to existing entries until their Plex validator
+   *  changes — versioning the key makes corrected data flow immediately).
+   *  v2: Track.artistId (2026-06-09). */
+  private vkey(key: string): string {
+    return `v2:${key}`;
+  }
+
   private async cached<T>(
     key: string,
     validator: string | undefined,
     fetch: () => Promise<T>,
   ): Promise<T> {
+    const vkey = this.vkey(key);
     if (validator !== undefined) {
-      const hit = await this.cache.get<T>(key, validator);
+      const hit = await this.cache.get<T>(vkey, validator);
       if (hit !== null) return hit;
     }
     const data = await fetch();
-    if (validator !== undefined) await this.cache.set(key, validator, data);
+    if (validator !== undefined) await this.cache.set(vkey, validator, data);
     return data;
   }
 
@@ -146,7 +155,7 @@ export class CachingPlexGateway implements PlexGateway {
     token: string,
   ): Promise<void> {
     await this.inner.addToPlaylist(playlistId, serverId, trackIds, token);
-    await this.cache.evictKey(`pltracks:${playlistId}`);
+    await this.cache.evictKey(this.vkey(`pltracks:${playlistId}`));
   }
 
   async removeFromPlaylist(
@@ -156,7 +165,7 @@ export class CachingPlexGateway implements PlexGateway {
     token: string,
   ): Promise<void> {
     await this.inner.removeFromPlaylist(playlistId, serverId, playlistItemIds, token);
-    await this.cache.evictKey(`pltracks:${playlistId}`);
+    await this.cache.evictKey(this.vkey(`pltracks:${playlistId}`));
   }
 
   async renamePlaylist(
@@ -170,7 +179,7 @@ export class CachingPlexGateway implements PlexGateway {
 
   async deletePlaylist(playlistId: string, serverId: string, token: string): Promise<void> {
     await this.inner.deletePlaylist(playlistId, serverId, token);
-    await this.cache.evictKey(`pltracks:${playlistId}`);
+    await this.cache.evictKey(this.vkey(`pltracks:${playlistId}`));
   }
 
   // --- pass-through (cheap / live / auth) ---
