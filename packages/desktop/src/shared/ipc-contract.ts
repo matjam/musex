@@ -43,7 +43,7 @@ export const IPC = {
   removeFromPlaylist: "musex:removeFromPlaylist", // (playlistId, serverId, playlistItemIds) -> void
   renamePlaylist: "musex:renamePlaylist", // (playlistId, serverId, title) -> void
   deletePlaylist: "musex:deletePlaylist", // (playlistId, serverId) -> void
-  rateItem: "musex:rateItem", // ({ serverId, itemId, rating, albumId?, libraryId?, trackInfo? }) -> void
+  rateItem: "musex:rateItem", // ({ serverId, itemId, rating, albumId?, artistId?, libraryId?, trackInfo? }) -> void
   getUserRating: "musex:getUserRating", // (serverId, itemId) -> number | null
   getTasteSnapshot: "musex:getTasteSnapshot", // -> TasteSnapshotDto
   prefetch: "musex:prefetch", // (tracks: Track[]) -> void
@@ -235,8 +235,9 @@ export interface MusexApi {
   ): Promise<void>;
   renamePlaylist(playlistId: string, serverId: string, title: string): Promise<void>;
   deletePlaylist(playlistId: string, serverId: string): Promise<void>;
-  /** Set a Plex userRating (0–10, integer; null clears). albumId/libraryId, when
-   *  known, let main evict the exact list caches the rated item appears in.
+  /** Set a Plex userRating (0–10, integer; null clears). albumId/artistId/libraryId,
+   *  when known, let main evict the exact list caches the rated item appears in
+   *  (albumId for track ratings, artistId for album ratings).
    *  trackInfo, when supplied (track ratings only), makes main fire the
    *  `trackRated` plugin event and feed the taste profile. artistName, when
    *  supplied (artist ratings only), feeds the taste profile's artist affinity. */
@@ -245,6 +246,7 @@ export interface MusexApi {
     itemId: string;
     rating: number | null;
     albumId?: string;
+    artistId?: string;
     libraryId?: string;
     trackInfo?: TrackInfo;
     artistName?: string;

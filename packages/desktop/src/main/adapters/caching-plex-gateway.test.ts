@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { Library, PlaylistTrack, Track } from "@musex/core";
+import type { Album, Library, PlaylistTrack, Track } from "@musex/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CachingPlexGateway } from "./caching-plex-gateway";
 import { ListCacheStore } from "./list-cache-store";
@@ -18,6 +18,12 @@ const track = (id: string): Track => ({
   media: { container: "flac", audioCodec: "flac", partId: "p", partKey: "/k" },
 });
 const ptracks: PlaylistTrack[] = [{ track: track("t1"), playlistItemId: "i1" }];
+const album = (id: string): Album => ({
+  id,
+  serverId: "s1",
+  artistId: "ar1",
+  title: id,
+});
 
 let dir: string;
 beforeEach(async () => {
@@ -32,6 +38,8 @@ function setup() {
     listPlaylistTracks: vi.fn(async () => ptracks),
     listTracks: vi.fn(async () => [track("t1")]),
     listAllTracks: vi.fn(async () => [track("t1")]),
+    listAlbums: vi.fn(async () => [album("al1")]),
+    listAllAlbums: vi.fn(async () => [album("al1")]),
     addToPlaylist: vi.fn(async () => {}),
     rateItem: vi.fn(async () => {}),
     getUserRating: vi.fn(async () => 8),
@@ -117,6 +125,31 @@ describe("CachingPlexGateway", () => {
     await gw.listAllTracks(lib, "artist", "tok", "v1");
     await gw.listAllTracks(lib, "added", "tok", "v1");
     expect(inner.listAllTracks).toHaveBeenCalledTimes(6); // every sort refetched
+  });
+
+  it("rateItem with artistId evicts that artist's album cache only", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listAlbums(lib, "ar1", "tok", "v1"); // seed albums:ar1
+    await gw.listPlaylistTracks("pl1", "s1", "tok", "v1"); // unrelated key
+    await gw.rateItem("s1", "al1", 8, "tok", { artistId: "ar1" });
+    await gw.listAlbums(lib, "ar1", "tok", "v1"); // evicted -> refetch
+    await gw.listPlaylistTracks("pl1", "s1", "tok", "v1"); // untouched -> hit
+    expect(inner.listAlbums).toHaveBeenCalledTimes(2);
+    expect(inner.listPlaylistTracks).toHaveBeenCalledTimes(1);
+  });
+
+  it("rateItem with libraryId evicts all three allalbums sort caches", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listAllAlbums(lib, "title", "tok", "v1");
+    await gw.listAllAlbums(lib, "artist", "tok", "v1");
+    await gw.listAllAlbums(lib, "added", "tok", "v1");
+    await gw.rateItem("s1", "al1", 8, "tok", { libraryId: lib.id });
+    await gw.listAllAlbums(lib, "title", "tok", "v1");
+    await gw.listAllAlbums(lib, "artist", "tok", "v1");
+    await gw.listAllAlbums(lib, "added", "tok", "v1");
+    expect(inner.listAllAlbums).toHaveBeenCalledTimes(6); // every sort refetched
   });
 
   it("rateItem without opts evicts nothing", async () => {

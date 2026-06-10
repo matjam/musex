@@ -331,6 +331,7 @@ export function registerIpc(rt: Runtime): void {
         itemId: string;
         rating: number | null;
         albumId?: string;
+        artistId?: string;
         libraryId?: string;
         trackInfo?: TrackInfo;
         artistName?: string;
@@ -338,12 +339,16 @@ export function registerIpc(rt: Runtime): void {
     ) => {
       if (typeof args?.serverId !== "string" || !args.serverId) throw new Error("invalid serverId");
       if (typeof args.itemId !== "string" || !args.itemId) throw new Error("invalid itemId");
+      if (args.artistId !== undefined && (typeof args.artistId !== "string" || !args.artistId)) {
+        throw new Error("invalid artistId");
+      }
       const r = args.rating;
       if (r !== null && (!Number.isInteger(r) || r < 0 || r > 10)) {
         throw new Error("invalid rating");
       }
       await rt.gateway.rateItem(args.serverId, args.itemId, r, rt.requireToken(), {
         albumId: args.albumId,
+        artistId: args.artistId,
         libraryId: args.libraryId,
       });
       // Track ratings only — the renderer sends trackInfo for tracks, never

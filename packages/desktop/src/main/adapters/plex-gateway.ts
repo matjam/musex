@@ -553,6 +553,7 @@ function toAlbumSafe(al: PlexAlbum, serverId: string): Album {
       thumb: al.thumb,
       parentRatingKey: al.parentRatingKey !== undefined ? String(al.parentRatingKey) : undefined,
       updatedAt: al.updatedAt ? al.updatedAt.getTime() : undefined,
+      userRating: al.userRating,
     },
     serverId,
   );

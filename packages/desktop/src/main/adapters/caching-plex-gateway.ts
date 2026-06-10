@@ -118,9 +118,10 @@ export class CachingPlexGateway implements PlexGateway {
    *  mapper fix is invisible to existing entries until their Plex validator
    *  changes — versioning the key makes corrected data flow immediately).
    *  v2: Track.artistId (2026-06-09).
-   *  v3: userRating on Track/Artist (2026-06-09). */
+   *  v3: userRating on Track/Artist (2026-06-09).
+   *  v4: Album.userRating (2026-06-09). */
   private vkey(key: string): string {
-    return `v3:${key}`;
+    return `v4:${key}`;
   }
 
   private async cached<T>(
@@ -183,9 +184,12 @@ export class CachingPlexGateway implements PlexGateway {
     await this.cache.evictKey(this.vkey(`pltracks:${playlistId}`));
   }
 
-  /** Rate, then evict the exactly-addressable list caches the rated track appears
-   *  in: its album's track list (when the caller knows the albumId) and the
-   *  library-wide track lists for every sort (when the caller knows the libraryId).
+  /** Rate, then evict the exactly-addressable list caches the rated item appears
+   *  in: a track's album track list (albumId), an album's artist album list
+   *  (artistId), and the library-wide track AND album lists for every sort
+   *  (libraryId — a track rating passes albumId+libraryId, an album rating
+   *  passes artistId+libraryId; evicting both list families on libraryId is
+   *  simpler than threading the item type through).
    *  The opts live on this class only — the core port stays minimal, and the IPC
    *  layer calls the caching class directly (like `endpoint()`). Playlist lists
    *  are NOT evicted: the renderer session overlay covers live UI and their
@@ -195,15 +199,19 @@ export class CachingPlexGateway implements PlexGateway {
     itemId: string,
     rating: number | null,
     token: string,
-    opts?: { albumId?: string; libraryId?: string },
+    opts?: { albumId?: string; artistId?: string; libraryId?: string },
   ): Promise<void> {
     await this.inner.rateItem(serverId, itemId, rating, token);
     if (opts?.albumId) {
       await this.cache.evictKey(this.vkey(`tracks:${opts.albumId}`));
     }
+    if (opts?.artistId) {
+      await this.cache.evictKey(this.vkey(`albums:${opts.artistId}`));
+    }
     if (opts?.libraryId) {
       for (const sort of ["title", "artist", "added"] as const) {
         await this.cache.evictKey(this.vkey(`alltracks:${opts.libraryId}:${sort}`));
+        await this.cache.evictKey(this.vkey(`allalbums:${opts.libraryId}:${sort}`));
       }
     }
   }

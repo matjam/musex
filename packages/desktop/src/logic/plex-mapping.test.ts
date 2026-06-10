@@ -64,6 +64,15 @@ describe("plex-mapping", () => {
     );
     expect(al.updatedAt).toBe(1717900000000);
   });
+  it("maps an album userRating, and leaves it undefined when absent", () => {
+    const rated = toAlbum(
+      { ratingKey: "20", title: "In Rainbows", parentRatingKey: "10", userRating: 8 },
+      "srv-1",
+    );
+    expect(rated.userRating).toBe(8);
+    const unrated = toAlbum({ ratingKey: "21", title: "OK Computer" }, "srv-1");
+    expect(unrated.userRating).toBeUndefined();
+  });
   it("maps a track with media/part and denormalized titles", () => {
     const t = toTrack(
       {

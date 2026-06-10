@@ -4,9 +4,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
+import { useRatings } from "../../state/ratings";
 import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
+import { StarRating } from "../StarRating";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
@@ -26,11 +28,28 @@ export function AlbumDetailView({ album }: Props) {
   const { state, playTracks, playTracksShuffled, playTrackNext, enqueueNext, enqueueEnd } =
     usePlayer();
   const { selectedTrack, select } = useSelection();
+  const { ratingFor, rate, seed } = useRatings();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
+
+  // Albums navigated from cached lists may lack userRating — fetch the
+  // authoritative value and seed the overlay. seed() is set-only-if-absent, so
+  // a rating the user clicked before this resolves is never clobbered.
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .getUserRating(album.serverId, album.id)
+      .then((r) => {
+        if (!cancelled) seed(album.id, r);
+      })
+      .catch((err) => console.error("[ratings] getUserRating failed:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [album.id, album.serverId, seed]);
 
   useEffect(() => {
     if (!library) return;
@@ -128,37 +147,53 @@ export function AlbumDetailView({ album }: Props) {
               </>
             )}
           </div>
-          {fetch.status === "ok" && tracks.length > 0 && (
-            <div className="album-actions">
-              <button
-                type="button"
-                className="play-btn"
-                title="Play album"
-                onClick={() => playTracks(tracks, 0)}
-              >
-                <Play size={18} />
-              </button>
-              <button
-                type="button"
-                className="shuffle-btn"
-                title="Shuffle album"
-                onClick={() => playTracksShuffled(tracks)}
-              >
-                <Shuffle size={16} />
-              </button>
-              <button
-                type="button"
-                className="album-more-btn"
-                title="More actions"
-                onClick={(e) => {
-                  setMorePos({ x: e.clientX, y: e.clientY });
-                  setMoreOpen((o) => !o);
-                }}
-              >
-                <MoreHorizontal size={18} />
-              </button>
-            </div>
-          )}
+          <div className="album-actions">
+            {fetch.status === "ok" && tracks.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="play-btn"
+                  title="Play album"
+                  onClick={() => playTracks(tracks, 0)}
+                >
+                  <Play size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="shuffle-btn"
+                  title="Shuffle album"
+                  onClick={() => playTracksShuffled(tracks)}
+                >
+                  <Shuffle size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="album-more-btn"
+                  title="More actions"
+                  onClick={(e) => {
+                    setMorePos({ x: e.clientX, y: e.clientY });
+                    setMoreOpen((o) => !o);
+                  }}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+              </>
+            )}
+            <StarRating
+              value10={ratingFor(album.id, album.userRating)}
+              onRate={(stars) =>
+                rate({
+                  serverId: album.serverId,
+                  itemId: album.id,
+                  stars,
+                  artistId: album.artistId || undefined,
+                  libraryId: library?.id,
+                })
+              }
+              size={16}
+              className="album-stars"
+            />
+          </div>
         </div>
       </div>
 

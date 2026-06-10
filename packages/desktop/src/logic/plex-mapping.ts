@@ -14,6 +14,7 @@ interface RawAlbum {
   thumb?: string;
   parentRatingKey?: string;
   updatedAt?: number;
+  userRating?: number; // 0–10
 }
 interface RawPart {
   id: string | number;
@@ -75,6 +76,7 @@ export function toAlbum(raw: RawAlbum, serverId: string): Album {
     year: raw.year,
     thumb: thumbPath(raw.thumb),
     updatedAt: raw.updatedAt,
+    userRating: raw.userRating,
   };
 }
 

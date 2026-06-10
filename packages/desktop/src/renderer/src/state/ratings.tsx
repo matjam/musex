@@ -9,12 +9,14 @@ interface RatingsApi {
   ratingFor(itemId: string, fallback?: number): number | null;
   /** Optimistically rate (stars 1–5) or clear (null); fires the IPC; reverts the overlay + logs on failure.
    *  Pass `trackInfo` when rating a TRACK so main can fire the `trackRated` plugin event (omit for
-   *  artists); pass `artistName` when rating an ARTIST so the taste profile hears about it. */
+   *  artists); pass `artistName` when rating an ARTIST so the taste profile hears about it; pass
+   *  `artistId` when rating an ALBUM so main evicts that artist's album-list cache. */
   rate(args: {
     serverId: string;
     itemId: string;
     stars: number | null;
     albumId?: string;
+    artistId?: string;
     libraryId?: string;
     trackInfo?: TrackInfo;
     artistName?: string;
@@ -29,7 +31,7 @@ export function RatingsProvider({ children }: { children: ReactNode }) {
   const [overlay, setOverlay] = useState(() => new Map<string, number | null>());
 
   const rate = useCallback<RatingsApi["rate"]>(
-    ({ serverId, itemId, stars, albumId, libraryId, trackInfo, artistName }) => {
+    ({ serverId, itemId, stars, albumId, artistId, libraryId, trackInfo, artistName }) => {
       const rating = stars === null ? null : stars * 2;
       // Snapshot the previous overlay entry so a failed IPC can revert exactly.
       let had = false;
@@ -40,7 +42,7 @@ export function RatingsProvider({ children }: { children: ReactNode }) {
         return new Map(m).set(itemId, rating);
       });
       window.musex
-        .rateItem({ serverId, itemId, rating, albumId, libraryId, trackInfo, artistName })
+        .rateItem({ serverId, itemId, rating, albumId, artistId, libraryId, trackInfo, artistName })
         .catch((err) => {
           console.error("[ratings] rateItem failed:", err);
           setOverlay((m) => {
