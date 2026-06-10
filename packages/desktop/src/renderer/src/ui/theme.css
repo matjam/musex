@@ -38,6 +38,16 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
+  /* App chrome, not a document: no text selection (drag or Cmd+A) anywhere... */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ...except where the user actually types or selects text. */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* ---- Brand / wordmark ---- */
@@ -1437,7 +1447,9 @@ img.np-art {
 
 .queue-drawer {
   position: fixed;
-  top: 0;
+  /* below the topbar (52px): its drag region is geometric at the window level
+     and would swallow clicks on anything overlapping it (e.g. the close X) */
+  top: 52px;
   right: 0;
   /* sit above the now-playing bar (68px) */
   bottom: 68px;
