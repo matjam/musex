@@ -1,6 +1,7 @@
 import type { Album, Artist, Library, Playlist } from "@musex/core";
 import { createContext, type ReactNode, useContext, useEffect, useReducer } from "react";
 import type { SmartKind } from "../../../logic/smart-playlists";
+import type { SimilarGetArgs } from "../../../shared/ipc-contract";
 
 type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";
 export type View =
@@ -18,6 +19,7 @@ export type View =
   | { name: "playlist"; playlist: Playlist }
   | { name: "smart"; kind: SmartKind }
   | { name: "external-artist"; artistName: string }
+  | { name: "similar"; target: SimilarGetArgs }
   | { name: "downloads" };
 
 interface AppState {

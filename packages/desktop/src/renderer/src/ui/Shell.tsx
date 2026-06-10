@@ -17,8 +17,6 @@ import type { SmartKind } from "../../../logic/smart-playlists";
 import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
-import { useSimilar } from "../state/similar";
-import { SimilarPanel } from "./SimilarPanel";
 import { TrackDetailPanel } from "./TrackDetailPanel";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
@@ -33,6 +31,7 @@ import { HomeView } from "./views/HomeView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
+import { SimilarView } from "./views/SimilarView";
 import { SmartPlaylistView } from "./views/SmartPlaylistView";
 import { TracksView } from "./views/TracksView";
 
@@ -47,7 +46,6 @@ const SMART_NAV: { kind: SmartKind; Icon: typeof Star }[] = [
 export function Shell() {
   const { library, view, dispatch } = useApp();
   const { playlists } = usePlaylists();
-  const { target: similarTarget } = useSimilar();
 
   const serverLabel = library ? `${library.serverName} · ${library.title}` : "No library";
 
@@ -93,6 +91,8 @@ export function Shell() {
         return <SmartPlaylistView kind={view.kind} />;
       case "external-artist":
         return <ExternalArtistView artistName={view.artistName} />;
+      case "similar":
+        return <SimilarView target={view.target} />;
       case "downloads":
         return <DownloadsView />;
     }
@@ -218,9 +218,7 @@ export function Shell() {
 
       <main className="content-area">{renderContent()}</main>
 
-      {/* Similar takes priority over the track panel; closing it restores the
-          track panel when a selection exists. */}
-      {similarTarget ? <SimilarPanel /> : <TrackDetailPanel />}
+      <TrackDetailPanel />
     </div>
   );
 }

@@ -6,7 +6,6 @@ import { useApp } from "../state/app";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { useRatings } from "../state/ratings";
 import { useSelection } from "../state/selection";
-import { useSimilar } from "../state/similar";
 import { formatDuration, relativeTime } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
 import { StarRating } from "./StarRating";
@@ -18,7 +17,6 @@ export function TrackDetailPanel() {
   const { dispatch, library } = useApp();
   const { ratingFor, rate } = useRatings();
   const { playTrackNext } = usePlayer();
-  const { open: openSimilar } = useSimilar();
   const [pluginDetails, setPluginDetails] = useState<TrackDetailDto[]>([]);
   const [listenStat, setListenStat] = useState<TrackStatDto | null>(null);
 
@@ -153,7 +151,15 @@ export function TrackDetailPanel() {
       <button
         type="button"
         className="detail-play detail-secondary"
-        onClick={() => openSimilar({ kind: "track", title: track.title, artist: track.artistName })}
+        onClick={() =>
+          dispatch({
+            type: "navigate",
+            view: {
+              name: "similar",
+              target: { kind: "track", title: track.title, artist: track.artistName },
+            },
+          })
+        }
       >
         <Sparkles size={16} />
         Similar Songs

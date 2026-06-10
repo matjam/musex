@@ -5,7 +5,6 @@ import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
-import { useSimilar } from "../../state/similar";
 import { AlbumArt } from "../AlbumArt";
 import { StarRating } from "../StarRating";
 
@@ -23,7 +22,6 @@ export function ArtistDetailView({ artist }: Props) {
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
     usePlayer();
   const { ratingFor, rate, seed } = useRatings();
-  const { open: openSimilar } = useSimilar();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
@@ -145,45 +143,52 @@ export function ArtistDetailView({ artist }: Props) {
           size={16}
           className="artist-stars"
         />
-        {fetch.status === "ok" && fetch.albums.length > 0 && (
-          <div className="album-actions">
-            <button
-              type="button"
-              className="play-btn"
-              title="Play all"
-              disabled={queueFetch === "busy"}
-              onClick={() => void handlePlayAll()}
-            >
-              <Play size={18} />
-            </button>
-            <button
-              type="button"
-              className="shuffle-btn"
-              title="Shuffle all"
-              disabled={queueFetch === "busy"}
-              onClick={() => void handleShuffleAll()}
-            >
-              <Shuffle size={16} />
-            </button>
-            <button
-              type="button"
-              className="album-more-btn"
-              title={queueFetch === "busy" ? "Loading…" : "More actions"}
-              disabled={queueFetch === "busy"}
-              onClick={handleMoreClick}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          className="shuffle-btn"
-          title="Similar artists"
-          onClick={() => openSimilar({ kind: "artist", name: artist.name })}
-        >
-          <Sparkles size={16} />
-        </button>
+        <div className="album-actions">
+          {fetch.status === "ok" && fetch.albums.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="play-btn"
+                title="Play all"
+                disabled={queueFetch === "busy"}
+                onClick={() => void handlePlayAll()}
+              >
+                <Play size={18} />
+              </button>
+              <button
+                type="button"
+                className="shuffle-btn"
+                title="Shuffle all"
+                disabled={queueFetch === "busy"}
+                onClick={() => void handleShuffleAll()}
+              >
+                <Shuffle size={16} />
+              </button>
+              <button
+                type="button"
+                className="album-more-btn"
+                title={queueFetch === "busy" ? "Loading…" : "More actions"}
+                disabled={queueFetch === "busy"}
+                onClick={handleMoreClick}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="shuffle-btn"
+            title="Similar artists"
+            onClick={() =>
+              dispatch({
+                type: "navigate",
+                view: { name: "similar", target: { kind: "artist", name: artist.name } },
+              })
+            }
+          >
+            <Sparkles size={16} />
+          </button>
+        </div>
       </div>
 
       {fetch.status === "loading" && <div className="content-placeholder">Loading albums…</div>}
