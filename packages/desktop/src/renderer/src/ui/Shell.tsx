@@ -1,4 +1,17 @@
-import { Compass, Disc3, Home, ListMusic, Mic2, Music, Settings } from "lucide-react";
+import {
+  Compass,
+  Disc3,
+  Flame,
+  History,
+  Home,
+  ListMusic,
+  Mic2,
+  Music,
+  Settings,
+  Star,
+} from "lucide-react";
+import type { SmartKind } from "../../../logic/smart-playlists";
+import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { TrackDetailPanel } from "./TrackDetailPanel";
@@ -11,7 +24,15 @@ import { HomeView } from "./views/HomeView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
+import { SmartPlaylistView } from "./views/SmartPlaylistView";
 import { TracksView } from "./views/TracksView";
+
+/** Sidebar entries for the Smart section, in display order. */
+const SMART_NAV: { kind: SmartKind; Icon: typeof Star }[] = [
+  { kind: "top-rated", Icon: Star },
+  { kind: "heavy-rotation", Icon: Flame },
+  { kind: "rediscover", Icon: History },
+];
 
 export function Shell() {
   const { library, view, dispatch } = useApp();
@@ -50,6 +71,8 @@ export function Shell() {
         return <TracksView />;
       case "playlist":
         return <PlaylistView playlist={view.playlist} />;
+      case "smart":
+        return <SmartPlaylistView kind={view.kind} />;
     }
   }
 
@@ -102,6 +125,20 @@ export function Shell() {
           <Music size={16} />
           Tracks
         </button>
+
+        <div className="nav-section">Smart</div>
+
+        {SMART_NAV.map(({ kind, Icon }) => (
+          <button
+            key={kind}
+            type="button"
+            className={`nav-item${view.name === "smart" && view.kind === kind ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+          >
+            <Icon size={16} />
+            {SMART_TITLES[kind]}
+          </button>
+        ))}
 
         <div className="playlist-rail">
           <div className="playlist-rail-head">

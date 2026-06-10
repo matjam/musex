@@ -1,5 +1,6 @@
 import type { Album, Artist, Library, Playlist } from "@musex/core";
 import { createContext, type ReactNode, useContext, useEffect, useReducer } from "react";
+import type { SmartKind } from "../../../logic/smart-playlists";
 
 type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";
 export type View =
@@ -12,7 +13,8 @@ export type View =
   | { name: "artist"; artist: Artist }
   | { name: "settings" }
   | { name: "search" }
-  | { name: "playlist"; playlist: Playlist };
+  | { name: "playlist"; playlist: Playlist }
+  | { name: "smart"; kind: SmartKind };
 
 interface AppState {
   auth: AuthState;

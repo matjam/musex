@@ -45,6 +45,7 @@ export const IPC = {
   deletePlaylist: "musex:deletePlaylist", // (playlistId, serverId) -> void
   rateItem: "musex:rateItem", // ({ serverId, itemId, rating, albumId?, libraryId?, trackInfo? }) -> void
   getUserRating: "musex:getUserRating", // (serverId, itemId) -> number | null
+  getTasteSnapshot: "musex:getTasteSnapshot", // -> TasteSnapshotDto
   prefetch: "musex:prefetch", // (tracks: Track[]) -> void
   savePlaybackQueue: "musex:playback:saveQueue", // (tracks: Track[]) -> void
   savePlaybackCursor: "musex:playback:saveCursor", // (cursor: PlaybackCursorDto) -> void
@@ -90,6 +91,22 @@ export type PlaybackCursorDto = {
   repeat: RepeatMode;
 };
 export type LoadPlaybackResult = { queue: Queue; positionSec: number } | null;
+
+/** One taste-profile track stat on the wire. `key` is the artist+title join
+ *  key (lower(artist)␟lower(title)) — names aren't carried, the renderer joins
+ *  against library tracks by key. Decayed values are computed in main. */
+export type TrackStatDto = {
+  key: string;
+  plays: number;
+  skips: number;
+  lastPlayedMs: number;
+  decayedPlays: number;
+};
+/** Taste profile snapshot for the renderer's smart playlists. */
+export type TasteSnapshotDto = {
+  stats: TrackStatDto[];
+  topArtists: { name: string; score: number }[];
+};
 
 /** Engine events pushed main → renderer. Structurally identical to
  *  `logic/mpv-ipc.ts`'s EngineEvent — duplicated deliberately so preload and
@@ -219,6 +236,8 @@ export interface MusexApi {
   }): Promise<void>;
   /** Read an item's current Plex userRating (0–10), or null when unrated. */
   getUserRating(serverId: string, itemId: string): Promise<number | null>;
+  /** Taste-profile snapshot (track stats + artist affinity) for smart playlists. */
+  getTasteSnapshot(): Promise<TasteSnapshotDto>;
   prefetch(tracks: Track[]): Promise<void>;
   savePlaybackQueue(tracks: Track[]): Promise<void>;
   savePlaybackCursor(cursor: PlaybackCursorDto): Promise<void>;

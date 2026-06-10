@@ -356,6 +356,20 @@ export function registerIpc(rt: Runtime): void {
     return rt.gateway.getUserRating(serverId, itemId, rt.requireToken());
   });
 
+  // Taste snapshot for the renderer's smart playlists: per-track play stats
+  // (with read-time decayed plays) + decayed artist affinity. Main computes
+  // the decayed values so the renderer never sees raw profile internals.
+  ipcMain.handle(IPC.getTasteSnapshot, () => ({
+    stats: rt.tasteProfile.trackStats().map((s) => ({
+      key: s.key,
+      plays: s.plays,
+      skips: s.skips,
+      lastPlayedMs: s.lastPlayedMs,
+      decayedPlays: s.decayedPlays,
+    })),
+    topArtists: rt.tasteProfile.topArtists(),
+  }));
+
   // mpv playback engine — load lazily spawns mpv; the rest are no-ops if it
   // isn't running (nothing is playing).
   ipcMain.handle(IPC.playbackLoad, (_e, args: { url: string; startSec?: number }) => {
