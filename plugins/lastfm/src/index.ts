@@ -103,7 +103,7 @@ export async function activate(ctx: PluginContext): Promise<void> {
       kind: "text",
       key: "apiKey",
       label: "API key",
-      help: "Sign in to last.fm in your browser, then create one at last.fm/api/account/create (leave callback URL blank)",
+      help: "Sign in to last.fm in your browser, then create one at https://www.last.fm/api/account/create (leave callback URL blank)",
     },
     { kind: "password", key: "apiSecret", label: "Shared secret" },
     { kind: "action", key: "connect", label: "Connect Last.fm account" },

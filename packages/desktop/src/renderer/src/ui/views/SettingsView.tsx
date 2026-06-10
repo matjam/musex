@@ -11,6 +11,31 @@ import { formatBytes } from "../../util/format";
 
 const GiB = 1024 ** 3;
 
+/** Renders help text with any http(s) URLs as clickable links (opened in the
+ *  default browser) so plugins can point at e.g. API-key signup pages. */
+function HelpText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
+  return (
+    <div className="settings-row-desc">
+      {parts.map((part, i) =>
+        /^https?:\/\//.test(part) ? (
+          <button
+            // biome-ignore lint/suspicious/noArrayIndexKey: static split of a constant string
+            key={i}
+            type="button"
+            className="about-link"
+            onClick={() => void window.musex.openExternal(part)}
+          >
+            {part}
+          </button>
+        ) : (
+          part
+        ),
+      )}
+    </div>
+  );
+}
+
 type LoadState = { status: "loading" } | { status: "ready"; cacheEnabled: boolean; capGiB: number };
 
 export function SettingsView() {
@@ -349,7 +374,7 @@ function PluginToggleRow({
     <div className="settings-row plugin-setting-row">
       <div className="settings-row-text">
         <div className="settings-row-label">{field.label}</div>
-        {field.help ? <div className="settings-row-desc">{field.help}</div> : null}
+        {field.help ? <HelpText text={field.help} /> : null}
       </div>
       <button
         type="button"
@@ -394,7 +419,7 @@ function PluginActionRow({
     <div className="settings-row plugin-setting-row">
       <div className="settings-row-text">
         <div className="settings-row-label">{field.label}</div>
-        {field.help ? <div className="settings-row-desc">{field.help}</div> : null}
+        {field.help ? <HelpText text={field.help} /> : null}
       </div>
       <div>
         {result?.message ? (
@@ -449,7 +474,7 @@ function PluginTextRow({
     <div className="settings-row plugin-setting-row">
       <div className="settings-row-text">
         <div className="settings-row-label">{field.label}</div>
-        {field.help ? <div className="settings-row-desc">{field.help}</div> : null}
+        {field.help ? <HelpText text={field.help} /> : null}
       </div>
       <input
         className="settings-input settings-input--text"
