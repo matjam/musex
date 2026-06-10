@@ -1,5 +1,6 @@
 packages:
   - "packages/*"
+  - "plugins/*"
 
 # pnpm 11 gates dependency build scripts; allowlist the ones that need them.
 allowBuilds:
