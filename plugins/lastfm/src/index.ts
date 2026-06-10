@@ -25,6 +25,14 @@ const TOP_TAGS = 3;
 const RADIO_SEED_TRACKS = 3;
 const RADIO_SIMILAR_TRACKS_LIMIT = 10;
 const RADIO_SIMILAR_ARTISTS_LIMIT = 5;
+/** Discover artwork (top-album covers — last.fm artist images are a dead
+ *  generic placeholder): per-artist lookup cache in ctx.storage. */
+const ART_CACHE_KEY = "artistArt";
+const ART_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const ART_CACHE_MAX_ENTRIES = 500;
+/** last.fm's "no image" placeholder — every URL containing this hash is the
+ *  same grey star; treat it as no artwork. */
+const ART_PLACEHOLDER_HASH = "2a96cbd8b46e442fc41c2b86b821562f";
 
 type TokenResponse = { token: string };
 type SessionResponse = { session: { name: string; key: string } };
@@ -34,6 +42,14 @@ type SimilarResponse = {
 type SimilarTracksResponse = {
   similartracks?: { track?: { name: string; artist?: { name?: string } }[] };
 };
+type LastfmImage = { size?: string; ["#text"]?: string };
+type TopAlbumsResponse = {
+  topalbums?: { album?: { image?: LastfmImage[] }[] };
+};
+/** url: null = known-miss (artist has no usable cover) — cached to avoid
+ *  re-querying; entries expire after ART_TTL_MS. */
+type ArtistArtCache = Record<string, { url: string | null; fetchedAt: number }>;
+
 type TrackInfoResponse = {
   track?: {
     playcount?: string;
@@ -62,6 +78,19 @@ function trackParams(t: TrackInfo): Record<string, string> {
 }
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** Best cover URL from a last.fm image array: extralarge → large → last
+ *  non-empty. The dead placeholder image counts as no artwork. */
+function pickImageUrl(images: LastfmImage[] | undefined): string | null {
+  const usable = (Array.isArray(images) ? images : []).filter(
+    (i): i is LastfmImage & { ["#text"]: string } =>
+      typeof i["#text"] === "string" &&
+      i["#text"].length > 0 &&
+      !i["#text"].includes(ART_PLACEHOLDER_HASH),
+  );
+  const bySize = (size: string) => usable.find((i) => i.size === size)?.["#text"];
+  return bySize("extralarge") ?? bySize("large") ?? usable[usable.length - 1]?.["#text"] ?? null;
+}
 
 export async function activate(ctx: PluginContext): Promise<void> {
   ctx.registerSettings([
@@ -207,6 +236,56 @@ export async function activate(ctx: PluginContext): Promise<void> {
   });
 
   // ── Discover: similar-artist sections ─────────────────────────────────────
+
+  /** Fill item.imageUrl with each artist's top-album cover (last.fm artist
+   *  images are a dead generic placeholder). Lookups go through a 30-day
+   *  ctx.storage cache (url: null = known-miss, so misses aren't re-queried
+   *  every open). A failed lookup only logs — art never breaks a section. */
+  const applyArtistArt = async (c: LastfmClient, sections: Section[]): Promise<void> => {
+    const names = [...new Set(sections.flatMap((sec) => sec.items.map((i) => i.name)))];
+    if (names.length === 0) return;
+    const cache = (await ctx.storage.get<ArtistArtCache>(ART_CACHE_KEY)) ?? {};
+    const now = Date.now();
+    const stale = names.filter((n) => {
+      const entry = cache[n.toLowerCase()];
+      return !entry || now - entry.fetchedAt >= ART_TTL_MS;
+    });
+    await Promise.all(
+      stale.map(async (artist) => {
+        try {
+          const res = await c.call<TopAlbumsResponse>(
+            "artist.getTopAlbums",
+            { artist, limit: "1", autocorrect: "1" },
+            { signed: false }, // read method — api_key only
+          );
+          cache[artist.toLowerCase()] = {
+            url: pickImageUrl(res.topalbums?.album?.[0]?.image),
+            fetchedAt: now,
+          };
+        } catch (err) {
+          // Transient failure: log and leave uncached so the next open retries.
+          ctx.log(`artist.getTopAlbums failed for "${artist}":`, errText(err));
+        }
+      }),
+    );
+    if (stale.length > 0) {
+      // Cap the cache by dropping the oldest-fetched entries.
+      let entries = Object.entries(cache);
+      if (entries.length > ART_CACHE_MAX_ENTRIES) {
+        entries = entries
+          .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt)
+          .slice(0, ART_CACHE_MAX_ENTRIES);
+      }
+      await ctx.storage.set(ART_CACHE_KEY, Object.fromEntries(entries));
+    }
+    for (const section of sections) {
+      for (const item of section.items) {
+        const url = cache[item.name.toLowerCase()]?.url;
+        if (url) item.imageUrl = url;
+      }
+    }
+  };
+
   ctx.ui.contributeSections("discover", {
     id: "lastfm-similar",
     getSections: async (sectionCtx) => {
@@ -239,6 +318,12 @@ export async function activate(ctx: PluginContext): Promise<void> {
         } catch (err) {
           ctx.log(`artist.getSimilar failed for "${artistName}":`, errText(err));
         }
+      }
+      try {
+        await applyArtistArt(s.client, sections);
+      } catch (err) {
+        // Artwork is decoration — a storage/lookup failure never drops sections.
+        ctx.log("artist artwork lookup failed:", errText(err));
       }
       return sections;
     },

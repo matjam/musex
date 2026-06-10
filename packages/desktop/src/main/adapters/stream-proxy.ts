@@ -13,9 +13,12 @@ import {
   parseByteRange,
   sniffImageType,
 } from "../../logic/cache.js";
+import { validExternalImageUrl } from "../../logic/external-url.js";
 import type { MediaCache } from "./media-cache.js";
 
 const PREFETCH_DEPTH = 10;
+/** Hard cap on a proxied external image body (covers are well under 1MB). */
+const EXT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 /** Strictly sequential: the wanted list arrives priority-ordered (current track
  *  first, then lookahead), and one-at-a-time keeps prefetch from competing with
  *  the live playback stream for the Plex server's attention. */
@@ -106,6 +109,15 @@ export class StreamProxy {
     return thumb ? this.mediaUrl(serverId, thumb) : undefined;
   }
 
+  /** Bake a proxy URL for a plugin-supplied external image (e.g. last.fm album
+   *  covers). https-only; anything else returns undefined (caller drops it). */
+  externalArtUrl(remoteUrl: string | undefined): string | undefined {
+    const valid = validExternalImageUrl(remoteUrl);
+    return valid
+      ? `${this.baseUrl()}/${this.secret}/ext?u=${encodeURIComponent(valid)}`
+      : undefined;
+  }
+
   resolve(track: Track): StreamRef {
     // mpv decodes every codec Plex can store, so everything direct-plays the
     // original file — no Plex transcode path needed.
@@ -140,6 +152,15 @@ export class StreamProxy {
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // External-image branch (`/{secret}/ext?u=<https url>`): plugin-supplied
+    // artwork (e.g. last.fm covers). Sits AFTER all security checks. NEVER
+    // touches this.endpoints and NEVER attaches the Plex token — it is a plain
+    // https fetch of a public image, cached in the always-on art cache.
+    if (segments[0] === "ext") {
+      await this.handleExternalArt(req, res, reqUrl);
       return;
     }
 
@@ -257,6 +278,84 @@ export class StreamProxy {
       finishCache(false);
     });
     upstreamReq.end();
+  }
+
+  /** Fetch + serve a plugin-supplied external image through the art cache.
+   *  Security posture: the caller has already verified secret + Host; the URL
+   *  must be https (no Plex token is ever attached, no endpoint lookup); the
+   *  body is buffered with a hard 5MB cap (covers are <1MB). Cached entries
+   *  are served from disk on later loads — including offline. */
+  private async handleExternalArt(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    reqUrl: URL,
+  ): Promise<void> {
+    const remote = validExternalImageUrl(reqUrl.searchParams.get("u"));
+    if (!remote) {
+      res.writeHead(400);
+      res.end("bad external url");
+      return;
+    }
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+    const key = cacheKey("ext", remote);
+    if (this.artCache) {
+      const hit = await this.artCache.pathIfPresent(key);
+      if (hit) {
+        const head = await this.readHead(hit, 12);
+        await this.serveFromFile(req, res, hit, sniffImageType(head));
+        return;
+      }
+    }
+
+    let upstream: Response;
+    try {
+      upstream = await fetch(remote); // global fetch: follows redirects, https enforced above
+    } catch (err) {
+      console.error(`[musex stream proxy] external image fetch failed for ${remote}:`, err);
+      res.writeHead(502);
+      res.end();
+      return;
+    }
+    const contentType = upstream.headers.get("content-type") ?? "";
+    const declaredLength = Number(upstream.headers.get("content-length") ?? "");
+    if (
+      !upstream.ok ||
+      !contentType.startsWith("image/") ||
+      (Number.isFinite(declaredLength) && declaredLength > EXT_IMAGE_MAX_BYTES)
+    ) {
+      // Cancel errors on an already-rejected upstream carry no signal — ignore.
+      upstream.body?.cancel().catch(() => {});
+      res.writeHead(502);
+      res.end("bad upstream image");
+      return;
+    }
+    let body: Buffer;
+    try {
+      body = Buffer.from(await upstream.arrayBuffer());
+    } catch (err) {
+      console.error(`[musex stream proxy] external image body failed for ${remote}:`, err);
+      res.writeHead(502);
+      res.end();
+      return;
+    }
+    if (body.length === 0 || body.length > EXT_IMAGE_MAX_BYTES) {
+      res.writeHead(502);
+      res.end("bad upstream image");
+      return;
+    }
+
+    // Best-effort cache write — a failed commit must never fail the response.
+    if (this.artCache) {
+      const writer = this.artCache.beginWrite(key, this.artMaxBytes);
+      writer.stream.write(body);
+      writer
+        .commit()
+        .catch((e) => console.error("[musex art cache] external image commit failed:", e));
+    }
+
+    res.writeHead(200, { "Content-Type": contentType, "Content-Length": String(body.length) });
+    res.end(req.method === "HEAD" ? undefined : body);
   }
 
   private cacheFromUpstream(

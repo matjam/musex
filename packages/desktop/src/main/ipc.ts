@@ -466,7 +466,21 @@ export function registerIpc(rt: Runtime): void {
         console.error("[plugins] sections library matching failed:", err);
       }
     }
-    return matchSectionsAgainstLibrary(results, artists);
+    // Plugin-supplied artwork is an external https URL; bake it through the
+    // proxy's /ext endpoint so it's disk-cached (art cache) and loads offline.
+    // Non-https/unparseable URLs are dropped rather than handed to the renderer.
+    return matchSectionsAgainstLibrary(results, artists).map((section) => ({
+      ...section,
+      items: section.items.map((item) => {
+        if (item.imageUrl === undefined) return item;
+        const proxied = rt.proxy.externalArtUrl(item.imageUrl);
+        if (proxied === undefined) {
+          const { imageUrl: _dropped, ...rest } = item;
+          return rest;
+        }
+        return { ...item, imageUrl: proxied };
+      }),
+    }));
   });
   ipcMain.handle(IPC.trackActionsList, () => rt.plugins.listTrackActions());
   ipcMain.handle(IPC.trackActionsInvoke, (_e, actionId: string, track: unknown) => {
