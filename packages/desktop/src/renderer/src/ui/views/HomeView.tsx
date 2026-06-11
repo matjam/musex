@@ -115,7 +115,7 @@ export function HomeView() {
     };
   }, [library]);
 
-  const topPlaylists = playlists.slice(0, 8);
+  const topPlaylists = playlists.filter((p) => p.trackCount > 0).slice(0, 8);
   const empty =
     topPlaylists.length === 0 &&
     artists.length === 0 &&

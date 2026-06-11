@@ -164,15 +164,6 @@ export function Shell() {
         <SidebarSection title="Library" collapsed={libraryCollapsed} onToggle={toggleLibrary}>
           <button
             type="button"
-            className={`nav-item${albumsActive ? " active" : ""}`}
-            onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
-          >
-            <Disc3 size={16} />
-            Albums
-          </button>
-
-          <button
-            type="button"
             className={`nav-item${artistsActive ? " active" : ""}`}
             onClick={() => dispatch({ type: "navigate", view: { name: "artists" } })}
           >
@@ -182,11 +173,11 @@ export function Shell() {
 
           <button
             type="button"
-            className={`nav-item${genresActive ? " active" : ""}`}
-            onClick={() => dispatch({ type: "navigate", view: { name: "genres" } })}
+            className={`nav-item${albumsActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "albums" } })}
           >
-            <Tags size={16} />
-            Genres
+            <Disc3 size={16} />
+            Albums
           </button>
 
           <button
@@ -196,6 +187,15 @@ export function Shell() {
           >
             <Music size={16} />
             Tracks
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item${genresActive ? " active" : ""}`}
+            onClick={() => dispatch({ type: "navigate", view: { name: "genres" } })}
+          >
+            <Tags size={16} />
+            Genres
           </button>
         </SidebarSection>
 
@@ -240,7 +240,8 @@ export function Shell() {
                 dispatch({ type: "navigate", view: { name: "playlist", playlist: p } })
               }
             >
-              {p.title}
+              <span className="nav-label">{p.title}</span>
+              <span className="nav-badge">{p.trackCount}</span>
             </button>
           ))}
         </SidebarSection>

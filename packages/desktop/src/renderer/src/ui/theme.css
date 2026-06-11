@@ -328,6 +328,19 @@ textarea:focus {
   pointer-events: none;
 }
 
+.nav-item .nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-item .nav-badge {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
 /* .nav-ic is no longer used — nav icons are now lucide-react components */
 
 /* ---- Sort selector ---- */
@@ -2033,6 +2046,11 @@ img.queue-row-art {
 
 .home-row {
   margin-bottom: 26px;
+}
+
+/* Home section labels need air between the title and the tile grid. */
+.home-row .browse-title {
+  margin-bottom: 14px;
 }
 
 /* ---- Tracks view header actions (play/shuffle + sort) ---- */

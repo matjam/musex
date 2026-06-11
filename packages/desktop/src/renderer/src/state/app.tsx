@@ -56,7 +56,7 @@ function reducer(s: AppState, a: Action): AppState {
             auth: "signed-in",
             library: a.library,
             signInCode: null,
-            view: { name: "albums" },
+            view: { name: "home" },
           }
         : { ...s, auth: "signed-out" };
     case "navigate":
