@@ -102,7 +102,8 @@ still produces interim refreshes.
    tested): `relevantSectionChange(container, sectionId): boolean` (parse an
    `AlertTypes` NotificationContainer payload; timeline entries with the
    library identifier, matching section, state 5|9), `sectionFrom(libraries,
-   id)`, `hasNewerTimestamp(prev, fresh)`, `nextReconnectDelayMs(attempt)`
+   id)`, `timestampChanged(prev, fresh)` (inequality, not greater-than — a
+   reset Plex DB must still register), `nextReconnectDelayMs(attempt)`
    (capped exponential 1s→60s), and a `ChangeCoalescer` class (injected
    `now()`; `noteChange(now)` → `dueAt` honoring 5s quiet / 30s max — the
    adapter owns the actual timer).
