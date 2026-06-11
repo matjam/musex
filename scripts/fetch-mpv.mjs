@@ -65,6 +65,13 @@ async function main() {
     await mkdir(targetDir, { recursive: true });
     execFileSync("tar", ["-xzf", join(tmpDir, "mpv.tar.gz"), "-C", targetDir]);
 
+    // The mpv distribution ships some files read-only (e.g. libMoltenVK.dylib
+    // at mode 444). Squirrel.Mac's ShipIt must remove the quarantine xattr
+    // from every file of an update, which requires owner-write — a single
+    // read-only file makes EVERY auto-update fail with "Permission denied"
+    // and silently relaunch the old version. Normalize to owner-writable.
+    execFileSync("chmod", ["-R", "u+w", targetDir]);
+
     // Sanity check
     const versionOut = execFileSync(binaryPath, ["--version"], { encoding: "utf8" });
     if (!versionOut.includes(`mpv ${MPV_VERSION}`)) {

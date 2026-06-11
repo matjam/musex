@@ -12,6 +12,9 @@
 # no `binaries` list needed.
 appId: net.stupendous.musex
 productName: musex
+# Auto-update safety: ShipIt can't strip quarantine xattrs from read-only
+# files (mpv ships some), which aborts the whole install. See the hook.
+afterPack: build/ensure-writable.cjs
 directories:
   output: release
   buildResources: build
