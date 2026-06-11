@@ -39,6 +39,17 @@ export function cmdSetVolume(id: number, v01: number): MpvCommand {
   return { command: ["set_property", "volume", Math.round(clamped * 100)], request_id: id };
 }
 
+/** Set the audio filter chain ("" clears it). Values come exclusively from
+ *  logic/audio-filters.ts — never free-form user text. The structured command
+ *  array keeps commas inside `lavfi=[...]` opaque to mpv's option parser. */
+export function cmdSetAf(id: number, af: string): MpvCommand {
+  return { command: ["set_property", "af", af], request_id: id };
+}
+
+export function cmdSetReplaygain(id: number, mode: "no" | "track" | "album"): MpvCommand {
+  return { command: ["set_property", "replaygain", mode], request_id: id };
+}
+
 export function cmdObserve(id: number, observeId: number, prop: string): MpvCommand {
   return { command: ["observe_property", observeId, prop], request_id: id };
 }

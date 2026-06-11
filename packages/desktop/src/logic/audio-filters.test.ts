@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AudioPrefs } from "./audio-filters";
 import {
   buildAf,
   DEFAULT_AUDIO_PREFS,
@@ -42,6 +43,12 @@ describe("replaygainMode", () => {
     expect(replaygainMode({ leveling: "replaygain", eqPreset: "off" })).toBe("album");
     expect(replaygainMode({ leveling: "off", eqPreset: "off" })).toBe("no");
     expect(replaygainMode({ leveling: "auto", eqPreset: "off" })).toBe("no");
+  });
+
+  it("auto leveling → replaygain off + dynaudnorm in the graph (never both)", () => {
+    const prefs: AudioPrefs = { leveling: "auto", eqPreset: "off" };
+    expect(replaygainMode(prefs)).toBe("no");
+    expect(buildAf(prefs)).toBe("lavfi=[dynaudnorm]");
   });
 });
 

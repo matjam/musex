@@ -57,7 +57,7 @@ export function sanitizeAudioPrefs(raw: unknown): AudioPrefs {
     ? (obj.leveling as LevelingMode)
     : DEFAULT_AUDIO_PREFS.leveling;
   const eqPreset = EQ_PRESETS.some((p) => p.id === obj.eqPreset)
-    ? (obj.eqPreset as string)
+    ? (obj.eqPreset as EqPreset["id"])
     : DEFAULT_AUDIO_PREFS.eqPreset;
   return { leveling, eqPreset };
 }
