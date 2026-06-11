@@ -300,13 +300,35 @@ export class PluginHost {
   async lookupArtistAlbums(
     artistName: string,
   ): Promise<(AcquirableAlbum & { providerId: string })[]> {
+    return this.lookupAlbums(artistName, false);
+  }
+
+  /** Like lookupArtistAlbums, but when EVERY provider errored the failure
+   *  THROWS instead of blending into "no albums". Taste expansion needs the
+   *  distinction: a metadata-service hiccup (timeout, SkyHook 503) must defer
+   *  the pick to the next cycle, not permanently blacklist the artist —
+   *  [] still means "providers answered: artist genuinely unknown". */
+  async lookupArtistAlbumsStrict(
+    artistName: string,
+  ): Promise<(AcquirableAlbum & { providerId: string })[]> {
+    return this.lookupAlbums(artistName, true);
+  }
+
+  private async lookupAlbums(
+    artistName: string,
+    strict: boolean,
+  ): Promise<(AcquirableAlbum & { providerId: string })[]> {
     const timeoutMs = this.deps.providerTimeoutMs ?? ACQUISITION_TIMEOUT_MS;
+    let attempted = 0;
+    let failed = 0;
     for (const p of this.registry.acquisitionProviders) {
+      attempted++;
       let items: AcquirableAlbum[];
       try {
         const res = await withTimeout(p.provider.lookupArtistAlbums(artistName), timeoutMs);
         items = Array.isArray(res) ? res : [];
       } catch (err) {
+        failed++;
         console.error(
           `[plugins] ${p.pluginId} acquisition provider "${p.provider.id}" lookup failed:`,
           err,
@@ -322,6 +344,9 @@ export class PluginHost {
         tagged.push({ ...item, providerId: p.pluginId });
       }
       if (tagged.length > 0) return tagged;
+    }
+    if (strict && attempted > 0 && failed === attempted) {
+      throw new Error(`every acquisition provider failed looking up "${artistName}"`);
     }
     return [];
   }

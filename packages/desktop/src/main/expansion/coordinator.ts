@@ -289,15 +289,18 @@ export class ExpansionCoordinator {
     for (const pick of picks) {
       if (requested >= budget) break;
       const entry = await this.requestPick(pick, now);
+      if (entry === null) continue; // transient lookup failure — retry next cycle
       ledger.push(entry);
       if (entry.state === "requested") requested++;
     }
     return requested;
   }
 
-  /** Resolve a pick to its entry-point album and request it. Failures return
-   *  an abandoned entry (artist blacklisted from re-suggestion, slot free). */
-  private async requestPick(pick: CandidatePick, now: number): Promise<ExpansionEntry> {
+  /** Resolve a pick to its entry-point album and request it. A provider that
+   *  ANSWERS "no albums" abandons the artist (blacklisted, slot free); a
+   *  provider that ERRORS (metadata-service timeout/503) returns null so the
+   *  pick is simply retried on a later cycle — never blacklisted. */
+  private async requestPick(pick: CandidatePick, now: number): Promise<ExpansionEntry | null> {
     const base: ExpansionEntry = {
       artistKey: artistKeyOf(pick.artistName),
       artistName: pick.artistName,
@@ -309,7 +312,16 @@ export class ExpansionCoordinator {
       createdAt: now,
     };
 
-    const lookup = await this.deps.host.lookupArtistAlbums(pick.artistName);
+    let lookup: Awaited<ReturnType<PluginHost["lookupArtistAlbumsStrict"]>>;
+    try {
+      lookup = await this.deps.host.lookupArtistAlbumsStrict(pick.artistName);
+    } catch (err) {
+      console.warn(
+        `[expansion] lookup failed for ${pick.artistName} — will retry next cycle:`,
+        errText(err),
+      );
+      return null;
+    }
     if (lookup.length === 0) {
       return {
         ...base,
@@ -410,7 +422,16 @@ export class ExpansionCoordinator {
         .map((e) => e.albumTitle.trim().toLowerCase()),
     );
 
-    const lookup = await this.deps.host.lookupArtistAlbums(landed.artistName);
+    let lookup: Awaited<ReturnType<PluginHost["lookupArtistAlbumsStrict"]>>;
+    try {
+      lookup = await this.deps.host.lookupArtistAlbumsStrict(landed.artistName);
+    } catch (err) {
+      console.warn(
+        `[expansion] deepening lookup failed for ${landed.artistName} — will retry next cycle:`,
+        errText(err),
+      );
+      return false;
+    }
     const top = await this.deps.host.topAlbums(landed.artistName);
     const ranked = [
       ...top
