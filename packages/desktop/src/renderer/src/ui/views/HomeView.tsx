@@ -40,6 +40,7 @@ export function HomeView() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [mixThumbs, setMixThumbs] = useState<Map<string, string[]>>(new Map());
   const [smartThumbs, setSmartThumbs] = useState<Map<SmartKind, string[]>>(new Map());
+  const [playlistArt, setPlaylistArt] = useState<Map<string, string[]>>(new Map());
   const [pluginSections, setPluginSections] = useState<SectionDto[]>([]);
   const [discoveries, setDiscoveries] = useState<Artist[]>([]);
 
@@ -155,6 +156,35 @@ export function HomeView() {
     };
   }, [library]);
 
+  // Playlists without a Plex composite thumb (e.g. smart playlists like
+  // "Recently Played") get a collage from their first few tracks.
+  useEffect(() => {
+    const missing = playlists.filter((p) => !p.thumb && p.trackCount > 0).slice(0, 8);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    for (const p of missing) {
+      window.musex
+        .listPlaylistTracksPage(p.id, p.serverId, 0, 8)
+        .then((page) => {
+          if (cancelled) return;
+          const thumbs = sampleThumbs(
+            page.items.map((it) => it.track.thumb),
+            4,
+            p.id,
+          );
+          if (thumbs.length > 0) {
+            setPlaylistArt((prev) => new Map(prev).set(p.id, thumbs));
+          }
+        })
+        .catch(() => {
+          // art fallback is decoration — blank tile art stays on failure
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [playlists]);
+
   const topPlaylists = playlists.filter((p) => p.trackCount > 0).slice(0, 8);
   const empty =
     topPlaylists.length === 0 &&
@@ -237,6 +267,7 @@ export function HomeView() {
               <GridCard
                 key={p.id}
                 thumb={p.thumb}
+                collage={!p.thumb ? playlistArt.get(p.id) : undefined}
                 title={p.title}
                 subtitle={`${p.trackCount} song${p.trackCount !== 1 ? "s" : ""}`}
                 onOpen={() =>
