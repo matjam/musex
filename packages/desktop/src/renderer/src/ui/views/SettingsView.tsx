@@ -1,3 +1,5 @@
+import type { LucideIcon } from "lucide-react";
+import { Blocks, HardDrive, Puzzle, Settings2, Sparkles, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_AUDIO_PREFS,
@@ -16,7 +18,29 @@ import type {
 import { useApp } from "../../state/app";
 import { formatBytes } from "../../util/format";
 
+declare const __APP_VERSION__: string;
+
 const GiB = 1024 ** 3;
+
+type CategoryId = "general" | "playback" | "library" | "discovery" | "plugins" | `plugin:${string}`;
+
+const CATEGORIES: ReadonlyArray<{
+  id: CategoryId;
+  label: string;
+  icon: LucideIcon;
+}> = [
+  { id: "general", label: "General", icon: Settings2 },
+  { id: "playback", label: "Playback", icon: Volume2 },
+  { id: "library", label: "Library & Cache", icon: HardDrive },
+  { id: "discovery", label: "Discovery", icon: Sparkles },
+  { id: "plugins", label: "Plugins", icon: Blocks },
+];
+
+function isKnownCategory(id: string | undefined): id is CategoryId {
+  if (!id) return false;
+  if ((CATEGORIES as ReadonlyArray<{ id: string }>).some((c) => c.id === id)) return true;
+  return id.startsWith("plugin:");
+}
 
 /** Renders help text with any http(s) URLs as clickable links (opened in the
  *  default browser) so plugins can point at e.g. API-key signup pages. */
@@ -43,11 +67,59 @@ function HelpText({ text }: { text: string }) {
   );
 }
 
-type LoadState = { status: "loading" } | { status: "ready"; cacheEnabled: boolean; capGiB: number };
-
-export function SettingsView() {
+/** Plex server / library info. */
+function AccountSection() {
   const { library } = useApp();
-  const [state, setState] = useState<LoadState>({ status: "loading" });
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Account</div>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Plex server</div>
+          <div className="settings-row-desc">
+            {library ? `${library.serverName} · ${library.title}` : "No library selected"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** App version + manual update check. Results surface as native dialogs in
+ *  main (same flow as the menu item), so no result plumbing here. */
+function AppSection() {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Application</div>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">musex {__APP_VERSION__}</div>
+          <div className="settings-row-desc">Updates install automatically when available.</div>
+        </div>
+        <button
+          type="button"
+          className="settings-btn"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void window.musex.updaterCheck().finally(() => setBusy(false));
+          }}
+        >
+          {busy ? "Checking…" : "Check for Updates"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type CacheLoadState =
+  | { status: "loading" }
+  | { status: "ready"; cacheEnabled: boolean; capGiB: number };
+
+/** Local cache settings (previously inline in SettingsView). */
+function CacheSection() {
+  const [state, setState] = useState<CacheLoadState>({ status: "loading" });
   const [stats, setStats] = useState<CacheStats | null>(null);
   const [clearing, setClearing] = useState(false);
 
@@ -112,89 +184,69 @@ export function SettingsView() {
   }
 
   return (
-    <div className="settings-page">
-      <div className="settings-section">
-        <div className="settings-section-title">Local Cache</div>
+    <div className="settings-section">
+      <div className="settings-section-title">Local Cache</div>
 
-        <div className="settings-row">
-          <div className="settings-row-text">
-            <div className="settings-row-label">Cache played tracks on this Mac</div>
-            <div className="settings-row-desc">
-              Audio files are saved to disk as they play and loaded locally next time, so repeat
-              listens don't re-stream from Plex. Only original (direct-play) files are cached.
-              Artwork is always cached regardless of this setting.
-            </div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={state.cacheEnabled}
-            aria-label="Cache played tracks"
-            className={`toggle${state.cacheEnabled ? " toggle--on" : ""}`}
-            onClick={() => void toggleCache(!state.cacheEnabled)}
-          >
-            <span className="toggle-knob" />
-          </button>
-        </div>
-
-        <div className="settings-row">
-          <div className="settings-row-text">
-            <div className="settings-row-label">Maximum cache size</div>
-            <div className="settings-row-desc">
-              When the cache grows past this size, the least-recently-played files are removed
-              automatically.
-            </div>
-          </div>
-          <div>
-            <input
-              className="settings-input"
-              type="number"
-              min={1}
-              step={1}
-              value={state.capGiB}
-              disabled={!state.cacheEnabled}
-              onChange={(e) => changeCap(Number(e.target.value))}
-            />
-            <span className="settings-suffix">GB</span>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Cache played tracks on this Mac</div>
+          <div className="settings-row-desc">
+            Audio files are saved to disk as they play and loaded locally next time, so repeat
+            listens don't re-stream from Plex. Only original (direct-play) files are cached. Artwork
+            is always cached regardless of this setting.
           </div>
         </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={state.cacheEnabled}
+          aria-label="Cache played tracks"
+          className={`toggle${state.cacheEnabled ? " toggle--on" : ""}`}
+          onClick={() => void toggleCache(!state.cacheEnabled)}
+        >
+          <span className="toggle-knob" />
+        </button>
+      </div>
 
-        <div className="settings-row">
-          <div className="settings-row-text">
-            <div className="settings-row-label">Current cache</div>
-            <div className="settings-row-desc">
-              {stats
-                ? `${formatBytes(stats.bytes)} across ${stats.files} file${stats.files === 1 ? "" : "s"}`
-                : "—"}
-            </div>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Maximum cache size</div>
+          <div className="settings-row-desc">
+            When the cache grows past this size, the least-recently-played files are removed
+            automatically.
           </div>
-          <button
-            type="button"
-            className="settings-btn danger"
-            disabled={clearing || (stats?.files ?? 0) === 0}
-            onClick={() => void clearCache()}
-          >
-            {clearing ? "Clearing…" : "Clear cache"}
-          </button>
+        </div>
+        <div>
+          <input
+            className="settings-input"
+            type="number"
+            min={1}
+            step={1}
+            value={state.capGiB}
+            disabled={!state.cacheEnabled}
+            onChange={(e) => changeCap(Number(e.target.value))}
+          />
+          <span className="settings-suffix">GB</span>
         </div>
       </div>
 
-      <AudioSection />
-
-      <ExpansionSection />
-
-      <PluginsSection />
-
-      <div className="settings-section">
-        <div className="settings-section-title">Account</div>
-        <div className="settings-row">
-          <div className="settings-row-text">
-            <div className="settings-row-label">Plex server</div>
-            <div className="settings-row-desc">
-              {library ? `${library.serverName} · ${library.title}` : "No library selected"}
-            </div>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Current cache</div>
+          <div className="settings-row-desc">
+            {stats
+              ? `${formatBytes(stats.bytes)} across ${stats.files} file${stats.files === 1 ? "" : "s"}`
+              : "—"}
           </div>
         </div>
+        <button
+          type="button"
+          className="settings-btn danger"
+          disabled={clearing || (stats?.files ?? 0) === 0}
+          onClick={() => void clearCache()}
+        >
+          {clearing ? "Clearing…" : "Clear cache"}
+        </button>
       </div>
     </div>
   );
@@ -442,31 +494,19 @@ function statusChip(p: PluginInfo) {
   return <span className={`plugin-chip plugin-chip--${p.status}`}>{p.status}</span>;
 }
 
-function PluginsSection() {
-  const [plugins, setPlugins] = useState<PluginInfo[] | null>(null);
-  const [reloading, setReloading] = useState(false);
-
-  const refresh = useCallback(() => {
-    window.musex
-      .pluginsList()
-      .then(setPlugins)
-      .catch(() => setPlugins([]));
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  async function reload() {
-    setReloading(true);
-    try {
-      await window.musex.pluginsReload();
-      refresh();
-    } finally {
-      setReloading(false);
-    }
-  }
-
+/** Overview pane: reload row + per-plugin enable toggles + status chips.
+ *  Settings fields are NOT shown here — use the plugin:<id> sub-entry for that. */
+function PluginsOverview({
+  plugins,
+  reloading,
+  onReload,
+  onChanged,
+}: {
+  plugins: PluginInfo[] | null;
+  reloading: boolean;
+  onReload: () => void;
+  onChanged: () => void;
+}) {
   return (
     <div className="settings-section">
       <div className="settings-section-title">Plugins</div>
@@ -478,12 +518,7 @@ function PluginsSection() {
             plugins directory and reload.
           </div>
         </div>
-        <button
-          type="button"
-          className="settings-btn"
-          disabled={reloading}
-          onClick={() => void reload()}
-        >
+        <button type="button" className="settings-btn" disabled={reloading} onClick={onReload}>
           {reloading ? "Reloading…" : "Reload plugins"}
         </button>
       </div>
@@ -500,8 +535,41 @@ function PluginsSection() {
           </div>
         </div>
       ) : (
-        plugins.map((p) => <PluginCard key={p.id} plugin={p} onChanged={refresh} />)
+        plugins.map((p) => <PluginsOverviewRow key={p.id} plugin={p} onChanged={onChanged} />)
       )}
+    </div>
+  );
+}
+
+/** A single plugin row in the overview: name/version/status chip + enable toggle. */
+function PluginsOverviewRow({ plugin, onChanged }: { plugin: PluginInfo; onChanged: () => void }) {
+  const enabled = plugin.status !== "disabled";
+
+  async function toggleEnabled() {
+    await window.musex.pluginsSetEnabled(plugin.id, !enabled);
+    onChanged();
+  }
+
+  return (
+    <div className="settings-row">
+      <div className="settings-row-text">
+        <div className="settings-row-label">
+          {plugin.name} <span className="plugin-version">v{plugin.version}</span>
+          {statusChip(plugin)}
+        </div>
+        {plugin.error ? <div className="settings-row-desc plugin-error">{plugin.error}</div> : null}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        aria-label={`Enable ${plugin.name}`}
+        className={`toggle${enabled ? " toggle--on" : ""}`}
+        disabled={plugin.status === "incompatible"}
+        onClick={() => void toggleEnabled()}
+      >
+        <span className="toggle-knob" />
+      </button>
     </div>
   );
 }
@@ -730,6 +798,107 @@ function PluginTextRow({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => void save()}
       />
+    </div>
+  );
+}
+
+export function SettingsView({ initialCategory }: { initialCategory?: string } = {}) {
+  const [category, setCategory] = useState<string>(() =>
+    isKnownCategory(initialCategory) ? initialCategory : "general",
+  );
+
+  // A deep-link arriving while the modal is already open switches the pane
+  // (the useState initializer above only covers mount).
+  useEffect(() => {
+    if (isKnownCategory(initialCategory)) setCategory(initialCategory);
+  }, [initialCategory]);
+
+  const [plugins, setPlugins] = useState<PluginInfo[] | null>(null);
+  const [reloading, setReloading] = useState(false);
+
+  const refresh = useCallback(() => {
+    window.musex
+      .pluginsList()
+      .then(setPlugins)
+      .catch(() => setPlugins([]));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function reload() {
+    setReloading(true);
+    try {
+      await window.musex.pluginsReload();
+      refresh();
+    } finally {
+      setReloading(false);
+    }
+  }
+
+  return (
+    <div className="settings-layout">
+      <nav className="settings-nav">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className={`nav-item${category === c.id ? " active" : ""}`}
+            onClick={() => setCategory(c.id)}
+          >
+            <c.icon size={16} />
+            {c.label}
+          </button>
+        ))}
+        {(plugins ?? []).map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`nav-item settings-nav-sub${category === `plugin:${p.id}` ? " active" : ""}`}
+            onClick={() => setCategory(`plugin:${p.id}`)}
+          >
+            <Puzzle size={14} />
+            {p.name}
+          </button>
+        ))}
+      </nav>
+      <div className="settings-pane">
+        <div className="settings-page">
+          {category === "general" && (
+            <>
+              <AccountSection />
+              <AppSection />
+            </>
+          )}
+          {category === "playback" && <AudioSection />}
+          {category === "library" && <CacheSection />}
+          {category === "discovery" && <ExpansionSection />}
+          {category === "plugins" && (
+            <PluginsOverview
+              plugins={plugins}
+              reloading={reloading}
+              onReload={() => void reload()}
+              onChanged={refresh}
+            />
+          )}
+          {category.startsWith("plugin:") &&
+            (() => {
+              if (plugins === null) {
+                return <div className="content-placeholder">Loading plugins…</div>;
+              }
+              const p = plugins.find((x) => `plugin:${x.id}` === category);
+              return p ? (
+                <div className="settings-section">
+                  <div className="settings-section-title">{p.name}</div>
+                  <PluginCard plugin={p} onChanged={refresh} />
+                </div>
+              ) : (
+                <div className="content-placeholder">Plugin not found.</div>
+              );
+            })()}
+        </div>
+      </div>
     </div>
   );
 }

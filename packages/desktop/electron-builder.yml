@@ -21,9 +21,11 @@ directories:
 files:
   - "out/**/*"
 mac:
-  # 1024px PNG (generated from assets/icon.svg by scripts/gen-icon.sh);
-  # electron-builder converts it to a full .icns at package time.
-  icon: build/icon.png
+  # Pre-built .icns (generated from assets/icon.svg by scripts/gen-icon.sh,
+  # committed). electron-builder ships a provided .icns AS-IS — its own
+  # PNG->ICNS conversion produced corrupt 16/32px representations (rainbow
+  # noise in Finder list view / Get Info), so never hand it the PNG.
+  icon: build/icon.icns
   # zip is REQUIRED alongside dmg: electron-updater on macOS (Squirrel.Mac)
   # updates from the zip; latest-mac.yml points at it.
   target:

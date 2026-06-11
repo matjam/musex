@@ -123,6 +123,7 @@ const api: MusexApi = {
   acquisitionMonitoredArtists: () => ipcRenderer.invoke(IPC.acquisitionMonitoredArtists),
   acquisitionDiscography: (artistName) =>
     ipcRenderer.invoke(IPC.acquisitionDiscography, artistName),
+  updaterCheck: () => ipcRenderer.invoke(IPC.updaterCheck),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

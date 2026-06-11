@@ -2664,6 +2664,32 @@ img.queue-row-art {
 
 .settings-modal-body {
   flex: 1;
+  overflow: hidden;
+}
+
+/* Categorized settings: internal sidebar + pane (same modal). */
+.settings-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+.settings-nav {
+  width: 170px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+.settings-nav .settings-nav-sub {
+  padding-left: 26px;
+  font-size: 12.5px;
+}
+.settings-pane {
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
 }
 
