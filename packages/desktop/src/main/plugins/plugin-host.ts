@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import type {
   AcquirableAlbum,
   AcquisitionStatusItem,
+  ArtistInfo,
   Disposable,
   ExternalArtistResult,
   LibrarySearchResult,
@@ -19,6 +20,7 @@ import type {
   SimilarItem,
   TrackInfo,
 } from "@musex/plugin-api";
+import { mergeDiscography } from "../../logic/discography-merge.js";
 import { validateManifest } from "../../logic/plugin-manifest.js";
 import { KEY_SEPARATOR } from "../../logic/taste-profile.js";
 import type { PluginInfo, PluginNotification, PluginSettings } from "../../shared/ipc-contract.js";
@@ -559,6 +561,65 @@ export class PluginHost {
       }
     }
     return [];
+  }
+
+  /** Artist bio/stats — first similar provider with a non-null answer. */
+  async artistInfo(artistName: string): Promise<ArtistInfo | null> {
+    const timeoutMs = this.deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
+    for (const p of this.registry.similarProviders) {
+      if (p.provider.artistInfo === undefined) continue;
+      try {
+        const info = await withTimeout(p.provider.artistInfo(artistName), timeoutMs);
+        if (info && typeof info.name === "string") return info;
+      } catch (err) {
+        console.error(`[plugins] ${p.pluginId} artistInfo failed:`, err);
+      }
+    }
+    return null;
+  }
+
+  private monitoredCache: { at: number; names: string[] } | null = null;
+  /** Union of monitored artists across providers; 60s cache — this backs
+   *  tile badges, so it must be cheap to call repeatedly. */
+  async listMonitoredArtists(): Promise<string[]> {
+    if (this.monitoredCache && Date.now() - this.monitoredCache.at < 60_000) {
+      return this.monitoredCache.names;
+    }
+    const timeoutMs = this.deps.providerTimeoutMs ?? ACQUISITION_TIMEOUT_MS;
+    const names = new Set<string>();
+    for (const p of this.registry.acquisitionProviders) {
+      const list = p.provider.listMonitoredArtists;
+      if (list === undefined) continue;
+      try {
+        const res = await withTimeout(list.call(p.provider), timeoutMs);
+        for (const n of Array.isArray(res) ? res : []) {
+          if (typeof n === "string" && n.length > 0) names.add(n);
+        }
+      } catch (err) {
+        console.error(`[plugins] ${p.pluginId} listMonitoredArtists failed:`, err);
+      }
+    }
+    const out = [...names];
+    this.monitoredCache = { at: Date.now(), names: out };
+    return out;
+  }
+
+  /** "What's fetchable" (acquisition lookup) ∪ "what exists" (topAlbums) —
+   *  lastfm-only titles appended as unavailable. */
+  async externalDiscography(
+    artistName: string,
+  ): Promise<(AcquirableAlbum & { providerId: string })[]> {
+    const [albums, known] = await Promise.all([
+      this.lookupArtistAlbums(artistName),
+      this.topAlbums(artistName),
+    ]);
+    // Cast to satisfy the AcquirableLike index signature — plugin-api types
+    // don't carry [key: string]: unknown but mergeDiscography only reads the
+    // declared fields; the cast is safe.
+    const input = albums as unknown as Parameters<typeof mergeDiscography>[1];
+    return mergeDiscography(artistName, input, known) as (AcquirableAlbum & {
+      providerId: string;
+    })[];
   }
 
   listTrackActions(): { pluginId: string; id: string; label: string; icon?: string }[] {

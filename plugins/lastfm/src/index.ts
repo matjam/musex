@@ -65,6 +65,16 @@ type TrackInfoResponse = {
   };
 };
 
+interface ArtistInfoResponse {
+  artist?: {
+    name?: string;
+    url?: string;
+    image?: Array<{ size?: string; "#text"?: string }>;
+    stats?: { listeners?: string; playcount?: string };
+    bio?: { summary?: string };
+  };
+}
+
 /** last.fm returns counts as decimal strings; render with locale separators. */
 function count(v: string): string {
   const n = Number(v);
@@ -392,6 +402,39 @@ export async function activate(ctx: PluginContext): Promise<void> {
       } catch (err) {
         ctx.log(`artist.getSimilar failed for "${artistName}":`, errText(err));
         return [];
+      }
+    },
+    artistInfo: async (artistName) => {
+      const s = await session();
+      if (!s) return null; // needs API key + connected account
+      try {
+        const res = await s.client.call<ArtistInfoResponse>(
+          "artist.getInfo",
+          { artist: artistName, autocorrect: "1" },
+          { signed: false }, // read method — api_key only
+        );
+        const a = res.artist;
+        if (!a || typeof a.name !== "string") return null;
+        // bio.summary carries a trailing "<a href=…>Read more…</a>" — strip
+        // the link and any other tags; the UI renders plain text.
+        const bio = a.bio?.summary
+          ?.replace(/<a [^>]*>.*?<\/a>/gs, "")
+          .replace(/<[^>]+>/g, "")
+          .trim();
+        const image = (Array.isArray(a.image) ? a.image : []).find(
+          (i) => i.size === "extralarge" && i["#text"],
+        );
+        return {
+          name: a.name,
+          bio: bio || undefined,
+          url: typeof a.url === "string" ? a.url : undefined,
+          listeners: a.stats?.listeners ? Number(a.stats.listeners) : undefined,
+          playCount: a.stats?.playcount ? Number(a.stats.playcount) : undefined,
+          imageUrl: image?.["#text"],
+        };
+      } catch (err) {
+        ctx.log(`artist.getInfo failed for "${artistName}":`, errText(err));
+        return null;
       }
     },
     similarTracks: async ({ title, artist }) => {
