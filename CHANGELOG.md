@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/matjam/musex/compare/v0.1.3...v0.2.0) (2026-06-11)
+
+
+### Features
+
+* **expansion:** optimistic acquisition + per-artist new-release watching ([7cc4295](https://github.com/matjam/musex/commit/7cc42959e0e2ad0db68e415ed0c92f7e6443f688))
+* **expansion:** release notes for [#7](https://github.com/matjam/musex/issues/7) (squash dropped conventional commits) ([024ff45](https://github.com/matjam/musex/commit/024ff458983640c8a0ae4063aedf0ff8501ead5c))
+
 ## [0.1.3](https://github.com/matjam/musex/compare/v0.1.2...v0.1.3) (2026-06-10)
 
 
