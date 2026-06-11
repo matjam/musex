@@ -8,7 +8,8 @@ a bundled mpv engine, so nothing is ever transcoded. On top of that it builds
 a listening profile from what you actually play, and turns it into smart
 playlists, mood mixes, radio, and recommendations.
 
-<!-- screenshot: docs/screenshot.png -->
+<img width="1392" height="932" alt="image" src="https://github.com/user-attachments/assets/95c64b08-5e9d-4845-aac1-62db37fbe6b5" />
+
 <!-- ![musex](docs/screenshot.png) -->
 
 ## Features
