@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/matjam/musex/compare/v0.2.0...v0.2.1) (2026-06-11)
+
+
+### Bug Fixes
+
+* **expansion:** transient Lidarr lookup failures must not blacklist artists ([#11](https://github.com/matjam/musex/issues/11)) ([665995c](https://github.com/matjam/musex/commit/665995cb08463a0fa1b686f3f7ec5d276635320d))
+
 ## [0.2.0](https://github.com/matjam/musex/compare/v0.1.3...v0.2.0) (2026-06-11)
 
 
