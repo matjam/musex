@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 import { Blocks, HardDrive, Puzzle, Settings2, Sparkles, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -26,7 +27,7 @@ type CategoryId = "general" | "playback" | "library" | "discovery" | "plugins" |
 const CATEGORIES: ReadonlyArray<{
   id: CategoryId;
   label: string;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: LucideIcon;
 }> = [
   { id: "general", label: "General", icon: Settings2 },
   { id: "playback", label: "Playback", icon: Volume2 },
@@ -806,6 +807,12 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
     isKnownCategory(initialCategory) ? initialCategory : "general",
   );
 
+  // A deep-link arriving while the modal is already open switches the pane
+  // (the useState initializer above only covers mount).
+  useEffect(() => {
+    if (isKnownCategory(initialCategory)) setCategory(initialCategory);
+  }, [initialCategory]);
+
   const [plugins, setPlugins] = useState<PluginInfo[] | null>(null);
   const [reloading, setReloading] = useState(false);
 
@@ -877,7 +884,10 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
           )}
           {category.startsWith("plugin:") &&
             (() => {
-              const p = (plugins ?? []).find((x) => `plugin:${x.id}` === category);
+              if (plugins === null) {
+                return <div className="content-placeholder">Loading plugins…</div>;
+              }
+              const p = plugins.find((x) => `plugin:${x.id}` === category);
               return p ? (
                 <div className="settings-section">
                   <div className="settings-section-title">{p.name}</div>

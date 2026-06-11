@@ -46,7 +46,14 @@ function Inner() {
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {logsOpen && <LogsModal onClose={() => setLogsOpen(false)} />}
       {settingsOpen && (
-        <SettingsModal initialCategory={settingsSection} onClose={() => setSettingsOpen(false)} />
+        <SettingsModal
+          initialCategory={settingsSection}
+          onClose={() => {
+            setSettingsOpen(false);
+            // A deep-linked category must not leak into the next plain ⌘, open.
+            setSettingsSection(null);
+          }}
+        />
       )}
     </>
   );
