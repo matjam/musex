@@ -3,7 +3,12 @@ import { useEffect, useState } from "react";
 import { sampleThumbs } from "../../../../logic/collage";
 import { albumsForMix, MOOD_MIXES } from "../../../../logic/mood-mixes";
 import type { SmartKind } from "../../../../logic/smart-playlists";
-import { SMART_TITLES, smartMixThumbs } from "../../../../logic/smart-playlists";
+import {
+  SMART_DESCRIPTIONS,
+  SMART_TITLES,
+  smartMixEmpty,
+  smartMixThumbs,
+} from "../../../../logic/smart-playlists";
 import type { SectionDto } from "../../../../shared/ipc-contract";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -39,8 +44,12 @@ export function HomeView() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [mixThumbs, setMixThumbs] = useState<Map<string, string[]>>(new Map());
+  const [mixEmpty, setMixEmpty] = useState<Set<string>>(new Set());
   const [smartThumbs, setSmartThumbs] = useState<Map<SmartKind, string[]>>(new Map());
+  const [smartEmpty, setSmartEmpty] = useState<Set<SmartKind>>(new Set());
   const [playlistArt, setPlaylistArt] = useState<Map<string, string[]>>(new Map());
+  const [playlistEmpty, setPlaylistEmpty] = useState<Set<string>>(new Set());
+  const [brokenComposite, setBrokenComposite] = useState<Set<string>>(new Set());
   const [pluginSections, setPluginSections] = useState<SectionDto[]>([]);
   const [discoveries, setDiscoveries] = useState<Artist[]>([]);
 
@@ -95,17 +104,24 @@ export function HomeView() {
           .catch(() => {
             // expansion is optional — no row when unavailable
           });
-        // Collage art for the mood-mix cards, from the same album fetch.
+        // Collage art for the mood-mix cards, from the same album fetch — and
+        // hide mixes whose genre/mood rules match nothing in this library.
+        const mixAlbums = new Map(MOOD_MIXES.map((mix) => [mix.id, albumsForMix(mix, al)]));
         setMixThumbs(
           new Map(
             MOOD_MIXES.map((mix) => [
               mix.id,
               sampleThumbs(
-                albumsForMix(mix, al).map((a) => a.thumb),
+                (mixAlbums.get(mix.id) ?? []).map((a) => a.thumb),
                 4,
                 mix.id,
               ),
             ]),
+          ),
+        );
+        setMixEmpty(
+          new Set(
+            MOOD_MIXES.filter((m) => (mixAlbums.get(m.id) ?? []).length === 0).map((m) => m.id),
           ),
         );
       })
@@ -135,16 +151,19 @@ export function HomeView() {
           lastPlayedMs: s.lastPlayedMs,
           decayedPlays: s.decayedPlays,
         }));
+        const now = Date.now();
         setSmartThumbs(
           new Map(
             SMART_ORDER.map((kind) => [
               kind,
-              sampleThumbs(
-                smartMixThumbs(kind, tracks, stats, taste.topArtists, Date.now()),
-                4,
-                kind,
-              ),
+              sampleThumbs(smartMixThumbs(kind, tracks, stats, taste.topArtists, now), 4, kind),
             ]),
+          ),
+        );
+        // Tiles for mixes that would open empty just hide.
+        setSmartEmpty(
+          new Set(
+            SMART_ORDER.filter((kind) => smartMixEmpty(kind, tracks, stats, taste.topArtists, now)),
           ),
         );
       })
@@ -156,17 +175,22 @@ export function HomeView() {
     };
   }, [library]);
 
-  // Playlists without a Plex composite thumb (e.g. smart playlists like
-  // "Recently Played") get a collage from their first few tracks.
+  // Probe each playlist's first page: it yields fallback collage art AND
+  // catches Plex smart playlists that report a leafCount but serve zero items
+  // (seen live with "Recently Played") — those tiles hide entirely.
   useEffect(() => {
     const candidates = playlists.filter((p) => p.trackCount > 0).slice(0, 8);
     if (candidates.length === 0) return;
     let cancelled = false;
-    function loadCollage(p: (typeof candidates)[number]) {
+    for (const p of candidates) {
       window.musex
         .listPlaylistTracksPage(p.id, p.serverId, 0, 8)
         .then((page) => {
           if (cancelled) return;
+          if (page.items.length === 0) {
+            setPlaylistEmpty((prev) => new Set(prev).add(p.id));
+            return;
+          }
           const thumbs = sampleThumbs(
             page.items.map((it) => it.track.thumb),
             4,
@@ -177,31 +201,29 @@ export function HomeView() {
           }
         })
         .catch(() => {
-          // art fallback is decoration — blank tile art stays on failure
+          // art/emptiness probe is best-effort — the tile stays as-is on failure
         });
-    }
-    for (const p of candidates) {
-      if (!p.thumb) {
-        loadCollage(p);
-        continue;
+      if (p.thumb) {
+        // A composite URL can exist but 404 (Plex doesn't render composites
+        // for some smart playlists) — probe it; broken ones use the collage.
+        // The image goes through the art-caching proxy, so it isn't wasted.
+        fetch(p.thumb)
+          .then((r) => {
+            if (!cancelled && !r.ok) setBrokenComposite((prev) => new Set(prev).add(p.id));
+          })
+          .catch(() => {
+            if (!cancelled) setBrokenComposite((prev) => new Set(prev).add(p.id));
+          });
       }
-      // A composite URL can exist but 404 (Plex doesn't render composites for
-      // some smart playlists) — probe it and fall back to the collage too.
-      // The image goes through the art-caching proxy, so the probe isn't wasted.
-      fetch(p.thumb)
-        .then((r) => {
-          if (!cancelled && !r.ok) loadCollage(p);
-        })
-        .catch(() => {
-          if (!cancelled) loadCollage(p);
-        });
     }
     return () => {
       cancelled = true;
     };
   }, [playlists]);
 
-  const topPlaylists = playlists.filter((p) => p.trackCount > 0).slice(0, 8);
+  const topPlaylists = playlists
+    .filter((p) => p.trackCount > 0 && !playlistEmpty.has(p.id))
+    .slice(0, 8);
   const empty =
     topPlaylists.length === 0 &&
     artists.length === 0 &&
@@ -215,7 +237,7 @@ export function HomeView() {
       <section className="home-row">
         <h3 className="browse-title">Smart Mixes</h3>
         <div className="genre-grid">
-          {SMART_ORDER.map((kind) => {
+          {SMART_ORDER.filter((kind) => !smartEmpty.has(kind)).map((kind) => {
             const Icon = SMART_ICONS[kind];
             const thumbs = smartThumbs.get(kind) ?? [];
             return (
@@ -238,10 +260,11 @@ export function HomeView() {
                   </div>
                 )}
                 <div className="genre-card-name">{SMART_TITLES[kind]}</div>
+                <div className="mix-card-desc">{SMART_DESCRIPTIONS[kind]}</div>
               </button>
             );
           })}
-          {MOOD_MIXES.map((mix) => (
+          {MOOD_MIXES.filter((mix) => !mixEmpty.has(mix.id)).map((mix) => (
             <button
               key={mix.id}
               type="button"
@@ -283,7 +306,7 @@ export function HomeView() {
               <GridCard
                 key={p.id}
                 thumb={p.thumb}
-                collage={playlistArt.get(p.id)}
+                collage={!p.thumb || brokenComposite.has(p.id) ? playlistArt.get(p.id) : undefined}
                 title={p.title}
                 subtitle={`${p.trackCount} song${p.trackCount !== 1 ? "s" : ""}`}
                 onOpen={() =>

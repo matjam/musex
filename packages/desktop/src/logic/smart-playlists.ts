@@ -11,6 +11,15 @@ export const SMART_TITLES: Record<SmartKind, string> = {
   rediscover: "Rediscover",
 };
 
+/** Tile descriptions (Home "Smart Mixes" row) — every card gets one so the
+ *  smart and mood tiles share the same structure and align. */
+export const SMART_DESCRIPTIONS: Record<SmartKind, string> = {
+  "for-you": "Fresh picks from your favorite artists and their neighbors.",
+  "top-rated": "Everything you've rated four stars and up.",
+  "heavy-rotation": "The tracks you keep coming back to.",
+  rediscover: "Old favorites you haven't played in a while.",
+};
+
 /** Plex userRating (0–10) threshold for "loved": 4 stars and up. */
 const LOVED_RATING = 8;
 /** Heavy Rotation needs at least this many full plays. */
@@ -71,6 +80,20 @@ export function smartMixThumbs(
   return dedupedThumbs(
     computeSmartPlaylist(kind, tracks, stats, artistScores, nowMs).map((t) => t.thumb),
   );
+}
+
+/** True when a smart mix would compose to nothing (its Home tile hides).
+ *  "for-you" approximates: it composes from the top-taste artists, so an
+ *  empty taste profile means an empty mix. */
+export function smartMixEmpty(
+  kind: SmartKind,
+  tracks: Track[],
+  stats: SmartTrackStat[],
+  artistScores: { name: string; score: number }[],
+  nowMs: number,
+): boolean {
+  if (kind === "for-you") return artistScores.length === 0;
+  return computeSmartPlaylist(kind, tracks, stats, artistScores, nowMs).length === 0;
 }
 
 /**

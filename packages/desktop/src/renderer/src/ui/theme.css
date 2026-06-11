@@ -2965,6 +2965,12 @@ img.queue-row-art {
   font-size: 11.5px;
   opacity: 0.6;
   line-height: 1.45;
+  /* Exactly two lines on every card so tiles in a row align vertically. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(2 * 1.45 * 11.5px);
 }
 
 /* Smart-playlist cards (Home → Smart Mixes): gradient icon tile in place of
@@ -2996,10 +3002,22 @@ img.queue-row-art {
   background: linear-gradient(135deg, var(--green), #1f6e52);
 }
 
-/* Smart cards with collage art keep a small kind-glyph chip for identity. */
-.smart-card-art--collage {
+/* Smart cards with collage art keep a small kind-glyph chip for identity.
+   The kind gradient must not bleed under/around the collage, and the inner
+   collage's browse margin is unwanted inside the square wrapper. */
+/* Two-class selector: must out-rank the per-kind `.smart-card--* .smart-card-art`
+   gradient rules (same specificity, later in the file wins). */
+.smart-card .smart-card-art--collage {
   position: relative;
   padding: 0;
+  background: none;
+  overflow: hidden;
+  display: block;
+}
+.smart-card-art--collage .genre-card-collage {
+  margin-bottom: 0;
+  width: 100%;
+  height: 100%;
 }
 .smart-card-glyph {
   position: absolute;

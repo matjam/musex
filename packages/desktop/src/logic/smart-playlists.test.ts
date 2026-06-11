@@ -2,8 +2,11 @@ import type { Track } from "@musex/core";
 import { describe, expect, it } from "vitest";
 import {
   computeSmartPlaylist,
+  SMART_DESCRIPTIONS,
   SMART_TITLES,
+  type SmartKind,
   type SmartTrackStat,
+  smartMixEmpty,
   smartMixThumbs,
   smartTrackKey,
 } from "./smart-playlists";
@@ -195,5 +198,37 @@ describe("smartMixThumbs", () => {
     const tracks = [t("fav", "x", "fav.jpg"), t("other", "y", "other.jpg")];
     const scores = [{ name: "Fav", score: 5 }];
     expect(smartMixThumbs("for-you", tracks, [], scores, 0)).toEqual(["fav.jpg"]);
+  });
+});
+
+describe("smartMixEmpty", () => {
+  const t = (artist: string, title: string, rating?: number) =>
+    ({
+      id: `${artist}-${title}`,
+      serverId: "s",
+      artistName: artist,
+      title,
+      userRating: rating,
+      albumId: "al",
+      artistId: "ar",
+      durationMs: 1000,
+    }) as unknown as Track;
+
+  it("rule kinds: empty when the computed playlist is empty", () => {
+    expect(smartMixEmpty("top-rated", [t("a", "x", 2)], [], [], 0)).toBe(true);
+    expect(smartMixEmpty("top-rated", [t("a", "x", 10)], [], [], 0)).toBe(false);
+    expect(smartMixEmpty("heavy-rotation", [t("a", "x")], [], [], 0)).toBe(true);
+  });
+
+  it("for-you: empty exactly when the taste profile has no artists", () => {
+    expect(smartMixEmpty("for-you", [t("a", "x")], [], [], 0)).toBe(true);
+    expect(smartMixEmpty("for-you", [], [], [{ name: "a", score: 1 }], 0)).toBe(false);
+  });
+});
+
+describe("SMART_DESCRIPTIONS", () => {
+  it("every smart kind has a tile description", () => {
+    const kinds: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
+    for (const k of kinds) expect(SMART_DESCRIPTIONS[k].length).toBeGreaterThan(0);
   });
 });
