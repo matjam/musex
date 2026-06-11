@@ -1,5 +1,13 @@
 import type { Album, Artist, Library, Playlist } from "@musex/core";
 import { createContext, type ReactNode, useContext, useEffect, useReducer } from "react";
+import {
+  EMPTY_HISTORY,
+  goBack,
+  goForward,
+  type NavHistory,
+  pushView,
+  sameView,
+} from "../../../logic/nav-history";
 import type { SmartKind } from "../../../logic/smart-playlists";
 import type { SimilarGetArgs } from "../../../shared/ipc-contract";
 
@@ -28,6 +36,7 @@ interface AppState {
   library: Library | null;
   view: View;
   searchQuery: string;
+  history: NavHistory<View>;
 }
 type Action =
   | { type: "signing-in"; code: string }
@@ -35,7 +44,9 @@ type Action =
   | { type: "restore-done"; library: Library | null }
   | { type: "navigate"; view: View }
   | { type: "set-search"; query: string }
-  | { type: "library-updated"; library: Library };
+  | { type: "library-updated"; library: Library }
+  | { type: "nav-back" }
+  | { type: "nav-forward" };
 
 function reducer(s: AppState, a: Action): AppState {
   switch (a.type) {
@@ -48,6 +59,7 @@ function reducer(s: AppState, a: Action): AppState {
         library: a.library,
         signInCode: null,
         view: { name: "home" },
+        history: EMPTY_HISTORY,
       };
     case "restore-done":
       return a.library
@@ -57,22 +69,35 @@ function reducer(s: AppState, a: Action): AppState {
             library: a.library,
             signInCode: null,
             view: { name: "home" },
+            history: EMPTY_HISTORY,
           }
         : { ...s, auth: "signed-out" };
-    case "navigate":
-      return { ...s, view: a.view };
-    case "set-search":
-      // Typing routes to the search view; clearing the box leaves you where you are.
+    case "navigate": {
+      if (sameView(s.view, a.view)) return s;
+      return { ...s, view: a.view, history: pushView(s.history, s.view) };
+    }
+    case "set-search": {
+      const entering = a.query.trim() !== "" && s.view.name !== "search";
       return {
         ...s,
         searchQuery: a.query,
         view: a.query.trim() ? { name: "search" } : s.view,
+        history: entering ? pushView(s.history, s.view) : s.history,
       };
+    }
     case "library-updated":
       // Only refresh in place — never resurrect a stale push after sign-out
       // or a library switch. View/search state stays untouched.
       if (s.auth !== "signed-in" || !s.library || s.library.id !== a.library.id) return s;
       return { ...s, library: a.library };
+    case "nav-back": {
+      const r = goBack(s.history, s.view);
+      return r ? { ...s, view: r.view, history: r.history } : s;
+    }
+    case "nav-forward": {
+      const r = goForward(s.history, s.view);
+      return r ? { ...s, view: r.view, history: r.history } : s;
+    }
   }
 }
 
@@ -88,6 +113,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     library: null,
     view: { name: "home" },
     searchQuery: "",
+    history: EMPTY_HISTORY,
   });
 
   useEffect(() => {

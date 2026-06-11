@@ -26,6 +26,8 @@ export const SHORTCUT_GROUPS: { title: string; items: { combo: string; label: st
       { combo: "⌘K", label: "Focus the search box" },
       { combo: "⌘,", label: "Open Settings" },
       { combo: "⌘/", label: "Help / keyboard shortcuts" },
+      { combo: "⌘[", label: "Back" },
+      { combo: "⌘]", label: "Forward" },
       { combo: "⌥⇧H", label: "Go to Home" },
       { combo: "⌥⇧0", label: "Go to Tracks" },
       { combo: "⌥⇧3", label: "Go to Artists" },
@@ -56,6 +58,8 @@ export function useKeyboardShortcuts(
   toggleQueue: () => void,
   toggleShortcutsHelp: () => void,
   openSettings: () => void,
+  navBack: () => void,
+  navForward: () => void,
 ): void {
   const player = usePlayer();
   const { library, dispatch } = useApp();
@@ -101,6 +105,16 @@ export function useKeyboardShortcuts(
         if (e.code === "Comma") {
           handled();
           openSettings();
+          return;
+        }
+        if (e.code === "BracketLeft") {
+          handled();
+          navBack();
+          return;
+        }
+        if (e.code === "BracketRight") {
+          handled();
+          navForward();
           return;
         }
         if (e.code === "Slash") {
