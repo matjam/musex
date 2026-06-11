@@ -143,7 +143,10 @@ export class PlexapiGateway implements PlexGateway {
           serverName: server.name,
           title: s.title,
           type: "music" as const,
-          updatedAt: s.updatedAt.getTime(),
+          // scannedAt moves on every completed scan; updatedAt only on
+          // section-settings changes. The max is what "content changed"
+          // actually keys on — the whole validator system derives from it.
+          updatedAt: Math.max(s.updatedAt.getTime(), s.scannedAt.getTime()),
         }));
     } catch (err) {
       asPlexAuthError(err);
