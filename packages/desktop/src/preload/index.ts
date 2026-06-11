@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from "electron";
 import type { Library } from "@musex/core";
+import { contextBridge, ipcRenderer } from "electron";
 import type {
   LogEntryDto,
   MusexApi,
