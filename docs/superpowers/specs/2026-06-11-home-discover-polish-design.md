@@ -136,8 +136,9 @@ IPC channel stays for compatibility with nothing else using it removed).
   listeners/plays, a "View on last.fm" link (`openExternal`), and two
   actions: **Browse albums** (→ navigate `external-artist` view — the merged
   discography from C2, where per-album monitor lives) and **Monitor artist**
-  (acquireArtistByName). If the artist turns out to be owned, an "In your
-  library" button navigates to the library artist instead.
+  (acquireArtistByName). The panel only ever opens for unowned artists —
+  owned tiles navigate straight to the library artist — so it needs no
+  owned-artist handling.
 - **Owned artist tiles** keep navigating straight to the library artist view
   (unchanged).
 - `openExternal`-only fallback (no acquisition provider) keeps current
@@ -171,8 +172,10 @@ ExternalArtistView. Empty result → section hidden.
   `{back, current, forward}`) and test it; discography merge logic
   (`logic/discography-merge.ts`, pure: lidarr list + lastfm titles → merged
   list with unavailable fill) and test it.
-- Plugin shapes: lastfm `artistInfo` parse + lidarr `listMonitoredArtists`
-  request shape pinned in the plugins' existing routed-HTTP test style.
+- Plugin shapes: lidarr `listMonitoredArtists` request shape pinned in the
+  plugin's existing routed-HTTP test style; lastfm `artistInfo` parsing is
+  verified live (the lastfm plugin's API-call layer isn't unit-mocked today —
+  consistent with its other read methods).
 - Everything else is view wiring — verified live at the end (single e2e pass
   over all items).
 
