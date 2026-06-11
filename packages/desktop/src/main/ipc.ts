@@ -6,6 +6,8 @@ import { isHttpUrl } from "../logic/external-url.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
   AcquirableAlbumDto,
+  ExpansionEntryDto,
+  ExpansionStateDto,
   ExternalArtistResultDto,
   LoadPlaybackResult,
   LogLevel,
@@ -681,6 +683,72 @@ export function registerIpc(rt: Runtime): void {
     if (typeof url !== "string" || !isHttpUrl(url)) throw new Error("invalid external url");
     void shell.openExternal(url);
   });
+
+  // ── Taste expansion + new-release watching ────────────────────────────────
+  const expansionState = (): ExpansionStateDto => {
+    const status = rt.expansion.status();
+    const entries = [...persistence.getExpansionLedger()]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(
+        (e): ExpansionEntryDto => ({
+          artistName: e.artistName,
+          albumTitle: e.albumTitle,
+          state: e.state,
+          deepening: e.deepening,
+          retried: e.retried,
+          provenance: e.provenance,
+          ...(e.note !== undefined ? { note: e.note } : {}),
+          createdAt: e.createdAt,
+          ...(e.requestedAt !== undefined ? { requestedAt: e.requestedAt } : {}),
+          ...(e.landedAt !== undefined ? { landedAt: e.landedAt } : {}),
+          ...(e.abandonedAt !== undefined ? { abandonedAt: e.abandonedAt } : {}),
+          ...(e.rejectedAt !== undefined ? { rejectedAt: e.rejectedAt } : {}),
+        }),
+      );
+    return {
+      prefs: persistence.getExpansionPrefs(),
+      running: status.running,
+      lastRunAt: status.lastRunAt,
+      lastSummary: status.lastSummary,
+      available: rt.plugins.expansionCapabilities(),
+      entries,
+    };
+  };
+  ipcMain.handle(IPC.expansionGetState, () => expansionState());
+  ipcMain.handle(IPC.expansionSetPrefs, (_e, prefs: unknown) => {
+    if (typeof prefs !== "object" || prefs === null) throw new Error("invalid expansion prefs");
+    const p = prefs as Record<string, unknown>;
+    if (
+      typeof p.enabled !== "boolean" ||
+      typeof p.albumsPerWeek !== "number" ||
+      typeof p.aggressiveness !== "number"
+    ) {
+      throw new Error("invalid expansion prefs");
+    }
+    persistence.setExpansionPrefs({
+      enabled: p.enabled,
+      albumsPerWeek: Math.min(10, Math.max(1, Math.round(p.albumsPerWeek))),
+      aggressiveness: Math.min(100, Math.max(0, Math.round(p.aggressiveness))),
+    });
+  });
+  ipcMain.handle(IPC.expansionRunNow, async () => {
+    await rt.expansion.runCycle();
+    return expansionState();
+  });
+  ipcMain.handle(IPC.expansionReject, (_e, artistName: unknown) => {
+    if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+    return rt.expansion.reject(artistName);
+  });
+  ipcMain.handle(IPC.newReleaseWatchGet, (_e, artistName: unknown) => {
+    if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+    return rt.plugins.isWatchingNewReleases(artistName);
+  });
+  ipcMain.handle(IPC.newReleaseWatchSet, (_e, artistName: unknown, enabled: unknown) => {
+    if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+    if (typeof enabled !== "boolean") throw new Error("invalid enabled flag");
+    return rt.plugins.watchNewReleases(artistName, enabled);
+  });
+  ipcMain.handle(IPC.newReleaseWatchList, () => rt.plugins.listWatchedArtists());
 
   // Unified log buffer (Help → Show Logs).
   ipcMain.handle(IPC.logsGet, () => logBuffer.snapshot());

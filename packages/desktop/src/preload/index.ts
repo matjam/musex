@@ -103,6 +103,14 @@ const api: MusexApi = {
     ipcRenderer.on(IPC.navigateTo, listener);
     return () => ipcRenderer.removeListener(IPC.navigateTo, listener);
   },
+  expansionGetState: () => ipcRenderer.invoke(IPC.expansionGetState),
+  expansionSetPrefs: (prefs) => ipcRenderer.invoke(IPC.expansionSetPrefs, prefs),
+  expansionRunNow: () => ipcRenderer.invoke(IPC.expansionRunNow),
+  expansionReject: (artistName) => ipcRenderer.invoke(IPC.expansionReject, artistName),
+  newReleaseWatchGet: (artistName) => ipcRenderer.invoke(IPC.newReleaseWatchGet, artistName),
+  newReleaseWatchSet: (artistName, enabled) =>
+    ipcRenderer.invoke(IPC.newReleaseWatchSet, artistName, enabled),
+  newReleaseWatchList: () => ipcRenderer.invoke(IPC.newReleaseWatchList),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

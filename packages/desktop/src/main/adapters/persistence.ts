@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Library, RepeatMode, Track } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import Store from "electron-store";
+import type { ExpansionEntry } from "../../logic/taste-expansion.js";
 import type { TasteState } from "../../logic/taste-profile.js";
 
 export interface PersistedState {
@@ -62,6 +63,17 @@ const tasteStore = new Store<{ taste: TasteState | null }>({
   name: "listening-profile",
   defaults: { taste: null },
 });
+// Taste-expansion attempt ledger + prefs (see logic/taste-expansion.ts).
+const expansionStore = new Store<{ ledger: ExpansionEntry[]; prefs: ExpansionPrefs }>({
+  name: "expansion-ledger",
+  defaults: { ledger: [], prefs: { enabled: false, albumsPerWeek: 2, aggressiveness: 50 } },
+});
+
+export interface ExpansionPrefs {
+  enabled: boolean;
+  albumsPerWeek: number;
+  aggressiveness: number;
+}
 
 /** A stable per-install Plex client identifier (generated once, then reused). */
 export function getClientId(): string {
@@ -126,6 +138,18 @@ export const persistence = {
   },
   setTasteState(s: TasteState): void {
     tasteStore.set("taste", s);
+  },
+  getExpansionLedger(): ExpansionEntry[] {
+    return expansionStore.get("ledger");
+  },
+  setExpansionLedger(ledger: ExpansionEntry[]): void {
+    expansionStore.set("ledger", ledger);
+  },
+  getExpansionPrefs(): ExpansionPrefs {
+    return expansionStore.get("prefs");
+  },
+  setExpansionPrefs(prefs: ExpansionPrefs): void {
+    expansionStore.set("prefs", prefs);
   },
   getRecentlyPlayed(): TrackInfo[] {
     return store.get("recentlyPlayed");

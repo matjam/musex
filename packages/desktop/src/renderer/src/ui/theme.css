@@ -2491,6 +2491,88 @@ img.queue-row-art {
   overflow-y: auto;
 }
 
+/* ---- Taste expansion (Settings section + Downloads feed) ---- */
+
+.settings-range {
+  width: 160px;
+  accent-color: var(--green);
+}
+
+.expansion-budget,
+.expansion-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.expansion-budget-value {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 52px;
+  text-align: right;
+}
+
+.expansion-slider-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.expansion-deepening {
+  color: var(--purple);
+  font-size: 11.5px;
+}
+
+.expansion-chip--requested,
+.expansion-chip--suggested {
+  color: var(--yellow);
+  border-color: color-mix(in srgb, var(--yellow) 45%, transparent);
+}
+
+.expansion-chip--landed {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 45%, transparent);
+}
+
+.expansion-chip--abandoned,
+.expansion-chip--rejected {
+  color: var(--muted);
+}
+
+.expansion-reject {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+.expansion-reject:hover {
+  color: var(--red);
+}
+
+.expansion-list {
+  margin-bottom: 26px;
+}
+
+.watched-title {
+  margin-top: 26px;
+}
+
+.watched-icon {
+  vertical-align: -2px;
+  color: var(--green);
+  margin-right: 4px;
+}
+
+.watch-btn--on {
+  color: var(--green);
+}
+
 /* ---- Settings modal (musex menu → Settings…, ⌘,) ---- */
 
 .settings-modal {

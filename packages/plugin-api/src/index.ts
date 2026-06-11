@@ -106,14 +106,21 @@ export type SimilarItem = {
   artistName?: string;
   imageUrl?: string;
   externalUrl?: string;
+  /** Similarity 0..1 when the source scores it (last.fm match). Taste
+   *  expansion uses this; the Similar panel ignores it. */
+  match?: number;
 };
 
 /** Powers the Similar side panel (artist pages → similar artists; track detail
- *  → similar songs). Implement whichever methods the source supports. */
+ *  → similar songs) and host-side taste expansion. Implement whichever
+ *  methods the source supports. */
 export interface SimilarProvider {
   id: string;
   similarArtists?(artistName: string): Promise<SimilarItem[]>;
   similarTracks?(seed: { title: string; artist: string }): Promise<SimilarItem[]>;
+  /** OPTIONAL: an artist's most popular albums, best first (taste expansion
+   *  uses the top entry as the "start here" album for a new artist). */
+  topAlbums?(artistName: string): Promise<{ title: string }[]>;
 }
 
 /** Where an album sits in the acquisition pipeline. Providers report
@@ -177,6 +184,17 @@ export interface AcquisitionProvider {
   searchArtists?(term: string): Promise<ExternalArtistResult[]>;
   /** OPTIONAL: monitor EVERYTHING by the artist + kick off a search. */
   acquireArtist?(providerRef: string): Promise<void>;
+  /** OPTIONAL: stop pursuing a previously acquired album (unmonitor; never
+   *  deletes files). Taste expansion calls this on abandon / "Not for me". */
+  cancelAlbum?(providerRef: string): Promise<void>;
+  /** OPTIONAL: watch an artist so FUTURE releases are fetched automatically.
+   *  Enabling must not monitor the artist's existing albums; disabling must
+   *  not unmonitor albums monitored separately. */
+  watchNewReleases?(artistName: string, enabled: boolean): Promise<void>;
+  /** OPTIONAL: is this artist currently watched for new releases? */
+  isWatchingNewReleases?(artistName: string): Promise<boolean>;
+  /** OPTIONAL: names of all artists watched for new releases. */
+  listWatchedArtists?(): Promise<string[]>;
 }
 
 export interface TrackDetailProvider {

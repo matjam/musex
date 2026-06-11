@@ -40,8 +40,9 @@ const ART_PLACEHOLDER_HASH = "2a96cbd8b46e442fc41c2b86b821562f";
 type TokenResponse = { token: string };
 type SessionResponse = { session: { name: string; key: string } };
 type SimilarResponse = {
-  similarartists?: { artist?: { name: string; url?: string }[] };
+  similarartists?: { artist?: { name: string; url?: string; match?: string }[] };
 };
+
 type SimilarTracksResponse = {
   similartracks?: {
     track?: { name: string; url?: string; artist?: { name?: string }; image?: LastfmImage[] }[];
@@ -49,7 +50,7 @@ type SimilarTracksResponse = {
 };
 type LastfmImage = { size?: string; ["#text"]?: string };
 type TopAlbumsResponse = {
-  topalbums?: { album?: { image?: LastfmImage[] }[] };
+  topalbums?: { album?: { name?: string; image?: LastfmImage[] }[] };
 };
 /** url: null = known-miss (artist has no usable cover) — cached to avoid
  *  re-querying; entries expire after ART_TTL_MS. */
@@ -309,10 +310,15 @@ export async function activate(ctx: PluginContext): Promise<void> {
     const raw = res.similarartists?.artist;
     return (Array.isArray(raw) ? raw : [])
       .filter((a) => typeof a.name === "string" && a.name.length > 0)
-      .map((a) => ({
-        name: a.name,
-        ...(typeof a.url === "string" ? { externalUrl: a.url } : {}),
-      }));
+      .map((a) => {
+        const match = a.match !== undefined ? Number(a.match) : Number.NaN;
+        return {
+          name: a.name,
+          ...(typeof a.url === "string" ? { externalUrl: a.url } : {}),
+          // last.fm returns match as a string ("0.81"); taste expansion needs it.
+          ...(Number.isFinite(match) ? { match } : {}),
+        };
+      });
   };
 
   ctx.ui.contributeSections("discover", {
@@ -353,6 +359,24 @@ export async function activate(ctx: PluginContext): Promise<void> {
   // ── Similar side panel: similar artists + similar songs ───────────────────
   ctx.ui.registerSimilarProvider({
     id: "lastfm-similar",
+    topAlbums: async (artistName) => {
+      const s = await session();
+      if (!s) return []; // needs API key + connected account
+      try {
+        const res = await s.client.call<TopAlbumsResponse>(
+          "artist.getTopAlbums",
+          { artist: artistName, limit: "10", autocorrect: "1" },
+          { signed: false }, // read method — api_key only
+        );
+        const raw = res.topalbums?.album;
+        return (Array.isArray(raw) ? raw : []).flatMap((a) =>
+          typeof a.name === "string" && a.name.length > 0 ? [{ title: a.name }] : [],
+        );
+      } catch (err) {
+        ctx.log(`artist.getTopAlbums failed for "${artistName}":`, errText(err));
+        return [];
+      }
+    },
     similarArtists: async (artistName) => {
       const s = await session();
       if (!s) return []; // needs API key + connected account

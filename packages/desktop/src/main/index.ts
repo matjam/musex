@@ -107,6 +107,7 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) wireEngineEvents(createWindow());
   });
   app.on("will-quit", () => {
+    runtime.expansion.dispose();
     void runtime.mpv.dispose();
   });
 });

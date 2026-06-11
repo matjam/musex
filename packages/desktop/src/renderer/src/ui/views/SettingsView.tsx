@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   CacheStats,
+  ExpansionStateDto,
   PluginInfo,
   PluginSettings,
   SettingField,
@@ -172,6 +173,8 @@ export function SettingsView() {
         </div>
       </div>
 
+      <ExpansionSection />
+
       <PluginsSection />
 
       <div className="settings-section">
@@ -184,6 +187,139 @@ export function SettingsView() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Taste expansion: opt-in optimistic acquisition. Toggle + weekly budget +
+ *  the conservative→aggressive slider, a status line, and a manual run. */
+function ExpansionSection() {
+  const [state, setState] = useState<ExpansionStateDto | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const refresh = useCallback(() => {
+    window.musex
+      .expansionGetState()
+      .then(setState)
+      .catch((err: unknown) => console.error("[expansion] state failed:", err));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function save(prefs: ExpansionStateDto["prefs"]) {
+    setState((cur) => (cur ? { ...cur, prefs } : cur)); // optimistic
+    await window.musex.expansionSetPrefs(prefs);
+    refresh();
+  }
+
+  async function runNow() {
+    setRunning(true);
+    try {
+      setState(await window.musex.expansionRunNow());
+    } catch (err) {
+      console.error("[expansion] run failed:", err);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (state === null) return null;
+  const { prefs, available } = state;
+  const missing = [
+    ...(available.similar ? [] : ["a similar-music plugin (last.fm)"]),
+    ...(available.acquisition ? [] : ["an acquisition plugin (Lidarr)"]),
+  ];
+  const statusLine = !prefs.enabled
+    ? "Off — nothing is downloaded automatically."
+    : missing.length > 0
+      ? `Needs ${missing.join(" and ")} to run.`
+      : state.lastSummary
+        ? `Last cycle: ${state.lastSummary.toLowerCase()}${state.lastRunAt ? ` (${new Date(state.lastRunAt).toLocaleString()})` : ""}`
+        : "Waiting for the first cycle.";
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Taste Expansion</div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Discover and download music you might like</div>
+          <div className="settings-row-desc">
+            Picks new artists from your listening profile via last.fm and quietly adds an album
+            through Lidarr — a blend of close-to-your-taste and a step beyond it. Every attempt is
+            visible in Downloads → Expansions.
+          </div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={prefs.enabled}
+          aria-label="Taste expansion"
+          className={`toggle${prefs.enabled ? " toggle--on" : ""}`}
+          onClick={() => void save({ ...prefs, enabled: !prefs.enabled })}
+        />
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Weekly budget</div>
+          <div className="settings-row-desc">How many albums may be requested per week.</div>
+        </div>
+        <div className="expansion-budget">
+          <input
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            value={prefs.albumsPerWeek}
+            aria-label="Albums per week"
+            className="settings-range"
+            onChange={(e) => void save({ ...prefs, albumsPerWeek: Number(e.target.value) })}
+          />
+          <span className="expansion-budget-value">{prefs.albumsPerWeek}/week</span>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Adventurousness</div>
+          <div className="settings-row-desc">
+            Conservative sticks close to artists you already love; aggressive bets further afield
+            and deepens winners faster.
+          </div>
+        </div>
+        <div className="expansion-slider">
+          <span className="expansion-slider-label">Conservative</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={prefs.aggressiveness}
+            aria-label="Adventurousness"
+            className="settings-range"
+            onChange={(e) => void save({ ...prefs, aggressiveness: Number(e.target.value) })}
+          />
+          <span className="expansion-slider-label">Aggressive</span>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Status</div>
+          <div className="settings-row-desc">{statusLine}</div>
+        </div>
+        <button
+          type="button"
+          className="settings-btn"
+          disabled={running || !prefs.enabled}
+          onClick={() => void runNow()}
+        >
+          {running ? "Running…" : "Run a cycle now"}
+        </button>
       </div>
     </div>
   );

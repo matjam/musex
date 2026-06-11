@@ -25,6 +25,9 @@
  * - GET  /api/v1/queue?includeArtist&includeAlbum → paged { records: QueueResource[] }
  * - GET  /api/v1/wanted/missing?includeArtist → paged monitored-but-missing albums
  * - GET  /api/v1/qualityprofile, /api/v1/metadataprofile, /api/v1/rootfolder
+ * - GET/PUT /api/v1/artist/{id}               → full ArtistResource round-trip;
+ *   monitorNewItems "all"|"none" (NewItemMonitorTypes) controls whether newly
+ *   released albums are auto-monitored — the "fetch new releases" watch.
  */
 import type {
   AcquirableAlbum,
@@ -63,6 +66,8 @@ type LidarrArtist = {
   /** Lookup results embed the full resource for already-added artists
    *  (id > 0); not-added results carry metadata-server defaults only. */
   monitored?: boolean;
+  /** "all" = auto-monitor (and search) newly released albums. */
+  monitorNewItems?: string | null;
   disambiguation?: string | null;
 };
 
@@ -199,6 +204,7 @@ async function addArtist(
   ref: { foreignArtistId: string; artistName: string },
   addOptions: { monitor: "all" | "none"; searchForMissingAlbums: boolean },
   log: LogFn,
+  monitorNewItems: "all" | "none" = "none",
 ): Promise<LidarrArtist> {
   const [qualityProfiles, metadataProfiles, rootFolders] = await Promise.all([
     c.get<LidarrProfile[]>("/api/v1/qualityprofile"),
@@ -231,6 +237,8 @@ async function addArtist(
       metadataProfileId: metadata.id,
       rootFolderPath: root.path,
       monitored: true,
+      // Explicit so adds are deterministic regardless of Lidarr's default.
+      monitorNewItems,
       addOptions,
     });
   } catch (err) {
@@ -243,6 +251,63 @@ async function addArtist(
       if (added !== undefined) return added;
     }
     throw err;
+  }
+}
+
+// ── New-release watching (artist monitorNewItems) ────────────────────────────
+
+const sameArtistName = (a: string | null | undefined, b: string): boolean =>
+  (a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Watch/unwatch an artist for FUTURE releases. Enabling never monitors
+ *  existing albums (the add uses addOptions.monitor "none"; updates only touch
+ *  monitored + monitorNewItems); disabling resets monitorNewItems ONLY, so
+ *  separately-monitored albums stay monitored. Exported for tests. */
+export async function setNewReleaseWatch(
+  c: LidarrClient,
+  artistName: string,
+  enabled: boolean,
+  log: LogFn,
+): Promise<void> {
+  const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
+  const existing = artists.find((a) => sameArtistName(a.artistName, artistName));
+  if (existing !== undefined) {
+    // PUT wants the full resource — round-trip it with the watch fields changed.
+    const full = await c.get<Record<string, unknown>>(`/api/v1/artist/${existing.id}`);
+    await c.put(`/api/v1/artist/${existing.id}`, {
+      ...full,
+      monitorNewItems: enabled ? "all" : "none",
+      // Watching requires the artist itself to be monitored; unwatching must
+      // NOT unmonitor (other albums may be monitored separately).
+      ...(enabled ? { monitored: true } : {}),
+    });
+    return;
+  }
+  if (!enabled) return; // not in Lidarr — nothing to unwatch
+
+  // Not in Lidarr yet: resolve via the metadata lookup, add watch-only.
+  const results = await c.get<LidarrArtist[]>("/api/v1/artist/lookup", { term: artistName });
+  const match = results.find((a) => sameArtistName(a.artistName, artistName)) ?? results[0];
+  if (!match?.foreignArtistId) {
+    throw new Error(`Artist "${artistName}" not found by Lidarr's metadata lookup`);
+  }
+  const added = await addArtist(
+    c,
+    { foreignArtistId: match.foreignArtistId, artistName: match.artistName ?? artistName },
+    { monitor: "none", searchForMissingAlbums: false },
+    log,
+    "all",
+  );
+  // Lidarr#3597: addOptions.monitor "none" can disregard monitored:true —
+  // assert the watch fields landed.
+  const full = await c.get<Record<string, unknown>>(`/api/v1/artist/${added.id}`);
+  if (full.monitored !== true || full.monitorNewItems !== "all") {
+    await c.put(`/api/v1/artist/${added.id}`, {
+      ...full,
+      monitored: true,
+      monitorNewItems: "all",
+    });
+    log(`re-asserted new-release watch on "${artistName}" (Lidarr#3597 workaround)`);
   }
 }
 
@@ -639,6 +704,80 @@ export async function activate(ctx: PluginContext): Promise<void> {
       } catch (err) {
         ctx.log("acquireAlbum failed:", errText(err));
         throw err;
+      }
+    },
+
+    cancelAlbum: async (providerRef) => {
+      try {
+        const c = await client();
+        if (!c) throw new Error("Lidarr is not configured");
+        let ref: ProviderRef;
+        try {
+          ref = JSON.parse(providerRef) as ProviderRef;
+        } catch {
+          throw new Error("Invalid acquisition reference");
+        }
+        if (!ref.foreignAlbumId) throw new Error("Invalid acquisition reference");
+        // Still deferred (artist metadata never arrived)? Just drop the entry.
+        const pending = await readPending();
+        if (pending[ref.foreignAlbumId] !== undefined) {
+          delete pending[ref.foreignAlbumId];
+          await ctx.storage.set(PENDING_KEY, pending);
+        }
+        const albums = await c.get<LidarrAlbum[]>("/api/v1/album", {
+          foreignAlbumId: ref.foreignAlbumId,
+        });
+        const album = albums.find((a) => a.foreignAlbumId === ref.foreignAlbumId);
+        if (album !== undefined && album.monitored) {
+          await c.put("/api/v1/album/monitor", { albumIds: [album.id], monitored: false });
+        }
+      } catch (err) {
+        ctx.log("cancelAlbum failed:", errText(err));
+        throw err;
+      }
+    },
+
+    watchNewReleases: async (artistName, enabled) => {
+      try {
+        const c = await client();
+        if (!c) throw new Error("Lidarr is not configured");
+        await setNewReleaseWatch(c, artistName, enabled, ctx.log);
+        ctx.ui.notify(
+          enabled
+            ? `Watching ${artistName} for new releases`
+            : `No longer watching ${artistName} for new releases`,
+        );
+      } catch (err) {
+        ctx.log("watchNewReleases failed:", errText(err));
+        throw err;
+      }
+    },
+
+    isWatchingNewReleases: async (artistName) => {
+      const c = await client();
+      if (!c) return false;
+      try {
+        const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
+        const a = artists.find((x) => sameArtistName(x.artistName, artistName));
+        return a !== undefined && a.monitored === true && a.monitorNewItems === "all";
+      } catch (err) {
+        ctx.log("isWatchingNewReleases failed:", errText(err));
+        return false;
+      }
+    },
+
+    listWatchedArtists: async () => {
+      const c = await client();
+      if (!c) return [];
+      try {
+        const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
+        return artists
+          .filter((a) => a.monitored === true && a.monitorNewItems === "all")
+          .map((a) => a.artistName ?? "")
+          .filter((n) => n.length > 0);
+      } catch (err) {
+        ctx.log("listWatchedArtists failed:", errText(err));
+        return [];
       }
     },
 
