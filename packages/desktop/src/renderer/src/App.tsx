@@ -25,6 +25,7 @@ function Inner() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<string | null>(null);
 
   // App-menu pushes (musex → About/Settings…, Help → Shortcuts/Show Logs).
   useEffect(() => {
@@ -32,7 +33,10 @@ function Inner() {
       if (p.view === "about") setAboutOpen(true);
       else if (p.view === "logs") setLogsOpen(true);
       else if (p.section === "shortcuts") setShortcutsOpen(true);
-      else setSettingsOpen(true);
+      else {
+        setSettingsSection(p.view === "settings" ? (p.section ?? null) : null);
+        setSettingsOpen(true);
+      }
     });
   }, []);
 
@@ -41,7 +45,9 @@ function Inner() {
     <>
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {logsOpen && <LogsModal onClose={() => setLogsOpen(false)} />}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsModal initialCategory={settingsSection} onClose={() => setSettingsOpen(false)} />
+      )}
     </>
   );
 

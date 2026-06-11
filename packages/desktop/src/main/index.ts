@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, Menu, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { IPC, type NavigateToPayload } from "../shared/ipc-contract.js";
 import { registerIpc } from "./ipc.js";
 import { installConsoleTee, logBuffer } from "./logging.js";
@@ -105,6 +105,9 @@ app.whenReady().then(async () => {
   const updater = setupAutoUpdater({
     getWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
   });
+  // Settings → General → "Check for Updates" — results surface as the same
+  // native dialogs the menu item uses, so the renderer needs no result.
+  ipcMain.handle(IPC.updaterCheck, () => updater.checkForUpdatesInteractive());
   wireEngineEvents(firstWindow);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) wireEngineEvents(createWindow());

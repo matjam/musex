@@ -45,7 +45,11 @@ function HelpText({ text }: { text: string }) {
 
 type LoadState = { status: "loading" } | { status: "ready"; cacheEnabled: boolean; capGiB: number };
 
-export function SettingsView() {
+export function SettingsView({
+  initialCategory: _initialCategory,
+}: {
+  initialCategory?: string;
+} = {}) {
   const { library } = useApp();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [stats, setStats] = useState<CacheStats | null>(null);

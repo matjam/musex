@@ -110,6 +110,7 @@ export const IPC = {
   artistInfoGet: "musex:artistInfo:get", // (artistName) -> ArtistInfoDto | null
   acquisitionMonitoredArtists: "musex:acquisition:monitoredArtists", // -> string[] (60s host cache)
   acquisitionDiscography: "musex:acquisition:discography", // (artistName) -> AcquirableAlbumDto[] incl. lastfm-only "unavailable" rows
+  updaterCheck: "musex:updater:check", // -> void (results surface as native dialogs in main)
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -211,7 +212,7 @@ export interface PluginInfo {
 /** Main → renderer navigation push (application menu items). Deliberately a
  *  narrow union — widen as more menu entries need to deep-link into the UI. */
 export type NavigateToPayload =
-  | { view: "settings"; section?: "shortcuts" }
+  | { view: "settings"; section?: string }
   | { view: "about" }
   | { view: "logs" };
 
@@ -468,4 +469,6 @@ export interface MusexApi {
   /** External discography: acquisition lookup ∪ topAlbums (lastfm-only titles
    *  appended as unavailable). Same enrichment pipeline as acquisitionLookupArtist. */
   acquisitionDiscography(artistName: string): Promise<AcquirableAlbumDto[]>;
+  /** Trigger an interactive update check; results surface as native dialogs in main. */
+  updaterCheck(): Promise<void>;
 }

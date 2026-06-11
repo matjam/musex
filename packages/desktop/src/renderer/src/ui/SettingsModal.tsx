@@ -4,7 +4,13 @@ import { SettingsView } from "./views/SettingsView";
 
 /** Settings as a centered modal (musex menu → Settings…, ⌘,). The settings
  *  content itself lives in SettingsView; this is just the modal chrome. */
-export function SettingsModal({ onClose }: { onClose: () => void }) {
+export function SettingsModal({
+  initialCategory,
+  onClose,
+}: {
+  initialCategory?: string | null;
+  onClose: () => void;
+}) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -36,7 +42,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="settings-modal-body">
-          <SettingsView />
+          <SettingsView initialCategory={initialCategory ?? undefined} />
         </div>
       </div>
     </div>
