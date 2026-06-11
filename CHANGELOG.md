@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/matjam/musex/compare/v0.2.2...v0.3.0) (2026-06-11)
+
+
+### Features
+
+* **ui:** app icon (lucide Disc3, brand gradient, dark squircle) ([#18](https://github.com/matjam/musex/issues/18)) ([7376b8a](https://github.com/matjam/musex/commit/7376b8a8b44c98193c17d49327815f006d715881))
+
+
+### Bug Fixes
+
+* **lidarr:** albums unmonitored by the initial artist refresh never downloaded ([#15](https://github.com/matjam/musex/issues/15)) ([0bec8cb](https://github.com/matjam/musex/commit/0bec8cb02890ae798ed970a19424a50c123fe487))
+
 ## [0.2.2](https://github.com/matjam/musex/compare/v0.2.1...v0.2.2) (2026-06-11)
 
 
