@@ -7,6 +7,7 @@ A macOS (Electron) music player that streams from Plex, with planned external-me
 - **Remote:** `git@github.com:matjam/musex.git`
 - **Feature branches + PRs (since 2026-06-10 — `main` has branch protection; direct commits to `main` no longer work).** No issue tracker; name branches `feature/<short-description>` / `fix/<short-description>`.
 - **Group logical sets of features into a single PR** — e.g. a batch of UI improvements is ONE branch/PR, not one PR per tweak. Don't split related work.
+- **PR titles MUST be conventional commits (`feat: …` / `fix: …` / `chore: …`).** PRs get squash-merged and the repo is configured (`squash_merge_commit_title=PR_TITLE`, 2026-06-11) to use the PR title as the squash commit subject — a non-conventional title makes release-please see NOTHING releasable. Why: PR #7 ("Taste expansion: …") squashed away all its `feat` commits and no release PR appeared; fixed with an empty `feat:` commit (#8).
 - Push after every commit (`git add -A` always — never selective staging).
 - **Releases:** when a work arc is done and merged, cut a release by merging the open release-please PR (only when the user asks). **Version semantics (since 0.1.3): `feat:` bumps MINOR, `fix:` bumps PATCH, breaking changes also bump minor while pre-1.0** (`bump-patch-for-minor-pre-major: false`, `bump-minor-pre-major: true`).
 
