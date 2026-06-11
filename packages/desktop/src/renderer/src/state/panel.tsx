@@ -8,11 +8,13 @@ interface PanelApi {
   panel: PanelKind | null;
   /** Payload for the artist-info panel (set by openArtistInfo). */
   artistInfoName: string | null;
-  openPanel(kind: PanelKind): void;
+  /** Open a payload-free panel. Use openArtistInfo for the artist-info panel. */
+  openPanel(kind: Exclude<PanelKind, "artist-info">): void;
   openArtistInfo(artistName: string): void;
   /** Close the open panel; with `kind`, only if that panel is the open one. */
   closePanel(kind?: PanelKind): void;
-  togglePanel(kind: PanelKind): void;
+  /** Toggle a panel open/closed. Use openArtistInfo to open the artist-info panel. */
+  togglePanel(kind: Exclude<PanelKind, "artist-info">): void;
 }
 
 const Ctx = createContext<PanelApi | null>(null);

@@ -89,17 +89,12 @@ export function ArtistInfoPanel({ artistName }: { artistName: string }) {
 
           {(info?.listeners != null || info?.playCount != null) && (
             <div className="detail-meta">
-              {info.listeners != null && info.playCount != null ? (
+              {info.listeners != null && (
                 <div className="detail-meta-row">
                   <span>Listeners</span>
                   <span>{info.listeners.toLocaleString()}</span>
                 </div>
-              ) : info.listeners != null ? (
-                <div className="detail-meta-row">
-                  <span>Listeners</span>
-                  <span>{info.listeners.toLocaleString()}</span>
-                </div>
-              ) : null}
+              )}
               {info.playCount != null && (
                 <div className="detail-meta-row">
                   <span>Plays</span>
