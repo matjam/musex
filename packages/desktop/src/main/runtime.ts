@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Library, Pin, Track } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { app, safeStorage, shell } from "electron";
+import { buildAf, replaygainMode } from "../logic/audio-filters.js";
 import { isHttpUrl } from "../logic/external-url.js";
 import { TasteProfile } from "../logic/taste-profile.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
@@ -68,6 +69,13 @@ export class Runtime {
 
   async init(): Promise<void> {
     this.mpv = new MpvController(resolveMpvPaths());
+    // Seed the controller's cached audio config from persisted prefs — mpv
+    // isn't running yet, so this only sets what the next spawn will apply.
+    const audioPrefs = persistence.getAudioPrefs();
+    await this.mpv.applyAudioConfig({
+      af: buildAf(audioPrefs),
+      replaygain: replaygainMode(audioPrefs),
+    });
     await this.cache.init();
     await this.listCache.init();
     this.proxy.configureCache(this.cache, () => ({

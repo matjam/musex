@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  DEFAULT_AUDIO_PREFS,
+  EQ_PRESETS,
+  type LevelingMode,
+} from "../../../../logic/audio-filters";
 import type {
+  AudioPrefsDto,
   CacheStats,
   ExpansionStateDto,
   PluginInfo,
@@ -173,6 +179,8 @@ export function SettingsView() {
         </div>
       </div>
 
+      <AudioSection />
+
       <ExpansionSection />
 
       <PluginsSection />
@@ -188,6 +196,111 @@ export function SettingsView() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const LEVELING_OPTIONS: ReadonlyArray<{ value: LevelingMode; label: string; desc: string }> = [
+  { value: "off", label: "Off", desc: "Play tracks at their original volume." },
+  {
+    value: "replaygain",
+    label: "ReplayGain",
+    desc: "Use ReplayGain tags when present (album gain, so albums keep their dynamics). Untagged files play unchanged.",
+  },
+  {
+    value: "auto",
+    label: "Auto",
+    desc: "Smooth out loudness differences in real time. Works on every file, no tags needed.",
+  },
+];
+
+/** Volume leveling + EQ presets — applied to mpv instantly, persisted in main. */
+function AudioSection() {
+  const [prefs, setPrefs] = useState<AudioPrefsDto | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .getAudioPrefs()
+      .then((p) => {
+        if (!cancelled) setPrefs(p);
+      })
+      .catch(() => {
+        if (!cancelled) setPrefs(DEFAULT_AUDIO_PREFS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!prefs) return null;
+
+  async function apply(next: AudioPrefsDto) {
+    const prev = prefs;
+    if (!prev) return;
+    setPrefs(next);
+    setError(null);
+    try {
+      await window.musex.setAudioPrefs(next);
+    } catch (err) {
+      // mpv refused the filter change — revert the UI to what's still in force.
+      setPrefs(prev);
+      setError(
+        `Couldn't apply audio settings: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  const levelingDesc = LEVELING_OPTIONS.find((o) => o.value === prefs.leveling)?.desc ?? "";
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Audio</div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Volume leveling</div>
+          <div className="settings-row-desc">{levelingDesc}</div>
+        </div>
+        <select
+          className="settings-input settings-input--select"
+          aria-label="Volume leveling"
+          value={prefs.leveling}
+          onChange={(e) => void apply({ ...prefs, leveling: e.target.value as LevelingMode })}
+        >
+          {LEVELING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Equalizer</div>
+          <div className="settings-row-desc">Presets apply instantly to the playing track.</div>
+        </div>
+        <select
+          className="settings-input settings-input--select"
+          aria-label="Equalizer preset"
+          value={prefs.eqPreset}
+          onChange={(e) => void apply({ ...prefs, eqPreset: e.target.value })}
+        >
+          {EQ_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {error ? (
+        <div className="settings-row">
+          <div className="settings-row-desc error-text">{error}</div>
+        </div>
+      ) : null}
     </div>
   );
 }

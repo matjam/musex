@@ -9,7 +9,9 @@ import {
   cmdObserve,
   cmdQuit,
   cmdSeekAbs,
+  cmdSetAf,
   cmdSetPause,
+  cmdSetReplaygain,
   cmdSetVolume,
   encodeLine,
   type MpvCommand,
@@ -20,6 +22,12 @@ import {
 export interface MpvPaths {
   binaryPath: string;
   socketPath: string;
+}
+
+export interface AudioConfig {
+  /** mpv `af` property value ("" = no filters). */
+  af: string;
+  replaygain: "no" | "track" | "album";
 }
 
 const SPAWN_ARGS = [
@@ -68,6 +76,8 @@ export class MpvController {
   private mapper = new MpvEventMapper();
   private rest = "";
   private sink: ((e: EngineEvent) => void) | null = null;
+  /** Desired audio filters/replaygain — cached so every (re)spawn applies it. */
+  private audioConfig: AudioConfig = { af: "", replaygain: "no" };
 
   constructor(private readonly paths: MpvPaths) {}
 
@@ -127,6 +137,7 @@ export class MpvController {
 
     await this.send((id) => cmdObserve(id, 1, "time-pos"));
     await this.send((id) => cmdObserve(id, 2, "pause"));
+    await this.sendAudioConfig();
   }
 
   /** mpv creates the IPC socket shortly after spawn — poll until it accepts. */
@@ -260,6 +271,29 @@ export class MpvController {
   async setVolume(v01: number): Promise<void> {
     if (!this.running) return;
     await this.send((id) => cmdSetVolume(id, v01));
+  }
+
+  /** Cache the desired audio config and apply it now if mpv is running. The
+   *  cached config is re-applied on every (re)spawn (see doStart), so a lazy
+   *  start or post-crash respawn comes up with the right filters. Rejects if
+   *  mpv refuses a property set (the caller surfaces that — no silent drop);
+   *  the cache rolls back on rejection so respawns never retry a config the
+   *  caller was told failed. */
+  async applyAudioConfig(cfg: AudioConfig): Promise<void> {
+    const prev = this.audioConfig;
+    this.audioConfig = cfg;
+    if (!this.running) return;
+    try {
+      await this.sendAudioConfig();
+    } catch (err) {
+      this.audioConfig = prev;
+      throw err;
+    }
+  }
+
+  private async sendAudioConfig(): Promise<void> {
+    await this.send((id) => cmdSetReplaygain(id, this.audioConfig.replaygain));
+    await this.send((id) => cmdSetAf(id, this.audioConfig.af));
   }
 
   private onChildExit(child: ChildProcess): void {

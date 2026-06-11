@@ -4,7 +4,9 @@ import {
   cmdLoadfile,
   cmdObserve,
   cmdSeekAbs,
+  cmdSetAf,
   cmdSetPause,
+  cmdSetReplaygain,
   cmdSetVolume,
   encodeLine,
   MpvEventMapper,
@@ -83,6 +85,28 @@ describe("command builders", () => {
     expect(cmdObserve(6, 1, "time-pos")).toEqual({
       command: ["observe_property", 1, "time-pos"],
       request_id: 6,
+    });
+  });
+
+  it("cmdSetAf", () => {
+    expect(cmdSetAf(10, "lavfi=[bass=g=6:f=110]")).toEqual({
+      command: ["set_property", "af", "lavfi=[bass=g=6:f=110]"],
+      request_id: 10,
+    });
+    expect(cmdSetAf(11, "")).toEqual({
+      command: ["set_property", "af", ""],
+      request_id: 11,
+    });
+  });
+
+  it("cmdSetReplaygain", () => {
+    expect(cmdSetReplaygain(12, "album")).toEqual({
+      command: ["set_property", "replaygain", "album"],
+      request_id: 12,
+    });
+    expect(cmdSetReplaygain(13, "no")).toEqual({
+      command: ["set_property", "replaygain", "no"],
+      request_id: 13,
     });
   });
 

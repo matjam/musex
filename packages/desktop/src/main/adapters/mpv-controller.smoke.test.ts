@@ -2,6 +2,7 @@ import os from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { buildAf, EQ_PRESETS, replaygainMode } from "../../logic/audio-filters.js";
 import type { EngineEvent } from "../../logic/mpv-ipc.js";
 import { MpvController } from "./mpv-controller.js";
 
@@ -44,6 +45,28 @@ run("MpvController (real vendored mpv, env-gated)", () => {
       expect(events.some((e) => e.type === "error")).toBe(false);
       // No spurious auto-advance: the only load was explicit.
       expect(events.some((e) => e.type === "advanced")).toBe(false);
+    } finally {
+      await controller.dispose();
+    }
+  }, 30_000);
+
+  it("accepts every EQ preset × leveling combo (pins known-good af strings)", async () => {
+    const controller = new MpvController({
+      binaryPath: BINARY,
+      socketPath: join(os.tmpdir(), "musex-mpv-af-test.sock"),
+    });
+    try {
+      await controller.start();
+      for (const preset of EQ_PRESETS) {
+        for (const leveling of ["off", "replaygain", "auto"] as const) {
+          const prefs = { leveling, eqPreset: preset.id };
+          // applyAudioConfig rejects if mpv refuses either property set.
+          await controller.applyAudioConfig({
+            af: buildAf(prefs),
+            replaygain: replaygainMode(prefs),
+          });
+        }
+      }
     } finally {
       await controller.dispose();
     }

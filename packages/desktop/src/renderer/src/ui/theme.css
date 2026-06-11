@@ -2111,6 +2111,13 @@ img.queue-row-art {
   text-align: left;
 }
 
+.settings-input.settings-input--select {
+  width: 160px;
+  text-align: left;
+  cursor: pointer;
+  appearance: auto;
+}
+
 .toggle:disabled {
   opacity: 0.4;
   cursor: default;
