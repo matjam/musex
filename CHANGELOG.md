@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/matjam/musex/compare/v0.2.1...v0.2.2) (2026-06-11)
+
+
+### Bug Fixes
+
+* **updater:** read-only vendored files broke every macOS auto-update ([#13](https://github.com/matjam/musex/issues/13)) ([8f59478](https://github.com/matjam/musex/commit/8f594787dde7c6314c5ea078b3a06d848326b2b5))
+
 ## [0.2.1](https://github.com/matjam/musex/compare/v0.2.0...v0.2.1) (2026-06-11)
 
 
