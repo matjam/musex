@@ -16,6 +16,7 @@ import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
+import { LibraryWatcher } from "./adapters/library-watcher.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";
 import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
@@ -48,6 +49,9 @@ export class Runtime {
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
   expansion!: ExpansionCoordinator;
+  libraryWatcher!: LibraryWatcher;
+  /** Set by main/index per window (same pattern as pluginNotifySink). */
+  private libraryChangedSink: ((lib: Library) => void) | null = null;
   /** Constructed in init() — drives the plugin events pipeline (trackStarted/
    *  paused/resumed/trackEnded/scrobble) + the recently-played history. */
   playbackMonitor!: PlaybackMonitor;
@@ -65,6 +69,10 @@ export class Runtime {
 
   setPluginNotifySink(sink: ((p: PluginNotification) => void) | null): void {
     this.pluginNotifySink = sink;
+  }
+
+  setLibraryChangedSink(sink: ((lib: Library) => void) | null): void {
+    this.libraryChangedSink = sink;
   }
 
   async init(): Promise<void> {
@@ -173,10 +181,27 @@ export class Runtime {
       trackStats: () => this.tasteProfile.trackStats(),
     });
     this.expansion.start();
+
+    this.libraryWatcher = new LibraryWatcher({
+      getToken: () => this.token,
+      endpoint: (serverId, token) => this.gateway.endpoint(serverId, token),
+      listMusicLibraries: (serverId, serverName, token) =>
+        this.gateway.listMusicLibraries({ id: serverId, name: serverName, connections: [] }, token),
+      onChange: async (fresh) => {
+        // Whole-store evict is deliberate: Plex doesn't reliably bump nested
+        // updatedAt (e.g. an artist's when an album lands), so nested
+        // validators can't be trusted after a change. The cache refills lazily.
+        await this.listCache.clear();
+        persistence.setLibrary(fresh);
+        this.libraries = this.libraries.map((l) => (l.id === fresh.id ? fresh : l));
+        this.libraryChangedSink?.(fresh);
+      },
+    });
   }
 
   async restore(): Promise<void> {
     this.token = await this.tokenStore.load();
+    this.libraryWatcher.setLibrary(persistence.getLibrary());
   }
 
   /** Debounced taste-profile persist: collapses bursts of plays/ratings into

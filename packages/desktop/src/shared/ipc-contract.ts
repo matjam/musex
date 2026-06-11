@@ -95,6 +95,7 @@ export const IPC = {
   openExternal: "musex:openExternal", // (url) -> void (http/https only)
   radioNext: "musex:radio:next", // (RadioNextArgs) -> Track[]
   navigateTo: "musex:navigateTo", // push: main -> renderer NavigateToPayload (app menu navigation)
+  libraryChanged: "musex:library:changed", // push: main -> renderer Library (watcher refreshed the section)
   logsGet: "musex:logs:get", // -> LogEntryDto[] (snapshot of the in-memory ring buffer)
   logsAppend: "musex:logs:append", // (RendererLogEntry[]) -> void (renderer console forwarding)
   logsEvent: "musex:logs:event", // push: main -> renderer LogEntryDto (live viewer updates)
@@ -436,6 +437,8 @@ export interface MusexApi {
   radioNext(args: RadioNextArgs): Promise<Track[]>;
   /** Subscribe to app-menu navigation pushes; returns an unsubscribe function. */
   onNavigateTo(cb: (p: NavigateToPayload) => void): () => void;
+  /** Fired when the library watcher refreshed the section (new updatedAt). */
+  onLibraryChanged(cb: (lib: Library) => void): () => void;
   /** Snapshot of the unified in-memory log buffer (main + renderer lines). */
   logsGet(): Promise<LogEntryDto[]>;
   /** Forward batched renderer console lines into the main-process buffer. */

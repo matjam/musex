@@ -126,6 +126,7 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.selectLibrary, (_e, libraryId: string) => {
     const lib = rt.findLibrary(libraryId);
     persistence.setLibrary(lib);
+    rt.libraryWatcher.setLibrary(lib);
   });
 
   // Browse handlers also register the stream-proxy endpoint for the server, because

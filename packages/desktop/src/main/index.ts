@@ -68,6 +68,9 @@ app.whenReady().then(async () => {
     runtime.setPluginNotifySink((p) => {
       if (!win.isDestroyed()) win.webContents.send(IPC.pluginsNotify, p);
     });
+    runtime.setLibraryChangedSink((lib) => {
+      if (!win.isDestroyed()) win.webContents.send(IPC.libraryChanged, lib);
+    });
     // Rebuilt per window so Help → Keyboard Shortcuts targets the current one
     // (setApplicationMenu is idempotent; stale closures would hit a destroyed
     // window after macOS re-activate).
@@ -108,6 +111,7 @@ app.whenReady().then(async () => {
   });
   app.on("will-quit", () => {
     runtime.expansion.dispose();
+    runtime.libraryWatcher.dispose();
     void runtime.mpv.dispose();
   });
 });

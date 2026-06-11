@@ -34,7 +34,8 @@ type Action =
   | { type: "signed-in"; library: Library }
   | { type: "restore-done"; library: Library | null }
   | { type: "navigate"; view: View }
-  | { type: "set-search"; query: string };
+  | { type: "set-search"; query: string }
+  | { type: "library-updated"; library: Library };
 
 function reducer(s: AppState, a: Action): AppState {
   switch (a.type) {
@@ -67,6 +68,11 @@ function reducer(s: AppState, a: Action): AppState {
         searchQuery: a.query,
         view: a.query.trim() ? { name: "search" } : s.view,
       };
+    case "library-updated":
+      // Only refresh in place — never resurrect a stale push after sign-out
+      // or a library switch. View/search state stays untouched.
+      if (s.auth !== "signed-in" || !s.library || s.library.id !== a.library.id) return s;
+      return { ...s, library: a.library };
   }
 }
 
@@ -97,6 +103,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    return window.musex.onLibraryChanged((library) => {
+      dispatch({ type: "library-updated", library });
+    });
   }, []);
 
   return <Ctx.Provider value={{ ...state, dispatch }}>{children}</Ctx.Provider>;

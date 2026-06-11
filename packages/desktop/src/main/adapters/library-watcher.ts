@@ -43,6 +43,8 @@ export class LibraryWatcher {
   private refreshTimer: NodeJS.Timeout | null = null;
   private readonly coalescer = new ChangeCoalescer(QUIET_MS, MAX_WAIT_MS);
   private refreshing = false;
+  /** A trigger landed while a refresh was in flight — run again right after. */
+  private pendingRefresh = false;
 
   constructor(private readonly deps: LibraryWatcherDeps) {}
 
@@ -143,7 +145,11 @@ export class LibraryWatcher {
   private async refresh(opts: { force: boolean }): Promise<void> {
     const lib = this.library;
     const token = this.deps.getToken();
-    if (this.disposed || !lib || !token || this.refreshing) return;
+    if (this.disposed || !lib || !token) return;
+    if (this.refreshing) {
+      this.pendingRefresh = true;
+      return;
+    }
     this.refreshing = true;
     try {
       const sections = await this.deps.listMusicLibraries(lib.serverId, lib.serverName, token);
@@ -167,6 +173,11 @@ export class LibraryWatcher {
       console.error("[musex library] refresh failed:", err);
     } finally {
       this.refreshing = false;
+      if (this.pendingRefresh && !this.disposed) {
+        this.pendingRefresh = false;
+        // A trigger arrived mid-refresh; its content may postdate our fetch.
+        void this.refresh({ force: true });
+      }
     }
   }
 
@@ -179,6 +190,7 @@ export class LibraryWatcher {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
     this.coalescer.reset();
+    this.pendingRefresh = false;
     this.ws?.close();
     this.ws = null;
   }
