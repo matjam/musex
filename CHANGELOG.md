@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/matjam/musex/compare/v0.3.0...v0.4.0) (2026-06-11)
+
+
+### Features
+
+* volume leveling and EQ presets ([#19](https://github.com/matjam/musex/issues/19)) ([b941321](https://github.com/matjam/musex/commit/b9413211590c1fbca7e2e1b4c1436a322b81735d))
+
+
+### Bug Fixes
+
+* pick up new Plex library items without a restart ([#21](https://github.com/matjam/musex/issues/21)) ([9434e8a](https://github.com/matjam/musex/commit/9434e8a07847ef851fbe512d4994b3c09cf22e66))
+
 ## [0.3.0](https://github.com/matjam/musex/compare/v0.2.2...v0.3.0) (2026-06-11)
 
 
