@@ -34,6 +34,12 @@ playlists, mood mixes, radio, and recommendations.
     "I wish I had this" into "it's in my library."
   - Federated search: results show what you own next to what you could
     acquire.
+  - **Bring your own source** — Lidarr is just the first acquisition
+    provider. The plugin API is deliberately source-agnostic: a plugin that
+    can look up an artist's albums and fetch one (an online music store like
+    Bandcamp, a different download manager, anything) plugs into the same
+    search, downloads, and taste-expansion machinery with no app changes.
+    See [docs/plugins.md](docs/plugins.md).
 - **Auto-update** — checks GitHub Releases silently and updates in place.
 
 ## Install
