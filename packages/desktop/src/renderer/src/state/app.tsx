@@ -92,11 +92,27 @@ function reducer(s: AppState, a: Action): AppState {
       return { ...s, library: a.library };
     case "nav-back": {
       const r = goBack(s.history, s.view);
-      return r ? { ...s, view: r.view, history: r.history } : s;
+      if (!r) return s;
+      // Leaving search via history clears the box — a stale query over a
+      // non-search view looks wrong (and would re-enter search on edit).
+      const leavingSearch = s.view.name === "search" && r.view.name !== "search";
+      return {
+        ...s,
+        view: r.view,
+        history: r.history,
+        searchQuery: leavingSearch ? "" : s.searchQuery,
+      };
     }
     case "nav-forward": {
       const r = goForward(s.history, s.view);
-      return r ? { ...s, view: r.view, history: r.history } : s;
+      if (!r) return s;
+      const leavingSearch = s.view.name === "search" && r.view.name !== "search";
+      return {
+        ...s,
+        view: r.view,
+        history: r.history,
+        searchQuery: leavingSearch ? "" : s.searchQuery,
+      };
     }
   }
 }
