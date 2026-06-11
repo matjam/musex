@@ -16,6 +16,9 @@ playlists, mood mixes, radio, and recommendations.
 
 - **Direct play, every codec, gapless** — audio is decoded by a vendored mpv,
   not the browser. No transcoding, no quality loss, gapless album playback.
+- **Volume leveling & EQ** — optional ReplayGain or real-time loudness
+  leveling, plus EQ presets (Bass Boost, Vocal, Loudness, …) applied in the
+  audio engine, not the UI.
 - **Your library, Spotify-shaped** — home view, artist/album/genre browsing,
   full-library search, playlists, queue, shuffle/repeat, keyboard shortcuts
   (`⌘/` shows them all).
