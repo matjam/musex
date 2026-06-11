@@ -104,7 +104,7 @@ ids, stream URLs, or tokens ever cross the plugin boundary.**
 - `ctx.ui.contributeTrackDetail(provider)` — `getDetail(track)` returns
   `{title, rows: [{label, value}]} | null`; rendered as an extra section in the
   track slide-out panel.
-- `ctx.ui.registerSimilarProvider({id, similarArtists?, similarTracks?, topAlbums?})` —
+- `ctx.ui.registerSimilarProvider({id, similarArtists?, similarTracks?, topAlbums?, artistInfo?})` —
   powers the Similar side panel ("Similar Artists" on artist pages, "Similar
   Songs" in the track panel) and host-side taste expansion. Return
   `SimilarItem[]` (`{name, artistName?, imageUrl?, externalUrl?, match?}`;
@@ -113,12 +113,18 @@ ids, stream URLs, or tokens ever cross the plugin boundary.**
   navigate; owned tracks become playable tiles) and proxies/caches external
   images. Same 8s timeout + isolation as sections. The optional
   `topAlbums(artistName)` returns an artist's most popular albums best-first
-  (taste expansion acquires the top one as a new artist's entry point).
+  (taste expansion acquires the top one as a new artist's entry point; the
+  External Artist view also merges these titles into the discography — titles
+  no acquisition provider knows render as `unavailable`). The optional
+  `artistInfo(artistName)` returns `ArtistInfo | null` (`{name, bio?, url?,
+  listeners?, playCount?, imageUrl?}`; bio is plain text) — it powers the
+  artist-info side panel opened from Discover tiles; first provider with a
+  non-null answer wins.
 - `ctx.registerTrackRecommender({id, recommend})` — feeds radio: given seeds +
   excludes, return `RecommendedTrack[]` (`{artistName, title?}`; no title =
   artist-level). The host resolves suggestions against the library and appends
   real tracks to the queue.
-- `ctx.registerAcquisitionProvider({id, lookupArtistAlbums, acquireAlbum, status, searchArtists?, acquireArtist?, cancelAlbum?, watchNewReleases?, isWatchingNewReleases?, listWatchedArtists?})`
+- `ctx.registerAcquisitionProvider({id, lookupArtistAlbums, acquireAlbum, status, searchArtists?, acquireArtist?, cancelAlbum?, watchNewReleases?, isWatchingNewReleases?, listWatchedArtists?, listMonitoredArtists?})`
   — powers the External Artist view (an unowned artist's discography with
   per-album `state`: downloaded/downloading/requested/available/unavailable;
   the host adds `owned` by cross-checking the library) and the Downloads view
@@ -131,7 +137,10 @@ ids, stream URLs, or tokens ever cross the plugin boundary.**
   enabled)` must not monitor existing albums when enabling nor unmonitor
   separately-monitored albums when disabling; `isWatchingNewReleases` and
   `listWatchedArtists` read the state back (the provider is the source of
-  truth). See `plugins/lidarr` for the reference implementation.
+  truth). The optional `listMonitoredArtists()` returns the names of artists
+  the provider currently monitors — it feeds the "monitored" tile badges and
+  artist chips (the host caches the answer for 60s and drops the cache after
+  any acquire). See `plugins/lidarr` for the reference implementation.
 
 ### Settings — declarative, host-rendered
 

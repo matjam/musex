@@ -7,6 +7,7 @@ import { isHttpUrl } from "../logic/external-url.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
   AcquirableAlbumDto,
+  ArtistInfoDto,
   ExpansionEntryDto,
   ExpansionStateDto,
   ExternalArtistResultDto,
@@ -597,11 +598,13 @@ export function registerIpc(rt: Runtime): void {
       }
       const ownedByTitle = new Map<string, Album>();
       for (const a of ownedAlbums) {
-        const key = a.title.toLowerCase();
+        // trim() matches mergeDiscography's key — a whitespace-padded provider
+        // title must still flip to owned.
+        const key = a.title.trim().toLowerCase();
         if (!ownedByTitle.has(key)) ownedByTitle.set(key, a);
       }
       return items.map((item): AcquirableAlbumDto => {
-        const owned = ownedArtist ? ownedByTitle.get(item.title.toLowerCase()) : undefined;
+        const owned = ownedArtist ? ownedByTitle.get(item.title.trim().toLowerCase()) : undefined;
         if (owned && ownedArtist) {
           return {
             ...item,
@@ -678,6 +681,82 @@ export function registerIpc(rt: Runtime): void {
     if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
     return rt.plugins.acquireArtistByName(artistName);
   });
+
+  ipcMain.handle(
+    IPC.artistInfoGet,
+    async (_e, artistName: unknown): Promise<ArtistInfoDto | null> => {
+      if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+      const info = await rt.plugins.artistInfo(String(artistName));
+      if (!info) return null;
+      if (info.imageUrl === undefined) return info;
+      // Bake plugin-supplied artwork through the proxy's /ext endpoint so it
+      // is disk-cached and loads offline — same treatment as every other
+      // plugin-supplied image (section items, acquisition album art, etc.).
+      const proxied = rt.proxy.externalArtUrl(info.imageUrl);
+      if (proxied === undefined) {
+        const { imageUrl: _dropped, ...rest } = info;
+        return rest;
+      }
+      return { ...info, imageUrl: proxied };
+    },
+  );
+
+  ipcMain.handle(IPC.acquisitionMonitoredArtists, () => rt.plugins.listMonitoredArtists());
+
+  ipcMain.handle(
+    IPC.acquisitionDiscography,
+    async (_e, artistName: unknown): Promise<AcquirableAlbumDto[]> => {
+      if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+      const items = await rt.plugins.externalDiscography(artistName);
+      // Same owned cross-check + image-proxy enrichment as acquisitionLookupArtist.
+      const lib = rt.libraries[0];
+      const token = rt.token;
+      let ownedArtist: Artist | undefined;
+      let ownedAlbums: Album[] = [];
+      if (lib && token && items.length > 0) {
+        try {
+          const results = await rt.gateway.search(lib, artistName, token);
+          const lower = artistName.toLowerCase();
+          ownedArtist = results.artists.find((a) => a.name.toLowerCase() === lower);
+          if (ownedArtist) {
+            ownedAlbums = await rt.gateway.listAlbums(lib, ownedArtist.id, token);
+          }
+        } catch (err) {
+          console.error("[plugins] acquisitionDiscography owned cross-check failed:", err);
+        }
+      }
+      const ownedByTitle = new Map<string, Album>();
+      for (const a of ownedAlbums) {
+        // trim() matches mergeDiscography's key — a whitespace-padded provider
+        // title must still flip to owned.
+        const key = a.title.trim().toLowerCase();
+        if (!ownedByTitle.has(key)) ownedByTitle.set(key, a);
+      }
+      return items.map((item): AcquirableAlbumDto => {
+        const owned = ownedArtist ? ownedByTitle.get(item.title.trim().toLowerCase()) : undefined;
+        if (owned && ownedArtist) {
+          return {
+            ...item,
+            state: "owned",
+            albumId: owned.id,
+            artistId: ownedArtist.id,
+            serverId: owned.serverId,
+          };
+        }
+        // Non-owned: bake plugin-supplied artwork through the proxy's /ext
+        // endpoint (disk-cached, loads offline); unbakeable URLs are dropped.
+        if (item.imageUrl !== undefined) {
+          const proxied = rt.proxy.externalArtUrl(item.imageUrl);
+          if (proxied === undefined) {
+            const { imageUrl: _dropped, ...rest } = item;
+            return rest;
+          }
+          return { ...item, imageUrl: proxied };
+        }
+        return item;
+      });
+    },
+  );
 
   ipcMain.handle(IPC.trackActionsList, () => rt.plugins.listTrackActions());
   ipcMain.handle(IPC.trackActionsInvoke, (_e, actionId: string, track: unknown) => {

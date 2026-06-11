@@ -111,6 +111,18 @@ export type SimilarItem = {
   match?: number;
 };
 
+/** Returned by SimilarProvider.artistInfo (e.g. last.fm artist.getInfo). */
+export interface ArtistInfo {
+  name: string;
+  /** Plain text (no HTML). */
+  bio?: string;
+  /** Provider page for the artist (e.g. last.fm URL). */
+  url?: string;
+  listeners?: number;
+  playCount?: number;
+  imageUrl?: string;
+}
+
 /** Powers the Similar side panel (artist pages → similar artists; track detail
  *  → similar songs) and host-side taste expansion. Implement whichever
  *  methods the source supports. */
@@ -121,6 +133,8 @@ export interface SimilarProvider {
   /** OPTIONAL: an artist's most popular albums, best first (taste expansion
    *  uses the top entry as the "start here" album for a new artist). */
   topAlbums?(artistName: string): Promise<{ title: string }[]>;
+  /** Artist bio/stats for the in-app artist-info panel. null = unknown artist. */
+  artistInfo?(artistName: string): Promise<ArtistInfo | null>;
 }
 
 /** Where an album sits in the acquisition pipeline. Providers report
@@ -195,6 +209,8 @@ export interface AcquisitionProvider {
   isWatchingNewReleases?(artistName: string): Promise<boolean>;
   /** OPTIONAL: names of all artists watched for new releases. */
   listWatchedArtists?(): Promise<string[]>;
+  /** OPTIONAL: names of artists currently monitored by the provider (tile badges). */
+  listMonitoredArtists?(): Promise<string[]>;
 }
 
 export interface TrackDetailProvider {

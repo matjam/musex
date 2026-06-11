@@ -16,6 +16,7 @@ import type {
   AcquirableAlbum,
   AcquisitionState,
   AcquisitionStatusItem,
+  ArtistInfo,
   ExternalArtistResult,
   SettingField,
   SettingsActionResult,
@@ -106,6 +107,9 @@ export const IPC = {
   newReleaseWatchGet: "musex:watch:get", // (artistName) -> boolean | null (null = unsupported)
   newReleaseWatchSet: "musex:watch:set", // (artistName, enabled) -> void
   newReleaseWatchList: "musex:watch:list", // -> string[] (watched artist names)
+  artistInfoGet: "musex:artistInfo:get", // (artistName) -> ArtistInfoDto | null
+  acquisitionMonitoredArtists: "musex:acquisition:monitoredArtists", // -> string[] (60s host cache)
+  acquisitionDiscography: "musex:acquisition:discography", // (artistName) -> AcquirableAlbumDto[] incl. lastfm-only "unavailable" rows
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -159,6 +163,7 @@ export type PlaybackEngineEvent =
 // plugin API package; the contract only adds the IPC-specific shapes.
 export type {
   AcquisitionState,
+  ArtistInfo as ArtistInfoDto,
   ExternalArtistResult,
   SettingField,
   SettingsActionResult,
@@ -456,4 +461,11 @@ export interface MusexApi {
   newReleaseWatchGet(artistName: string): Promise<boolean | null>;
   newReleaseWatchSet(artistName: string, enabled: boolean): Promise<void>;
   newReleaseWatchList(): Promise<string[]>;
+  /** Artist bio/stats from the first similar provider (e.g. last.fm). */
+  artistInfoGet(artistName: string): Promise<ArtistInfo | null>;
+  /** Union of monitored artists across all acquisition providers (60s host cache). */
+  acquisitionMonitoredArtists(): Promise<string[]>;
+  /** External discography: acquisition lookup ∪ topAlbums (lastfm-only titles
+   *  appended as unavailable). Same enrichment pipeline as acquisitionLookupArtist. */
+  acquisitionDiscography(artistName: string): Promise<AcquirableAlbumDto[]>;
 }

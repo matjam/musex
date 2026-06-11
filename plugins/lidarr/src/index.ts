@@ -269,6 +269,18 @@ async function addArtist(
   }
 }
 
+// ── Monitored artists list ───────────────────────────────────────────────────
+
+/** Returns names of all artists that are currently monitored in Lidarr.
+ *  Exported for tests. */
+export async function getMonitoredArtists(c: LidarrClient): Promise<string[]> {
+  const artists = await c.get<LidarrArtist[]>("/api/v1/artist");
+  return artists
+    .filter((a) => a.monitored === true)
+    .map((a) => a.artistName ?? "")
+    .filter((n) => n.length > 0);
+}
+
 // ── New-release watching (artist monitorNewItems) ────────────────────────────
 
 const sameArtistName = (a: string | null | undefined, b: string): boolean =>
@@ -856,6 +868,17 @@ export async function activate(ctx: PluginContext): Promise<void> {
           .filter((n) => n.length > 0);
       } catch (err) {
         ctx.log("listWatchedArtists failed:", errText(err));
+        return [];
+      }
+    },
+
+    listMonitoredArtists: async () => {
+      const c = await client();
+      if (!c) return [];
+      try {
+        return await getMonitoredArtists(c);
+      } catch (err) {
+        ctx.log("listMonitoredArtists failed:", errText(err));
         return [];
       }
     },

@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRef, useState } from "react";
 import { usePanel } from "../state/panel";
+import { ArtistInfoPanel } from "./ArtistInfoPanel";
 import { QueueDrawer } from "./QueueDrawer";
 import { TrackDetailPanel } from "./TrackDetailPanel";
 
@@ -21,7 +22,7 @@ function savedWidth(): number {
  *  content stays mounted while closed so the exit animation has something to
  *  show (it's clipped to zero width, so it renders nothing visible). */
 export function SidePanelHost() {
-  const { panel } = usePanel();
+  const { panel, artistInfoName } = usePanel();
   const [width, setWidth] = useState(savedWidth);
   const [resizing, setResizing] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -29,6 +30,10 @@ export function SidePanelHost() {
   const lastPanelRef = useRef<typeof panel>(null);
   if (panel !== null) lastPanelRef.current = panel;
   const content = panel ?? lastPanelRef.current;
+  // Mirrors artistInfoName so the exit animation still has an artist to show.
+  const lastArtistRef = useRef<string | null>(null);
+  if (artistInfoName !== null) lastArtistRef.current = artistInfoName;
+  const artistName = artistInfoName ?? lastArtistRef.current;
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     dragRef.current = { startX: e.clientX, startWidth: width };
@@ -68,10 +73,18 @@ export function SidePanelHost() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
         />
-        {/* key swaps re-run the slide-in animation when one panel replaces another */}
-        <div className="side-panel-content" key={content ?? "none"}>
+        {/* key swaps re-run the slide-in animation when one panel replaces another;
+            for artist-info the key also includes the artist name so switching
+            artists while the panel is open re-runs the slide-in animation. */}
+        <div
+          className="side-panel-content"
+          key={`${content ?? "none"}:${content === "artist-info" ? artistName : ""}`}
+        >
           {content === "track" && <TrackDetailPanel />}
           {content === "queue" && <QueueDrawer />}
+          {content === "artist-info" && artistName !== null && (
+            <ArtistInfoPanel artistName={artistName} />
+          )}
         </div>
       </div>
     </aside>

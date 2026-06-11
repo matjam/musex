@@ -228,6 +228,33 @@ textarea:focus {
   border-color: var(--green);
 }
 
+/* Back/forward sit immediately left of the centered search box. */
+.topbar-nav {
+  position: absolute;
+  right: calc(50% + min(19%, 180px) + 10px);
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+.topbar-nav-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  cursor: pointer;
+}
+.topbar-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.topbar-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* ---- App layout ---- */
 
 .app-root {
@@ -326,6 +353,21 @@ textarea:focus {
 .nav-item.dim {
   opacity: 0.32;
   pointer-events: none;
+}
+
+.nav-item .nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-item .nav-badge {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
 }
 
 /* .nav-ic is no longer used — nav icons are now lucide-react components */
@@ -2023,6 +2065,28 @@ img.queue-row-art {
   margin-bottom: 1px;
 }
 
+/* ---- Artist info panel ---- */
+
+.artist-info-image {
+  width: 100%;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.artist-info-bio {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+  white-space: pre-line;
+}
+
+.artist-info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ---- Home view ---- */
 
 .home-greeting {
@@ -2033,6 +2097,11 @@ img.queue-row-art {
 
 .home-row {
   margin-bottom: 26px;
+}
+
+/* Home section labels need air between the title and the tile grid. */
+.home-row .browse-title {
+  margin-bottom: 14px;
 }
 
 /* ---- Tracks view header actions (play/shuffle + sort) ---- */
@@ -2896,6 +2965,12 @@ img.queue-row-art {
   font-size: 11.5px;
   opacity: 0.6;
   line-height: 1.45;
+  /* Exactly two lines on every card so tiles in a row align vertically. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(2 * 1.45 * 11.5px);
 }
 
 /* Smart-playlist cards (Home → Smart Mixes): gradient icon tile in place of
@@ -2925,6 +3000,36 @@ img.queue-row-art {
 
 .smart-card--rediscover .smart-card-art {
   background: linear-gradient(135deg, var(--green), #1f6e52);
+}
+
+/* Smart cards with collage art keep a small kind-glyph chip for identity.
+   The kind gradient must not bleed under/around the collage, and the inner
+   collage's browse margin is unwanted inside the square wrapper. */
+/* Two-class selector: must out-rank the per-kind `.smart-card--* .smart-card-art`
+   gradient rules (same specificity, later in the file wins). */
+.smart-card .smart-card-art--collage {
+  position: relative;
+  padding: 0;
+  background: none;
+  overflow: hidden;
+  display: block;
+}
+.smart-card-art--collage .genre-card-collage {
+  margin-bottom: 0;
+  width: 100%;
+  height: 100%;
+}
+.smart-card-glyph {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
 }
 
 /* Artist header: .album-actions sits inline in the flex row, so the

@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
+import { badgeFor } from "../acquisition-badges";
 import { GridCard } from "../GridCard";
 import { WatchNewReleasesButton } from "../WatchNewReleasesButton";
 
@@ -10,52 +11,46 @@ type FetchState =
   | { status: "error"; message: string }
   | { status: "ok"; albums: AcquirableAlbumDto[] };
 
-/** Badge text + color variant per acquisition state. `available` renders no
- *  badge (it gets the hover Add action instead). */
-function badgeFor(album: AcquirableAlbumDto): { badge: string; variant: string } | null {
-  switch (album.state) {
-    case "owned":
-      return { badge: "owned", variant: "owned" };
-    case "downloaded":
-      return { badge: "downloaded", variant: "downloaded" };
-    case "downloading":
-      return { badge: album.detail ?? "downloading", variant: "downloading" };
-    case "requested":
-      return { badge: "requested", variant: "requested" };
-    case "unavailable":
-      return { badge: "unavailable", variant: "unavailable" };
-    case "available":
-      return null;
-  }
-}
-
-/** Discography of an artist we don't (fully) own, served by acquisition
- *  provider plugins (Lidarr). Owned albums navigate into the library; available
- *  ones get a hover Add (acquire) action. */
+/** Discography of an artist we don't (fully) own, merged from acquisition
+ *  providers (Lidarr) and similar providers (last.fm). Owned albums navigate
+ *  into the library; available ones get a hover Add (acquire) action;
+ *  last.fm-only titles are shown dimmed as unavailable. */
 export function ExternalArtistView({ artistName }: { artistName: string }) {
   const { dispatch } = useApp();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [monitorState, setMonitorState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [monitorError, setMonitorError] = useState<string | null>(null);
+  const [artistMonitored, setArtistMonitored] = useState(false);
 
   useEffect(() => {
     setFetch({ status: "loading" });
     setMonitorState("idle");
     setMonitorError(null);
+    setArtistMonitored(false);
     let cancelled = false;
     window.musex
-      .acquisitionLookupArtist(artistName)
+      .acquisitionDiscography(artistName)
       .then((albums) => {
         if (!cancelled) setFetch({ status: "ok", albums });
       })
       .catch((err: unknown) => {
-        console.error("[acquisition] lookupArtist failed:", err);
+        console.error("[acquisition] acquisitionDiscography failed:", err);
         if (!cancelled) {
           setFetch({
             status: "error",
             message: err instanceof Error ? err.message : "Failed to look up artist",
           });
         }
+      });
+    window.musex
+      .acquisitionMonitoredArtists()
+      .then((names) => {
+        if (!cancelled && names.some((n) => n.toLowerCase() === artistName.toLowerCase())) {
+          setArtistMonitored(true);
+        }
+      })
+      .catch(() => {
+        // badge only — fine without it
       });
     return () => {
       cancelled = true;
@@ -136,7 +131,7 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
           type="button"
           className="shuffle-btn"
           title="Monitor entire artist — download everything"
-          disabled={monitorState === "busy" || monitorState === "done"}
+          disabled={monitorState === "busy" || monitorState === "done" || artistMonitored}
           onClick={monitorEntireArtist}
         >
           <Download size={16} />
@@ -149,9 +144,13 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
               : "Monitor entire artist"}
         </span>
         <WatchNewReleasesButton artistName={artistName} />
+        {artistMonitored && (
+          <span className="grid-card-badge grid-card-badge--monitored">monitoring artist</span>
+        )}
       </div>
       <div className="browse-sub">
-        Discography via plugins — albums you own open in your library.
+        Discography via last.fm + your download manager — albums you own open in your library;
+        dimmed ones aren't available to fetch.
       </div>
       {monitorError !== null && <div className="browse-sub error-text">{monitorError}</div>}
 

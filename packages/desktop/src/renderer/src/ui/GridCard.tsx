@@ -2,9 +2,12 @@ import type { LucideIcon } from "lucide-react";
 import { Play } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { AlbumArt } from "./AlbumArt";
+import { CardCollage } from "./CardCollage";
 
 interface Props {
   thumb?: string;
+  /** Collage artwork (e.g. playlist fallback art) — wins over `thumb`. */
+  collage?: string[];
   title: string;
   subtitle?: string;
   /** Round the artwork (artists) vs square (albums). */
@@ -29,6 +32,7 @@ interface Props {
 /** A browse-grid card (album/artist) with a Spotify-style hover Play button. */
 export function GridCard({
   thumb,
+  collage,
   title,
   subtitle,
   round = false,
@@ -58,12 +62,16 @@ export function GridCard({
       onKeyDown={onKey}
     >
       <div className="grid-card-artwrap">
-        <AlbumArt
-          thumb={thumb}
-          className={`grid-card-art${round ? " artist-art" : ""}`}
-          label={title}
-          kind={round ? "artist" : "album"}
-        />
+        {collage && collage.length > 0 ? (
+          <CardCollage thumbs={collage} className={`grid-card-art${round ? " artist-art" : ""}`} />
+        ) : (
+          <AlbumArt
+            thumb={thumb}
+            className={`grid-card-art${round ? " artist-art" : ""}`}
+            label={title}
+            kind={round ? "artist" : "album"}
+          />
+        )}
         {badge && (
           <span
             className={`grid-card-badge${badgeVariant ? ` grid-card-badge--${badgeVariant}` : ""}`}

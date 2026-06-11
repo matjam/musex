@@ -119,6 +119,10 @@ const api: MusexApi = {
   newReleaseWatchSet: (artistName, enabled) =>
     ipcRenderer.invoke(IPC.newReleaseWatchSet, artistName, enabled),
   newReleaseWatchList: () => ipcRenderer.invoke(IPC.newReleaseWatchList),
+  artistInfoGet: (artistName) => ipcRenderer.invoke(IPC.artistInfoGet, artistName),
+  acquisitionMonitoredArtists: () => ipcRenderer.invoke(IPC.acquisitionMonitoredArtists),
+  acquisitionDiscography: (artistName) =>
+    ipcRenderer.invoke(IPC.acquisitionDiscography, artistName),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

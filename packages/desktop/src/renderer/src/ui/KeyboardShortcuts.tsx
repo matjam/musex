@@ -1,3 +1,4 @@
+import { useApp } from "../state/app";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 /** Renders nothing — mounts the app-wide keyboard shortcut listener. Lives as
@@ -12,6 +13,13 @@ export function KeyboardShortcuts({
   toggleShortcutsHelp: () => void;
   openSettings: () => void;
 }) {
-  useKeyboardShortcuts(toggleQueue, toggleShortcutsHelp, openSettings);
+  const { dispatch } = useApp();
+  useKeyboardShortcuts(
+    toggleQueue,
+    toggleShortcutsHelp,
+    openSettings,
+    () => dispatch({ type: "nav-back" }),
+    () => dispatch({ type: "nav-forward" }),
+  );
   return null;
 }

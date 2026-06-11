@@ -6,6 +6,7 @@ import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { AlbumArt } from "../AlbumArt";
+import { MissingAlbumsSection } from "../MissingAlbumsSection";
 import { StarRating } from "../StarRating";
 import { WatchNewReleasesButton } from "../WatchNewReleasesButton";
 
@@ -229,6 +230,8 @@ export function ArtistDetailView({ artist }: Props) {
           </div>
         </>
       )}
+
+      <MissingAlbumsSection artistName={artist.name} />
 
       {moreOpen && (
         <ArtistMoreMenu
