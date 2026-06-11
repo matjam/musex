@@ -680,10 +680,24 @@ export function registerIpc(rt: Runtime): void {
     return rt.plugins.acquireArtistByName(artistName);
   });
 
-  ipcMain.handle(IPC.artistInfoGet, (_e, artistName: unknown): Promise<ArtistInfoDto | null> => {
-    if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
-    return rt.plugins.artistInfo(String(artistName));
-  });
+  ipcMain.handle(
+    IPC.artistInfoGet,
+    async (_e, artistName: unknown): Promise<ArtistInfoDto | null> => {
+      if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
+      const info = await rt.plugins.artistInfo(String(artistName));
+      if (!info) return null;
+      if (info.imageUrl === undefined) return info;
+      // Bake plugin-supplied artwork through the proxy's /ext endpoint so it
+      // is disk-cached and loads offline — same treatment as every other
+      // plugin-supplied image (section items, acquisition album art, etc.).
+      const proxied = rt.proxy.externalArtUrl(info.imageUrl);
+      if (proxied === undefined) {
+        const { imageUrl: _dropped, ...rest } = info;
+        return rest;
+      }
+      return { ...info, imageUrl: proxied };
+    },
+  );
 
   ipcMain.handle(IPC.acquisitionMonitoredArtists, () => rt.plugins.listMonitoredArtists());
 

@@ -2065,6 +2065,28 @@ img.queue-row-art {
   margin-bottom: 1px;
 }
 
+/* ---- Artist info panel ---- */
+
+.artist-info-image {
+  width: 100%;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.artist-info-bio {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+  white-space: pre-line;
+}
+
+.artist-info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ---- Home view ---- */
 
 .home-greeting {

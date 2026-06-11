@@ -424,12 +424,14 @@ export async function activate(ctx: PluginContext): Promise<void> {
         const image = (Array.isArray(a.image) ? a.image : []).find(
           (i) => i.size === "extralarge" && i["#text"],
         );
+        const listeners = Number(a.stats?.listeners);
+        const playCount = Number(a.stats?.playcount);
         return {
           name: a.name,
           bio: bio || undefined,
           url: typeof a.url === "string" ? a.url : undefined,
-          listeners: a.stats?.listeners ? Number(a.stats.listeners) : undefined,
-          playCount: a.stats?.playcount ? Number(a.stats.playcount) : undefined,
+          listeners: Number.isFinite(listeners) ? listeners : undefined,
+          playCount: Number.isFinite(playCount) ? playCount : undefined,
           imageUrl: image?.["#text"],
         };
       } catch (err) {
