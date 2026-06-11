@@ -21,6 +21,9 @@ directories:
 files:
   - "out/**/*"
 mac:
+  # 1024px PNG (generated from assets/icon.svg by scripts/gen-icon.sh);
+  # electron-builder converts it to a full .icns at package time.
+  icon: build/icon.png
   # zip is REQUIRED alongside dmg: electron-updater on macOS (Squirrel.Mac)
   # updates from the zip; latest-mac.yml points at it.
   target:
