@@ -4,6 +4,7 @@ import {
   computeSmartPlaylist,
   SMART_TITLES,
   type SmartTrackStat,
+  smartMixThumbs,
   smartTrackKey,
 } from "./smart-playlists";
 import { KEY_SEPARATOR } from "./taste-profile";
@@ -163,5 +164,36 @@ describe("rediscover", () => {
       track({ title: `T${i}`, artistName: "A", userRating: 10 }),
     );
     expect(computeSmartPlaylist("rediscover", tracks, [], [], NOW)).toHaveLength(100);
+  });
+});
+
+describe("smartMixThumbs", () => {
+  const t = (artist: string, title: string, thumb?: string, rating?: number) =>
+    ({
+      id: `${artist}-${title}`,
+      serverId: "s",
+      artistName: artist,
+      title,
+      thumb,
+      userRating: rating,
+      albumId: "al",
+      artistId: "ar",
+      durationMs: 1000,
+    }) as unknown as Track;
+
+  it("rule kinds: thumbs of the computed playlist, deduped, no undefineds", () => {
+    const tracks = [
+      t("a", "one", "art1.jpg", 10),
+      t("a", "two", "art1.jpg", 9), // same album art → deduped
+      t("b", "three", undefined, 8), // no art → dropped
+      t("c", "four", "art2.jpg", 2), // below threshold → not in playlist
+    ];
+    expect(smartMixThumbs("top-rated", tracks, [], [], 0)).toEqual(["art1.jpg"]);
+  });
+
+  it("for-you approximates with top-taste artists' track art", () => {
+    const tracks = [t("fav", "x", "fav.jpg"), t("other", "y", "other.jpg")];
+    const scores = [{ name: "Fav", score: 5 }];
+    expect(smartMixThumbs("for-you", tracks, [], scores, 0)).toEqual(["fav.jpg"]);
   });
 });

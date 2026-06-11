@@ -2974,6 +2974,24 @@ img.queue-row-art {
   background: linear-gradient(135deg, var(--green), #1f6e52);
 }
 
+/* Smart cards with collage art keep a small kind-glyph chip for identity. */
+.smart-card-art--collage {
+  position: relative;
+  padding: 0;
+}
+.smart-card-glyph {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
+}
+
 /* Artist header: .album-actions sits inline in the flex row, so the
    margin-top (designed for the album header's stacked meta column) would
    push the buttons below the centered title/stars baseline. */

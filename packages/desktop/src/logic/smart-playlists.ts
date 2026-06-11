@@ -35,6 +35,44 @@ export interface SmartTrackStat {
   decayedPlays: number;
 }
 
+/** Up to the first 8 top-taste artists feed the For You tile art. */
+const FOR_YOU_ART_ARTISTS = 8;
+
+function dedupedThumbs(thumbs: (string | undefined)[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const t of thumbs) {
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+/** Album-art candidates for a smart-mix tile collage. Rule-based kinds reuse
+ *  the real playlist computation (track thumb = album art). "for-you"'s full
+ *  composition is a multi-IPC fan-out — far too heavy for a Home tile — so it
+ *  approximates with the top-taste artists' track art. */
+export function smartMixThumbs(
+  kind: SmartKind,
+  tracks: Track[],
+  stats: SmartTrackStat[],
+  artistScores: { name: string; score: number }[],
+  nowMs: number,
+): string[] {
+  if (kind === "for-you") {
+    const top = new Set(
+      artistScores.slice(0, FOR_YOU_ART_ARTISTS).map((a) => a.name.toLowerCase()),
+    );
+    return dedupedThumbs(
+      tracks.filter((t) => top.has(t.artistName.toLowerCase())).map((t) => t.thumb),
+    );
+  }
+  return dedupedThumbs(
+    computeSmartPlaylist(kind, tracks, stats, artistScores, nowMs).map((t) => t.thumb),
+  );
+}
+
 /**
  * Pure smart-playlist rules: select + order library tracks for one canned
  * kind, joining main's taste-profile stats by artist+title key. No I/O, no

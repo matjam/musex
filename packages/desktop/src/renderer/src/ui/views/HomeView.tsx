@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { sampleThumbs } from "../../../../logic/collage";
 import { albumsForMix, MOOD_MIXES } from "../../../../logic/mood-mixes";
 import type { SmartKind } from "../../../../logic/smart-playlists";
-import { SMART_TITLES } from "../../../../logic/smart-playlists";
+import { SMART_TITLES, smartMixThumbs } from "../../../../logic/smart-playlists";
 import type { SectionDto } from "../../../../shared/ipc-contract";
 import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
@@ -39,6 +39,7 @@ export function HomeView() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [mixThumbs, setMixThumbs] = useState<Map<string, string[]>>(new Map());
+  const [smartThumbs, setSmartThumbs] = useState<Map<SmartKind, string[]>>(new Map());
   const [pluginSections, setPluginSections] = useState<SectionDto[]>([]);
   const [discoveries, setDiscoveries] = useState<Artist[]>([]);
 
@@ -115,6 +116,45 @@ export function HomeView() {
     };
   }, [library]);
 
+  // Smart-mix tile art: compose each mix in the background (cheap pure rules
+  // over the cached all-tracks list + taste snapshot) and collage its album art.
+  useEffect(() => {
+    if (!library) return;
+    let cancelled = false;
+    const validator = listValidator(library.updatedAt);
+    Promise.all([
+      window.musex.listAllTracks(library.id, "title", validator),
+      window.musex.getTasteSnapshot(),
+    ])
+      .then(([tracks, taste]) => {
+        if (cancelled) return;
+        const stats = taste.stats.map((s) => ({
+          key: s.key,
+          plays: s.plays,
+          lastPlayedMs: s.lastPlayedMs,
+          decayedPlays: s.decayedPlays,
+        }));
+        setSmartThumbs(
+          new Map(
+            SMART_ORDER.map((kind) => [
+              kind,
+              sampleThumbs(
+                smartMixThumbs(kind, tracks, stats, taste.topArtists, Date.now()),
+                4,
+                kind,
+              ),
+            ]),
+          ),
+        );
+      })
+      .catch(() => {
+        // tile art is decoration — icon placeholder stays on failure
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [library]);
+
   const topPlaylists = playlists.filter((p) => p.trackCount > 0).slice(0, 8);
   const empty =
     topPlaylists.length === 0 &&
@@ -131,6 +171,7 @@ export function HomeView() {
         <div className="genre-grid">
           {SMART_ORDER.map((kind) => {
             const Icon = SMART_ICONS[kind];
+            const thumbs = smartThumbs.get(kind) ?? [];
             return (
               <button
                 key={kind}
@@ -138,9 +179,18 @@ export function HomeView() {
                 className={`genre-card smart-card smart-card--${kind}`}
                 onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
               >
-                <div className="smart-card-art">
-                  <Icon size={42} strokeWidth={1.5} />
-                </div>
+                {thumbs.length > 0 ? (
+                  <div className="smart-card-art smart-card-art--collage">
+                    <CardCollage thumbs={thumbs} className="genre-card-collage" />
+                    <span className="smart-card-glyph">
+                      <Icon size={14} />
+                    </span>
+                  </div>
+                ) : (
+                  <div className="smart-card-art">
+                    <Icon size={42} strokeWidth={1.5} />
+                  </div>
+                )}
                 <div className="genre-card-name">{SMART_TITLES[kind]}</div>
               </button>
             );
