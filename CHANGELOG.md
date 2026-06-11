@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/matjam/musex/compare/v0.5.0...v0.6.0) (2026-06-11)
+
+
+### Features
+
+* categorized settings with per-plugin panes and in-app update check ([#24](https://github.com/matjam/musex/issues/24)) ([c3a81c5](https://github.com/matjam/musex/commit/c3a81c58dfe6eb55f406a9721b0723b42edb3cc6))
+
 ## [0.5.0](https://github.com/matjam/musex/compare/v0.4.0...v0.5.0) (2026-06-11)
 
 
