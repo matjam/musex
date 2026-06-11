@@ -49,6 +49,12 @@ const ALBUM_FIND_RETRY_MS = 2_000;
 const PENDING_POLL_MS = 20_000;
 const PENDING_MAX_AGE_MS = 15 * 60_000;
 const PENDING_KEY = "pendingAlbums";
+/** After requesting an album, re-check that it STAYED monitored: Lidarr's
+ *  initial artist refresh (which may still be running when we monitor the
+ *  album) can reset per-album monitoring to the artist's add policy. */
+const VERIFY_KEY = "verifyAlbums";
+const VERIFY_DELAY_MS = 60_000;
+const VERIFY_MAX_ATTEMPTS = 3;
 /** Queue page size for lookup/status (Lidarr defaults to 10). */
 const QUEUE_PAGE_SIZE = 100;
 /** Downloads view cap. */
@@ -127,6 +133,15 @@ type PendingAlbum = {
   addedAt: number;
 };
 type PendingAlbums = Record<string, PendingAlbum>;
+
+/** A requested album awaiting monitored-state verification; keyed by
+ *  foreignAlbumId in storage under VERIFY_KEY. */
+type VerifyAlbum = {
+  title?: string;
+  addedAt: number;
+  attempts: number;
+};
+type VerifyAlbums = Record<string, VerifyAlbum>;
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -369,6 +384,8 @@ export async function activate(ctx: PluginContext): Promise<void> {
   // ── Pending albums (deferred until Lidarr's artist refresh finishes) ─────
   const readPending = async (): Promise<PendingAlbums> =>
     (await ctx.storage.get<PendingAlbums>(PENDING_KEY)) ?? {};
+  const readVerify = async (): Promise<VerifyAlbums> =>
+    (await ctx.storage.get<VerifyAlbums>(VERIFY_KEY)) ?? {};
 
   /** Lidarr bug (Lidarr/Lidarr#3597): POST artist with addOptions.monitor
    *  "none" DISREGARDS monitored:true and adds the artist unmonitored — which
@@ -391,13 +408,33 @@ export async function activate(ctx: PluginContext): Promise<void> {
     }
   };
 
-  /** Monitor the album and kick off a search (shared by acquire + poller). */
-  const requestAlbum = async (c: LidarrClient, album: LidarrAlbum): Promise<void> => {
+  /** Monitor the album + kick off a search (the raw operations; callers
+   *  handle notification/verification). */
+  const monitorAndSearch = async (c: LidarrClient, album: LidarrAlbum): Promise<void> => {
     await ensureArtistMonitored(c, album.artistId);
     if (!album.monitored) {
       await c.put("/api/v1/album/monitor", { albumIds: [album.id], monitored: true });
     }
     await c.post("/api/v1/command", { name: "AlbumSearch", albumIds: [album.id] });
+  };
+
+  /** Monitor the album, kick off a search, and schedule a verification pass:
+   *  when the artist was JUST added, Lidarr's initial refresh may still be
+   *  running and can reset the album's monitored flag after we set it —
+   *  leaving the artist in Lidarr but nothing downloading. The poller
+   *  re-checks after the refresh settles and re-asserts if needed. */
+  const requestAlbum = async (c: LidarrClient, album: LidarrAlbum): Promise<void> => {
+    await monitorAndSearch(c, album);
+    if (album.foreignAlbumId) {
+      const verify = await readVerify();
+      verify[album.foreignAlbumId] = {
+        ...(album.title != null ? { title: album.title } : {}),
+        addedAt: Date.now(),
+        attempts: 0,
+      };
+      await ctx.storage.set(VERIFY_KEY, verify);
+      armPendingPoller();
+    }
     ctx.ui.notify(`Requested ${album.title ?? "album"} on Lidarr`);
   };
 
@@ -408,11 +445,14 @@ export async function activate(ctx: PluginContext): Promise<void> {
     }
   };
 
-  /** One poll pass: request every pending album whose metadata has appeared,
-   *  expire entries older than PENDING_MAX_AGE_MS, stop when none remain. */
+  /** One poll pass: request every pending album whose metadata has appeared
+   *  (expiring entries older than PENDING_MAX_AGE_MS), verify that recently
+   *  requested albums STAYED monitored (re-asserting when Lidarr's initial
+   *  refresh clobbered them), and stop when no work remains. */
   const processPending = async (): Promise<void> => {
     const pending = await readPending();
-    if (Object.keys(pending).length === 0) {
+    const verifyCount = Object.keys(await readVerify()).length;
+    if (Object.keys(pending).length === 0 && verifyCount === 0) {
       stopPendingPoller();
       return;
     }
@@ -441,7 +481,43 @@ export async function activate(ctx: PluginContext): Promise<void> {
       }
     }
     if (changed) await ctx.storage.set(PENDING_KEY, pending);
-    if (Object.keys(pending).length === 0) stopPendingPoller();
+
+    // Verification: re-read fresh (requestAlbum above may have added entries).
+    const verify = await readVerify();
+    let verifyChanged = false;
+    for (const [foreignAlbumId, entry] of Object.entries(verify)) {
+      if (Date.now() - entry.addedAt < VERIFY_DELAY_MS) continue; // refresh settling
+      if (!c) continue;
+      const label = entry.title ?? "the album";
+      try {
+        const albums = await c.get<LidarrAlbum[]>("/api/v1/album", { foreignAlbumId });
+        const album = albums.find((a) => a.foreignAlbumId === foreignAlbumId);
+        if (album === undefined) continue; // metadata churn — next pass
+        if (album.monitored) {
+          delete verify[foreignAlbumId];
+          verifyChanged = true;
+          continue;
+        }
+        if (entry.attempts >= VERIFY_MAX_ATTEMPTS) {
+          delete verify[foreignAlbumId];
+          verifyChanged = true;
+          ctx.ui.notify(`Lidarr keeps unmonitoring ${label} — check it in Lidarr`, "error");
+          continue;
+        }
+        ctx.log(`album "${label}" was unmonitored after our request — re-asserting`);
+        await monitorAndSearch(c, album);
+        entry.attempts++;
+        entry.addedAt = Date.now(); // wait a full delay before re-checking
+        verifyChanged = true;
+      } catch (err) {
+        ctx.log(`monitor verification failed for ${label}:`, errText(err));
+      }
+    }
+    if (verifyChanged) await ctx.storage.set(VERIFY_KEY, verify);
+
+    if (Object.keys(pending).length === 0 && Object.keys(verify).length === 0) {
+      stopPendingPoller();
+    }
   };
 
   const armPendingPoller = (): void => {
@@ -451,8 +527,11 @@ export async function activate(ctx: PluginContext): Promise<void> {
     }, PENDING_POLL_MS);
   };
 
-  // Resume polling for any albums deferred in a previous session.
-  if (Object.keys(await readPending()).length > 0) armPendingPoller();
+  // Resume polling for any albums deferred or awaiting monitored-state
+  // verification from a previous session.
+  if (Object.keys(await readPending()).length > 0 || Object.keys(await readVerify()).length > 0) {
+    armPendingPoller();
+  }
 
   // ── Test connection ─────────────────────────────────────────────────────
   ctx.onSettingsAction("test", async () => {
