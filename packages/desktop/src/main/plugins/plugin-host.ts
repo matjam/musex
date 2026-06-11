@@ -365,6 +365,9 @@ export class PluginHost {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`[plugin:${entry.pluginId}] acquire failed: ${msg}`);
     }
+    // Acquiring an album makes its artist monitored in Lidarr (and the
+    // expansion coordinator acquires in the background) — drop the badge cache.
+    this.monitoredCache = null;
   }
 
   /** Federated external artist search: ask providers implementing
