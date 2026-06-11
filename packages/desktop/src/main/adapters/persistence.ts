@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { Library, RepeatMode, Track } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import Store from "electron-store";
+import {
+  type AudioPrefs,
+  DEFAULT_AUDIO_PREFS,
+  sanitizeAudioPrefs,
+} from "../../logic/audio-filters.js";
 import type { ExpansionEntry } from "../../logic/taste-expansion.js";
 import type { TasteState } from "../../logic/taste-profile.js";
 
@@ -11,6 +16,8 @@ export interface PersistedState {
   volume: number;
   cacheEnabled: boolean;
   cacheMaxBytes: number;
+  // Volume leveling + EQ preset (see logic/audio-filters.ts).
+  audioPrefs: AudioPrefs;
   // Last known-good base URL per Plex server (machineIdentifier -> URL). Lets us
   // skip @ctrl/plex's slow connection probe on startup — we connect straight to
   // the cached URL and only rediscover if it's unreachable.
@@ -33,6 +40,7 @@ const store = new Store<PersistedState>({
     volume: 1,
     cacheEnabled: false,
     cacheMaxBytes: DEFAULT_CACHE_MAX_BYTES,
+    audioPrefs: DEFAULT_AUDIO_PREFS,
     serverUrls: {},
     disabledPlugins: [],
     recentlyPlayed: [],
@@ -109,6 +117,13 @@ export const persistence = {
   },
   setCacheMaxBytes(v: number): void {
     store.set("cacheMaxBytes", v);
+  },
+  getAudioPrefs(): AudioPrefs {
+    // sanitize on read: defends against hand-edited or stale store JSON.
+    return sanitizeAudioPrefs(store.get("audioPrefs"));
+  },
+  setAudioPrefs(p: AudioPrefs): void {
+    store.set("audioPrefs", p);
   },
   getPlaybackQueue(): Track[] | null {
     return queueStore.get("tracks") ?? null;

@@ -2,6 +2,7 @@ import type { Album, Artist, LibrarySort, Queue, Track } from "@musex/core";
 import { createPlaylist, discoverMusicLibraries } from "@musex/core";
 import type { SectionContext } from "@musex/plugin-api";
 import { ipcMain, shell } from "electron";
+import { buildAf, replaygainMode, sanitizeAudioPrefs } from "../logic/audio-filters.js";
 import { isHttpUrl } from "../logic/external-url.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
@@ -225,6 +226,14 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.setVolume, (_e, v: number) => {
     if (typeof v !== "number" || v < 0 || v > 1) throw new Error("invalid volume");
     persistence.setVolume(v);
+  });
+  ipcMain.handle(IPC.getAudioPrefs, () => persistence.getAudioPrefs());
+  ipcMain.handle(IPC.setAudioPrefs, async (_e, raw: unknown) => {
+    const prefs = sanitizeAudioPrefs(raw);
+    // Apply to mpv FIRST; persist only after it accepted (an mpv rejection
+    // propagates to the renderer and the old prefs stay in force).
+    await rt.mpv.applyAudioConfig({ af: buildAf(prefs), replaygain: replaygainMode(prefs) });
+    persistence.setAudioPrefs(prefs);
   });
   ipcMain.handle(IPC.getPreferences, () => ({
     cacheEnabled: persistence.getCacheEnabled(),

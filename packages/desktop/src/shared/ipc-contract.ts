@@ -35,6 +35,8 @@ export const IPC = {
   resolveStream: "musex:resolveStream", // (track) -> StreamRef
   getVolume: "musex:getVolume", // -> number
   setVolume: "musex:setVolume", // (v) -> void
+  getAudioPrefs: "musex:audio:getPrefs", // -> AudioPrefsDto
+  setAudioPrefs: "musex:audio:setPrefs", // (AudioPrefsDto) -> void (applies to mpv, then persists)
   getPreferences: "musex:getPreferences", // -> Preferences
   setCacheEnabled: "musex:setCacheEnabled", // (boolean) -> void
   setCacheMaxBytes: "musex:setCacheMaxBytes", // (number bytes) -> void
@@ -111,6 +113,10 @@ export type DiscoverResult = { libraries: Library[]; unreachable: Server[] };
 
 export type RestoreSessionResult = { library: Library | null };
 export type Preferences = { cacheEnabled: boolean; cacheMaxBytes: number };
+/** Volume leveling + EQ preset. Structurally identical to
+ *  `logic/audio-filters.ts`'s AudioPrefs — duplicated (like
+ *  PlaybackEngineEvent) so preload never imports main-process logic. */
+export type AudioPrefsDto = { leveling: "off" | "replaygain" | "auto"; eqPreset: string };
 export type CacheStats = { bytes: number; files: number };
 export type ClearCacheResult = { freedBytes: number };
 export type PlaybackCursorDto = {
@@ -321,6 +327,8 @@ export interface MusexApi {
   resolveStream(track: Track): Promise<StreamRef>;
   getVolume(): Promise<number>;
   setVolume(v: number): Promise<void>;
+  getAudioPrefs(): Promise<AudioPrefsDto>;
+  setAudioPrefs(prefs: AudioPrefsDto): Promise<void>;
   getPreferences(): Promise<Preferences>;
   setCacheEnabled(enabled: boolean): Promise<void>;
   setCacheMaxBytes(bytes: number): Promise<void>;
