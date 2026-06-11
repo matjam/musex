@@ -419,6 +419,9 @@ export class PluginHost {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`[plugin:${entry.pluginId}] monitor artist failed: ${msg}`);
     }
+    // The artist just became monitored — a stale 60s cache here would show
+    // an un-monitored chip/badge on the very next view the user opens.
+    this.monitoredCache = null;
   }
 
   /** Monitor an entire artist by NAME (e.g. from the External Artist view,

@@ -598,11 +598,13 @@ export function registerIpc(rt: Runtime): void {
       }
       const ownedByTitle = new Map<string, Album>();
       for (const a of ownedAlbums) {
-        const key = a.title.toLowerCase();
+        // trim() matches mergeDiscography's key — a whitespace-padded provider
+        // title must still flip to owned.
+        const key = a.title.trim().toLowerCase();
         if (!ownedByTitle.has(key)) ownedByTitle.set(key, a);
       }
       return items.map((item): AcquirableAlbumDto => {
-        const owned = ownedArtist ? ownedByTitle.get(item.title.toLowerCase()) : undefined;
+        const owned = ownedArtist ? ownedByTitle.get(item.title.trim().toLowerCase()) : undefined;
         if (owned && ownedArtist) {
           return {
             ...item,
@@ -725,11 +727,13 @@ export function registerIpc(rt: Runtime): void {
       }
       const ownedByTitle = new Map<string, Album>();
       for (const a of ownedAlbums) {
-        const key = a.title.toLowerCase();
+        // trim() matches mergeDiscography's key — a whitespace-padded provider
+        // title must still flip to owned.
+        const key = a.title.trim().toLowerCase();
         if (!ownedByTitle.has(key)) ownedByTitle.set(key, a);
       }
       return items.map((item): AcquirableAlbumDto => {
-        const owned = ownedArtist ? ownedByTitle.get(item.title.toLowerCase()) : undefined;
+        const owned = ownedArtist ? ownedByTitle.get(item.title.trim().toLowerCase()) : undefined;
         if (owned && ownedArtist) {
           return {
             ...item,
