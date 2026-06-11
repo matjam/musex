@@ -1,3 +1,4 @@
+import type { Library } from "@musex/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   LogEntryDto,
@@ -104,6 +105,11 @@ const api: MusexApi = {
     const listener = (_e: Electron.IpcRendererEvent, p: NavigateToPayload) => cb(p);
     ipcRenderer.on(IPC.navigateTo, listener);
     return () => ipcRenderer.removeListener(IPC.navigateTo, listener);
+  },
+  onLibraryChanged: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, lib: Library) => cb(lib);
+    ipcRenderer.on(IPC.libraryChanged, listener);
+    return () => ipcRenderer.removeListener(IPC.libraryChanged, listener);
   },
   expansionGetState: () => ipcRenderer.invoke(IPC.expansionGetState),
   expansionSetPrefs: (prefs) => ipcRenderer.invoke(IPC.expansionSetPrefs, prefs),
