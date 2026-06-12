@@ -1,5 +1,5 @@
-import type { Album, Track } from "@musex/core";
 import { describe, expect, it } from "vitest";
+import type { Album, Track } from "../models/index";
 import { albumsForGenre, genreIndex, tracksForGenre } from "./genres";
 
 function album(over: Partial<Album> & { id: string }): Album {

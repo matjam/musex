@@ -1,11 +1,11 @@
 import type { Library } from "@musex/core";
-import { PlexAuthError } from "@musex/core";
 import {
   ChangeCoalescer,
   nextReconnectDelayMs,
+  PlexAuthError,
   relevantSectionChange,
   timestampChanged,
-} from "../../logic/library-watch.js";
+} from "@musex/core";
 
 export interface LibraryWatcherDeps {
   getToken(): string | null;

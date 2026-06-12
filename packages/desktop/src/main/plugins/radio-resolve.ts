@@ -1,6 +1,6 @@
 import type { Track } from "@musex/core";
+import { KEY_SEPARATOR } from "@musex/core";
 import type { RecommendedTrack } from "@musex/plugin-api";
-import { KEY_SEPARATOR } from "../../logic/taste-profile.js";
 
 /** How many tracks an artist-level suggestion may contribute. */
 const ARTIST_PICKS_MAX = 2;

@@ -1,16 +1,17 @@
 import type { Album, Artist } from "@musex/core";
-import { useEffect, useState } from "react";
-import { sampleThumbs } from "../../../../logic/collage";
-import { albumsForMix, MOOD_MIXES } from "../../../../logic/mood-mixes";
-import type { SmartKind } from "../../../../logic/smart-playlists";
 import {
+  albumsForMix,
+  listValidator,
+  MOOD_MIXES,
   SMART_DESCRIPTIONS,
   SMART_TITLES,
+  type SmartKind,
+  sampleThumbs,
   smartMixEmpty,
   smartMixThumbs,
-} from "../../../../logic/smart-playlists";
+} from "@musex/core";
+import { useEffect, useState } from "react";
 import type { SectionDto } from "../../../../shared/ipc-contract";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlaylists } from "../../state/playlists";
 import { CardCollage } from "../CardCollage";

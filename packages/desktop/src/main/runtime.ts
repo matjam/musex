@@ -1,11 +1,10 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Library, Pin, Track } from "@musex/core";
+import { isHttpUrl, TasteProfile } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { app, safeStorage, shell } from "electron";
 import { buildAf, replaygainMode } from "../logic/audio-filters.js";
-import { isHttpUrl } from "../logic/external-url.js";
-import { TasteProfile } from "../logic/taste-profile.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
 import { LibraryWatcher } from "./adapters/library-watcher.js";

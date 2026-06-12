@@ -1,4 +1,4 @@
-import type { Album, Artist, MediaInfo, Track } from "@musex/core";
+import type { Album, Artist, MediaInfo, Track } from "../models/index";
 
 interface RawArtist {
   ratingKey: string;

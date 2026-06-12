@@ -1,6 +1,7 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { KEY_SEPARATOR, mergeDiscography } from "@musex/core";
 import type {
   AcquirableAlbum,
   AcquisitionStatusItem,
@@ -20,9 +21,7 @@ import type {
   SimilarItem,
   TrackInfo,
 } from "@musex/plugin-api";
-import { mergeDiscography } from "../../logic/discography-merge.js";
 import { validateManifest } from "../../logic/plugin-manifest.js";
-import { KEY_SEPARATOR } from "../../logic/taste-profile.js";
 import type { PluginInfo, PluginNotification, PluginSettings } from "../../shared/ipc-contract.js";
 import { buildPluginContext, createPluginRegistry, type PluginRegistry } from "./plugin-context.js";
 import {

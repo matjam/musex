@@ -1,4 +1,4 @@
-import type { Track } from "@musex/core";
+import type { Track } from "../models/index";
 import { smartTrackKey } from "./smart-playlists";
 
 /** Unexplored bonus: never played at all. */

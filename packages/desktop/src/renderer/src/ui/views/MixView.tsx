@@ -1,9 +1,7 @@
 import type { Track } from "@musex/core";
+import { albumsForMix, composeMoodMix, listValidator, MOOD_MIXES, sampleThumbs } from "@musex/core";
 import { Play, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { sampleThumbs } from "../../../../logic/collage";
-import { albumsForMix, composeMoodMix, MOOD_MIXES } from "../../../../logic/mood-mixes";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";

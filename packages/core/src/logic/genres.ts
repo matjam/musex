@@ -1,4 +1,4 @@
-import type { Album, Track } from "@musex/core";
+import type { Album, Track } from "../models/index";
 
 /** One entry in the library genre index. */
 export interface GenreEntry {

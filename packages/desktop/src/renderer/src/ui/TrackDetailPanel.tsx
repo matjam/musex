@@ -1,6 +1,6 @@
+import { smartTrackKey } from "@musex/core";
 import { Play, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { smartTrackKey } from "../../../logic/smart-playlists";
 import type { TrackDetailDto, TrackStatDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
 import { usePanel } from "../state/panel";

@@ -1,13 +1,14 @@
 import type { Library, Track } from "@musex/core";
-import { Play, Shuffle } from "lucide-react";
-import { useEffect, useState } from "react";
-import { composeForYou, type ForYouInput } from "../../../../logic/for-you";
 import {
+  composeForYou,
   computeSmartPlaylist,
+  type ForYouInput,
+  listValidator,
   SMART_TITLES,
   type SmartKind,
-} from "../../../../logic/smart-playlists";
-import { listValidator } from "../../../../shared/list-validator";
+} from "@musex/core";
+import { Play, Shuffle } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";

@@ -1,3 +1,4 @@
+import { MOOD_MIXES, SMART_TITLES, type SmartKind } from "@musex/core";
 import {
   ChevronDown,
   ChevronRight,
@@ -11,9 +12,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { MOOD_MIXES } from "../../../logic/mood-mixes";
-import type { SmartKind } from "../../../logic/smart-playlists";
-import { SMART_TITLES } from "../../../logic/smart-playlists";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";

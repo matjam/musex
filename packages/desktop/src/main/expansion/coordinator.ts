@@ -11,7 +11,7 @@ import {
   expansionParams,
   planPicks,
   type SimilarNeighbor,
-} from "../../logic/taste-expansion.js";
+} from "@musex/core";
 import { type ExpansionPrefs, persistence } from "../adapters/persistence.js";
 import type { PluginHost } from "../plugins/plugin-host.js";
 

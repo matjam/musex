@@ -5,6 +5,7 @@ import http from "node:http";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
 import type { StreamRef, Track } from "@musex/core";
+import { validExternalImageUrl } from "@musex/core";
 import {
   cacheKey,
   contentTypeForPath,
@@ -13,7 +14,6 @@ import {
   parseByteRange,
   sniffImageType,
 } from "../../logic/cache.js";
-import { validExternalImageUrl } from "../../logic/external-url.js";
 import type { MediaCache } from "./media-cache.js";
 
 const PREFETCH_DEPTH = 10;

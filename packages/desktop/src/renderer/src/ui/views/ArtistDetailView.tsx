@@ -1,7 +1,7 @@
 import type { Album, Artist, Track } from "@musex/core";
+import { listValidator } from "@musex/core";
 import { ListEnd, ListPlus, MoreHorizontal, Play, Radio, Shuffle, Sparkles } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";

@@ -1,5 +1,5 @@
-import type { Track } from "@musex/core";
 import { describe, expect, it } from "vitest";
+import type { Track } from "../models/index";
 import {
   computeSmartPlaylist,
   SMART_DESCRIPTIONS,

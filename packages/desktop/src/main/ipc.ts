@@ -1,9 +1,8 @@
 import type { Album, Artist, LibrarySort, Queue, Track } from "@musex/core";
-import { createPlaylist, discoverMusicLibraries } from "@musex/core";
+import { createPlaylist, discoverMusicLibraries, isHttpUrl } from "@musex/core";
 import type { SectionContext } from "@musex/plugin-api";
 import { ipcMain, shell } from "electron";
 import { buildAf, replaygainMode, sanitizeAudioPrefs } from "../logic/audio-filters.js";
-import { isHttpUrl } from "../logic/external-url.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
   AcquirableAlbumDto,

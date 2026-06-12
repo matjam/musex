@@ -1,5 +1,5 @@
-import type { Album, Track } from "@musex/core";
 import { describe, expect, it } from "vitest";
+import type { Album, Track } from "../models/index";
 import { albumsForMix, composeMoodMix, MOOD_MIXES, type MoodMix } from "./mood-mixes";
 import { smartTrackKey } from "./smart-playlists";
 

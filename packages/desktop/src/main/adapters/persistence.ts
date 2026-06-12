@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Library, RepeatMode, Track } from "@musex/core";
+import type { ExpansionEntry, Library, RepeatMode, TasteState, Track } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import Store from "electron-store";
 import {
@@ -7,8 +7,6 @@ import {
   DEFAULT_AUDIO_PREFS,
   sanitizeAudioPrefs,
 } from "../../logic/audio-filters.js";
-import type { ExpansionEntry } from "../../logic/taste-expansion.js";
-import type { TasteState } from "../../logic/taste-profile.js";
 
 export interface PersistedState {
   clientId: string;

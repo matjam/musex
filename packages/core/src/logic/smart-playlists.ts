@@ -1,4 +1,4 @@
-import type { Track } from "@musex/core";
+import type { Track } from "../models/index";
 import { KEY_SEPARATOR } from "./taste-profile";
 
 /** The canned smart playlists (sidebar "Smart" section). */
