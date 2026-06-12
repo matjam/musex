@@ -169,7 +169,7 @@ export class Runtime {
 
     // Taste expansion: host-owned coordinator over the plugin providers
     // (similar/lastfm + acquisition/lidarr). Pure planning lives in
-    // logic/taste-expansion.ts; this just wires its inputs.
+    // @musex/core's taste-expansion; this just wires its inputs.
     this.expansion = new ExpansionCoordinator({
       host: this.plugins,
       getLibrary: () => this.libraries[0] ?? null,

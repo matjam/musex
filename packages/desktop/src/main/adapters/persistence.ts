@@ -69,7 +69,7 @@ const tasteStore = new Store<{ taste: TasteState | null }>({
   name: "listening-profile",
   defaults: { taste: null },
 });
-// Taste-expansion attempt ledger + prefs (see logic/taste-expansion.ts).
+// Taste-expansion attempt ledger + prefs (see @musex/core's taste-expansion).
 const expansionStore = new Store<{ ledger: ExpansionEntry[]; prefs: ExpansionPrefs }>({
   name: "expansion-ledger",
   defaults: { ledger: [], prefs: { enabled: false, albumsPerWeek: 2, aggressiveness: 50 } },
