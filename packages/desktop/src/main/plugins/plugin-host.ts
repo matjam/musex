@@ -71,8 +71,8 @@ export interface PluginHostDeps {
    *  Activated before any dynamic scan; their ids win on collision with user plugins.
    *  Defaults to [] when omitted (useful in tests that exercise only user plugin loading). */
   corePlugins?: readonly CorePlugin[];
-  /** Dirs whose subdirectories are plugins: `<sub>/plugin.json` or (dev repo
-   *  convention) `<sub>/dist/plugin.json`. */
+  /** Dirs whose subdirectories are plugins: each sub must contain `plugin.json`
+   *  at its root (the entry file named in the manifest sits alongside it). */
   scanDirs: string[];
   dataDir: string;
   secretsDir: string;
@@ -166,15 +166,38 @@ export class PluginHost {
 
   private async loadCore(corePlugins: readonly CorePlugin[]): Promise<void> {
     for (const cp of corePlugins) {
-      if (cp.manifest.apiVersion !== HOST_API_VERSION) {
-        console.error(
-          `[plugins] core plugin "${cp.manifest.id}" apiVersion ${cp.manifest.apiVersion} ≠ host ${HOST_API_VERSION} — skipped`,
-        );
-        continue;
-      }
       if (this.plugins.has(cp.manifest.id)) {
         // Should never happen on first load; guard against double-call.
         console.error(`[plugins] duplicate core plugin id "${cp.manifest.id}" — skipped`);
+        continue;
+      }
+      if (cp.manifest.apiVersion !== HOST_API_VERSION) {
+        // List as incompatible (visible in Settings) rather than silently dropping.
+        const reason = `incompatible: requires API v${cp.manifest.apiVersion}, host is v${HOST_API_VERSION}`;
+        console.error(`[plugins] core plugin "${cp.manifest.id}" ${reason}`);
+        this.plugins.set(cp.manifest.id, {
+          manifest: {
+            id: cp.manifest.id,
+            name: cp.manifest.name,
+            version: cp.manifest.version,
+            apiVersion: cp.manifest.apiVersion,
+            entry: "",
+          },
+          dir: "",
+          origin: "core",
+          status: "incompatible",
+          error: reason,
+          disposables: [],
+          settingsSchema: [],
+          settingsActions: new Map(),
+          storage: createPluginStorage(this.deps.dataDir, cp.manifest.id),
+          secrets: createPluginSecrets(
+            this.deps.secretsDir,
+            cp.manifest.id,
+            this.deps.encrypt,
+            this.deps.decrypt,
+          ),
+        });
         continue;
       }
       const rec: LoadedPlugin = {
@@ -201,16 +224,17 @@ export class PluginHost {
       };
       this.plugins.set(cp.manifest.id, rec);
       if (!this.deps.isEnabled(cp.manifest.id)) continue;
-      await this.activateCorePlugin(rec, cp.activate);
+      await this.activateCorePlugin(rec, cp.activate, cp.deactivate);
     }
   }
 
   private async activateCorePlugin(
     rec: LoadedPlugin,
     activate: (ctx: PluginContext) => void | Promise<void>,
+    deactivate?: () => void | Promise<void>,
   ): Promise<void> {
     try {
-      rec.module = { activate };
+      rec.module = { activate, deactivate };
       const ctx = buildPluginContext(
         rec.manifest,
         {
@@ -248,8 +272,20 @@ export class PluginHost {
     if (rec.status === "incompatible") return; // listed but never activatable
     if (v) {
       if (rec.status === "active") return;
-      this.generation += 1; // fresh import on re-enable
-      await this.activatePlugin(rec);
+      if (rec.origin === "core") {
+        // Core plugins are statically bundled — re-activate via the static path,
+        // never via dynamic import() which would try to import a directory ("").
+        const cp = (this.deps.corePlugins ?? []).find((c) => c.manifest.id === id);
+        if (cp === undefined) {
+          rec.status = "error";
+          rec.error = `core plugin "${id}" not found in corePlugins`;
+          return;
+        }
+        await this.activateCorePlugin(rec, cp.activate, cp.deactivate);
+      } else {
+        this.generation += 1; // fresh import on re-enable
+        await this.activatePlugin(rec);
+      }
     } else {
       if (rec.status === "active") await this.deactivatePlugin(rec);
       rec.status = "disabled";
@@ -819,46 +855,40 @@ export class PluginHost {
         continue;
       }
       for (const sub of subs) {
-        // Dev repo convention FIRST (<repo>/plugins/<name>/dist/plugin.json —
-        // source packages also keep plugin.json at their root, which must NOT
-        // win or the entry resolves beside the source instead of the bundle),
-        // then the direct layout (userData/plugins/<id>/plugin.json).
-        for (const dir of [join(scanDir, sub, "dist"), join(scanDir, sub)]) {
-          const manifestPath = join(dir, "plugin.json");
-          let raw: string;
-          try {
-            raw = await readFile(manifestPath, "utf8");
-          } catch (err) {
-            if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-              console.error(`[plugins] cannot read ${manifestPath}:`, err);
-            }
-            continue; // try the next candidate layout
+        // User plugins: plugin.json at the dir root, entry file alongside it.
+        const dir = join(scanDir, sub);
+        const manifestPath = join(dir, "plugin.json");
+        let raw: string;
+        try {
+          raw = await readFile(manifestPath, "utf8");
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+            console.error(`[plugins] cannot read ${manifestPath}:`, err);
           }
-          let json: unknown;
-          try {
-            json = JSON.parse(raw);
-          } catch (err) {
-            console.error(`[plugins] malformed JSON in ${manifestPath}:`, err);
-            break; // manifest found but unusable — don't fall through to another layout
-          }
-          // A manifest whose entry file is absent is not a usable candidate
-          // (e.g. a source-tree plugin.json before `pnpm build:plugins` ran) —
-          // keep looking rather than failing at import time.
-          const entry = (json as Record<string, unknown>).entry;
-          if (typeof entry === "string" && entry.length > 0) {
-            try {
-              await access(join(dir, entry));
-            } catch {
-              console.error(
-                `[plugins] ${manifestPath}: entry "${entry}" not found next to the manifest` +
-                  ` (unbuilt plugin? run pnpm build:plugins)`,
-              );
-              continue;
-            }
-          }
-          found.push({ dir, json });
-          break;
+          continue;
         }
+        let json: unknown;
+        try {
+          json = JSON.parse(raw);
+        } catch (err) {
+          console.error(`[plugins] malformed JSON in ${manifestPath}:`, err);
+          continue;
+        }
+        // A manifest whose entry file is absent is not a usable candidate —
+        // keep looking rather than failing at import time.
+        const entry = (json as Record<string, unknown>).entry;
+        if (typeof entry === "string" && entry.length > 0) {
+          try {
+            await access(join(dir, entry));
+          } catch {
+            console.error(
+              `[plugins] ${manifestPath}: entry "${entry}" not found next to the manifest` +
+                ` (unbuilt plugin?)`,
+            );
+            continue;
+          }
+        }
+        found.push({ dir, json });
       }
     }
     return found;

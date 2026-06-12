@@ -184,7 +184,7 @@ import { build } from "esbuild";
 import { copyFile, mkdir } from "node:fs/promises";
 await build({ entryPoints: ["src/index.ts"], outfile: "dist/index.mjs",
               bundle: true, format: "esm", platform: "node" });
-await copyFile("plugin.json", "dist/index.mjs");
+await copyFile("plugin.json", "dist/plugin.json");
 ```
 
 `@musex/plugin-api` is types-only — import it freely; nothing of it lands in the

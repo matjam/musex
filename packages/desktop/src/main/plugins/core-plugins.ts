@@ -8,9 +8,10 @@ import * as lidarr from "@musex/plugin-lidarr";
 export interface CorePlugin {
   manifest: { id: string; name: string; version: string; apiVersion: number };
   activate: (ctx: PluginContext) => void | Promise<void>;
+  deactivate?: () => void | Promise<void>;
 }
 
 export const CORE_PLUGINS: readonly CorePlugin[] = [
   { manifest: lastfm.manifest, activate: lastfm.activate },
-  { manifest: lidarr.manifest, activate: lidarr.activate },
+  { manifest: lidarr.manifest, activate: lidarr.activate, deactivate: lidarr.deactivate },
 ];

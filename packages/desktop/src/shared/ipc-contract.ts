@@ -208,7 +208,8 @@ export interface PluginInfo {
   version: string;
   status: PluginStatus;
   /** "core" = first-party, statically bundled; "user" = dynamically loaded from
-   *  userData/plugins/. Core plugins cannot be disabled through the UI. */
+   *  userData/plugins/. Core plugins toggle like user plugins but load statically
+   *  (never via dynamic import()). */
   origin: "core" | "user";
   error?: string;
 }
