@@ -86,7 +86,9 @@ describe("PluginHost", () => {
     const { host } = makeHost();
     await host.loadAll();
 
-    expect(host.list()).toEqual([{ id: "good", name: "good", version: "1.0.0", status: "active" }]);
+    expect(host.list()).toEqual([
+      { id: "good", name: "good", version: "1.0.0", status: "active", origin: "user" },
+    ]);
     expect(activations()).toBe(1);
 
     const settings = await host.getSettings("good");

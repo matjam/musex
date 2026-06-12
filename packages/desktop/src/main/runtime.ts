@@ -17,6 +17,7 @@ import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";
+import { CORE_PLUGINS } from "./plugins/core-plugins.js";
 import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
 
@@ -108,19 +109,12 @@ export class Runtime {
       },
     });
 
-    // Plugin host: userData/plugins always FIRST (user plugins win duplicate
-    // ids — first scan dir wins); then the bundled plugins — packaged builds
-    // ship them in Resources/plugins (see electron-builder.yml extraResources),
-    // dev scans <repo>/plugins (the scan helper handles the <name>/dist/
-    // plugin.json build-output layout).
-    const scanDirs = [path.join(app.getPath("userData"), "plugins")];
-    scanDirs.push(
-      app.isPackaged
-        ? path.join(process.resourcesPath, "plugins")
-        : path.join(__dirname, "../../../../plugins"),
-    );
+    // Plugin host: core plugins (lastfm, lidarr) are statically bundled —
+    // no filesystem scan for them. Only userData/plugins is scanned for
+    // user-installed plugins; core plugin ids win on collision.
     this.plugins = new PluginHost({
-      scanDirs,
+      corePlugins: CORE_PLUGINS,
+      scanDirs: [path.join(app.getPath("userData"), "plugins")],
       dataDir: path.join(app.getPath("userData"), "plugin-data"),
       secretsDir: path.join(app.getPath("userData"), "plugin-secrets"),
       encrypt: async (s) => {

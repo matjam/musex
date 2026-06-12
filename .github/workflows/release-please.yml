@@ -57,9 +57,6 @@ jobs:
       - name: Vendor mpv
         run: pnpm vendor
 
-      - name: Build plugins
-        run: pnpm build:plugins
-
       - name: Check (typecheck + lint + tests)
         run: pnpm check
 

@@ -23,6 +23,7 @@ import type {
 } from "@musex/plugin-api";
 import { validateManifest } from "../../logic/plugin-manifest.js";
 import type { PluginInfo, PluginNotification, PluginSettings } from "../../shared/ipc-contract.js";
+import type { CorePlugin } from "./core-plugins.js";
 import { buildPluginContext, createPluginRegistry, type PluginRegistry } from "./plugin-context.js";
 import {
   createPluginSecrets,
@@ -66,6 +67,10 @@ function recommendationKey(artist: string, title: string | undefined): string {
 }
 
 export interface PluginHostDeps {
+  /** First-party plugins that are statically imported and bundled with the app.
+   *  Activated before any dynamic scan; their ids win on collision with user plugins.
+   *  Defaults to [] when omitted (useful in tests that exercise only user plugin loading). */
+  corePlugins?: readonly CorePlugin[];
   /** Dirs whose subdirectories are plugins: `<sub>/plugin.json` or (dev repo
    *  convention) `<sub>/dist/plugin.json`. */
   scanDirs: string[];
@@ -96,8 +101,10 @@ interface PluginModule {
 
 interface LoadedPlugin {
   manifest: PluginManifest;
-  /** Directory containing plugin.json + the entry file. */
+  /** Directory containing plugin.json + the entry file (empty for core plugins). */
   dir: string;
+  /** "core" = statically bundled first-party; "user" = dynamically loaded from userData. */
+  origin: "core" | "user";
   status: PluginInfo["status"];
   error?: string;
   module?: PluginModule;
@@ -126,13 +133,16 @@ export class PluginHost {
 
   async loadAll(): Promise<void> {
     this.generation += 1;
+    // Core plugins run first so their ids win on collision with user plugins.
+    await this.loadCore(this.deps.corePlugins ?? []);
     for (const found of await this.scan()) {
       await this.loadOne(found.dir, found.json);
     }
   }
 
   /** Dispose all registrations, deactivate, re-scan and re-import everything
-   *  (fresh module instances via the generation query). */
+   *  (fresh module instances via the generation query). Core plugins are
+   *  re-activated against the fresh registry on every reload. */
   async reloadAll(): Promise<void> {
     for (const rec of this.plugins.values()) {
       if (rec.status === "active") await this.deactivatePlugin(rec);
@@ -147,8 +157,89 @@ export class PluginHost {
       name: rec.manifest.name,
       version: rec.manifest.version,
       status: rec.status,
+      origin: rec.origin,
       ...(rec.error !== undefined ? { error: rec.error } : {}),
     }));
+  }
+
+  // ── core plugin loading ───────────────────────────────────────────────────
+
+  private async loadCore(corePlugins: readonly CorePlugin[]): Promise<void> {
+    for (const cp of corePlugins) {
+      if (cp.manifest.apiVersion !== HOST_API_VERSION) {
+        console.error(
+          `[plugins] core plugin "${cp.manifest.id}" apiVersion ${cp.manifest.apiVersion} ≠ host ${HOST_API_VERSION} — skipped`,
+        );
+        continue;
+      }
+      if (this.plugins.has(cp.manifest.id)) {
+        // Should never happen on first load; guard against double-call.
+        console.error(`[plugins] duplicate core plugin id "${cp.manifest.id}" — skipped`);
+        continue;
+      }
+      const rec: LoadedPlugin = {
+        manifest: {
+          id: cp.manifest.id,
+          name: cp.manifest.name,
+          version: cp.manifest.version,
+          apiVersion: cp.manifest.apiVersion,
+          entry: "",
+        },
+        dir: "",
+        origin: "core",
+        status: "disabled",
+        disposables: [],
+        settingsSchema: [],
+        settingsActions: new Map(),
+        storage: createPluginStorage(this.deps.dataDir, cp.manifest.id),
+        secrets: createPluginSecrets(
+          this.deps.secretsDir,
+          cp.manifest.id,
+          this.deps.encrypt,
+          this.deps.decrypt,
+        ),
+      };
+      this.plugins.set(cp.manifest.id, rec);
+      if (!this.deps.isEnabled(cp.manifest.id)) continue;
+      await this.activateCorePlugin(rec, cp.activate);
+    }
+  }
+
+  private async activateCorePlugin(
+    rec: LoadedPlugin,
+    activate: (ctx: PluginContext) => void | Promise<void>,
+  ): Promise<void> {
+    try {
+      rec.module = { activate };
+      const ctx = buildPluginContext(
+        rec.manifest,
+        {
+          storage: rec.storage,
+          secrets: rec.secrets,
+          notifySink: this.deps.notifySink,
+          openExternal: this.deps.openExternal,
+          library: this.deps.library,
+          registerSettings: (schema) => {
+            rec.settingsSchema = schema;
+          },
+          onSettingsAction: (key, handler) => {
+            rec.settingsActions.set(key, handler);
+          },
+        },
+        this.registry,
+        (d) => rec.disposables.push(d),
+      );
+      await activate(ctx);
+      rec.status = "active";
+      rec.error = undefined;
+    } catch (err) {
+      rec.status = "error";
+      rec.error = err instanceof Error ? err.message : String(err);
+      this.disposeRegistrations(rec);
+      rec.settingsSchema = [];
+      rec.settingsActions.clear();
+      console.error(`[plugins] core plugin ${rec.manifest.id} failed to activate:`, err);
+    }
   }
 
   async setEnabled(id: string, v: boolean): Promise<void> {
@@ -782,12 +873,20 @@ export class PluginHost {
     }
     const m = v.manifest;
     if (this.plugins.has(m.id)) {
-      console.error(`[plugins] duplicate plugin id "${m.id}" in ${dir} — first one wins`);
+      const existing = this.plugins.get(m.id);
+      if (existing?.origin === "core") {
+        console.warn(
+          `[plugins] user plugin "${m.id}" in ${dir} collides with a core plugin — skipped (core wins)`,
+        );
+      } else {
+        console.error(`[plugins] duplicate plugin id "${m.id}" in ${dir} — first one wins`);
+      }
       return;
     }
     const rec: LoadedPlugin = {
       manifest: m,
       dir,
+      origin: "user",
       status: "disabled",
       disposables: [],
       settingsSchema: [],
@@ -823,6 +922,7 @@ export class PluginHost {
         entry: "",
       },
       dir,
+      origin: "user",
       status: "incompatible",
       error: reason,
       disposables: [],

@@ -29,6 +29,16 @@
  *   monitorNewItems "all"|"none" (NewItemMonitorTypes) controls whether newly
  *   released albums are auto-monitored — the "fetch new releases" watch.
  */
+
+/** Static manifest — core plugins register through this instead of a
+ *  plugin.json (which remains the format for USER plugins only). */
+export const manifest = {
+  id: "lidarr",
+  name: "Lidarr",
+  version: "0.1.0",
+  apiVersion: 1,
+} as const;
+
 import type {
   AcquirableAlbum,
   AcquisitionStatusItem,

@@ -25,8 +25,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build plugins
-        run: pnpm build:plugins
-
       - name: Check (typecheck + lint + tests)
         run: pnpm check

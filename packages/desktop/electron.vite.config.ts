@@ -8,7 +8,16 @@ const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), 
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ["@musex/core", "@musex/plugin-api"] })],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: [
+          "@musex/core",
+          "@musex/plugin-api",
+          "@musex/plugin-lastfm",
+          "@musex/plugin-lidarr",
+        ],
+      }),
+    ],
     build: { rollupOptions: { output: { format: "es" } } },
   },
   preload: {
