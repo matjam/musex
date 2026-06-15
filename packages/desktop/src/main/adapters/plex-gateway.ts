@@ -31,9 +31,7 @@ import type {
   Server,
   Track,
 } from "@musex/core";
-import { PlexAuthError } from "@musex/core";
-import { plexSort } from "../../logic/library-sort.js";
-import { toAlbum, toArtist, toTrack } from "../../logic/plex-mapping.js";
+import { PlexAuthError, plexSort, toAlbum, toArtist, toTrack } from "@musex/core";
 
 /** Translate @ctrl/plex ofetch HTTP errors into PlexAuthError where appropriate.
  *  ofetch throws an object with a `response.status` number for HTTP errors. */

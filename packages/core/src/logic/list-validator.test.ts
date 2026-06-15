@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listValidator } from "../shared/list-validator.js";
+import { listValidator } from "./list-validator";
 
 describe("listValidator", () => {
   it("combines updatedAt and count into a stable string", () => {

@@ -1,14 +1,14 @@
 import type { Album, Artist, Library, Playlist } from "@musex/core";
-import { createContext, type ReactNode, useContext, useEffect, useReducer } from "react";
 import {
   EMPTY_HISTORY,
   goBack,
   goForward,
   type NavHistory,
   pushView,
+  type SmartKind,
   sameView,
-} from "../../../logic/nav-history";
-import type { SmartKind } from "../../../logic/smart-playlists";
+} from "@musex/core";
+import { createContext, type ReactNode, useContext, useEffect, useReducer } from "react";
 import type { SimilarGetArgs } from "../../../shared/ipc-contract";
 
 type AuthState = "restoring" | "signed-out" | "signing-in" | "signed-in";

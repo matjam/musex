@@ -8,7 +8,18 @@ Obsidian or VS Code extensions. Only install plugins you trust.
 The complete, authoritative type surface is `@musex/plugin-api`
 (`packages/plugin-api/src/index.ts`). This document explains how to use it.
 
-## Anatomy of a plugin
+## Bundled integrations (core plugins)
+
+Last.fm and Lidarr are **core plugins**: they ship as workspace packages
+(`plugins/lastfm`, `plugins/lidarr`), statically imported by the desktop app,
+and compiled in by electron-vite. There is no build step, no `plugin.json`, and
+no `dist/` directory for them. They appear in Settings → Last.fm / Settings →
+Lidarr as regular entries and cannot be overridden by user plugins (core wins on
+id collision).
+
+## User plugins
+
+A user plugin is a directory you drop into `userData/plugins/<id>/`:
 
 ```
 my-plugin/
@@ -38,20 +49,20 @@ export function activate(ctx: PluginContext): void | Promise<void> { /* register
 export function deactivate(): void | Promise<void> { /* optional cleanup */ }
 ```
 
-## Where plugins live
+## Where user plugins live
 
 - **Installed:** `~/Library/Application Support/@musex/desktop/plugins/<id>/` —
   drop the directory in and use **Settings → Plugins → Reload plugins** (or
   restart the app).
-- **Development (repo checkouts only):** `<repo>/plugins/<name>/dist/` is also
-  scanned when the app runs unpackaged — first-party plugins live here as
-  workspace packages and are loaded straight from their build output.
 
 Enable/disable per plugin persists across launches. A plugin that throws during
 load or activate is shown as **errored** in Settings and never affects the app
 or other plugins. **Reload plugins** disposes every registration, calls
 `deactivate()`, and re-imports fresh module code (with a cache-busting query;
 old module instances leak until restart — fine for iteration, not a hot path).
+
+Core plugins are also re-activated on Reload (their module is static — no
+cache-busting needed; the registry is rebuilt from scratch).
 
 ## The PluginContext
 
@@ -162,10 +173,10 @@ Field vocabulary is fixed (text/password/toggle/action/status). If a plugin
 needs a new field kind, the kind gets added to the host so every plugin gains it
 — plugins never ship UI.
 
-## Building a plugin
+## Building a user plugin
 
-Use `plugins/lastfm/` as the reference implementation (auth flow, event
-subscriber, Discover provider, track action, detail provider). The build recipe:
+Bundle your plugin to a single ESM file and create a `plugin.json` manifest.
+Example build recipe using esbuild:
 
 ```js
 // build.mjs — bundle to a single ESM file + copy the manifest
@@ -179,7 +190,6 @@ await copyFile("plugin.json", "dist/plugin.json");
 `@musex/plugin-api` is types-only — import it freely; nothing of it lands in the
 bundle. `node:*` builtins are available (main process). Do not import `electron`
 or musex runtime modules; the manifest validator and ctx are your whole contract.
-First-party repo plugins: `pnpm build:plugins` builds every `plugins/*` package.
 
 ## Trust model (read this)
 

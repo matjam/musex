@@ -1,8 +1,0 @@
-{
-  "id": "lastfm",
-  "name": "Last.fm",
-  "version": "0.1.0",
-  "apiVersion": 1,
-  "entry": "index.mjs",
-  "description": "Scrobbling, loved tracks and discovery via Last.fm"
-}

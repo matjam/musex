@@ -66,7 +66,6 @@ Requires Node 24+ and [pnpm](https://pnpm.io/) 11.
 ```sh
 pnpm install
 pnpm vendor          # fetch the pinned mpv build (checksum-verified)
-pnpm build:plugins   # bundle the bundled plugins (last.fm, Lidarr)
 pnpm dev             # run the app with hot reload
 pnpm check           # lint + typecheck + format + tests (the CI bar)
 ```

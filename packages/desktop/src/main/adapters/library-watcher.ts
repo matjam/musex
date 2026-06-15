@@ -1,11 +1,11 @@
 import type { Library } from "@musex/core";
-import { PlexAuthError } from "@musex/core";
 import {
   ChangeCoalescer,
   nextReconnectDelayMs,
+  PlexAuthError,
   relevantSectionChange,
   timestampChanged,
-} from "../../logic/library-watch.js";
+} from "@musex/core";
 
 export interface LibraryWatcherDeps {
   getToken(): string | null;
@@ -25,7 +25,7 @@ const POLL_INTERVAL_MS = 15 * 60_000;
  *  websocket to PMS `/:/websockets/notifications` (push, primary) plus a
  *  15-minute section-timestamp poll (fallback, also run on every reconnect to
  *  cover events missed while disconnected). All decision logic is in pure
- *  logic/library-watch.ts; this class owns the socket and timers.
+ *  @musex/core's library-watch; this class owns the socket and timers.
  *
  *  Electron 42 main = Node 24, so the global WebSocket is available. We
  *  deliberately do NOT use @ctrl/plex's AlertListener: it has no reconnect

@@ -57,13 +57,7 @@ publish:
   repo: musex
 extraResources:
   # `from` resolves relative to the project directory (packages/desktop) — vendor/
-  # and plugins/ live at the repo root.
+  # lives at the repo root.
   # mpv lands at Resources/mpv/mpv.app/Contents/MacOS/mpv (matches mpv-paths.ts).
   - from: ../../vendor/mpv/darwin-arm64/
     to: mpv/
-  # Plugins land at Resources/plugins/<id>/plugin.json (PluginHost scans both the
-  # direct and the dev `<id>/dist/` layouts).
-  - from: ../../plugins/lastfm/dist/
-    to: plugins/lastfm/
-  - from: ../../plugins/lidarr/dist/
-    to: plugins/lidarr/

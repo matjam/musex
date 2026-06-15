@@ -1,6 +1,6 @@
 import type { Album, Artist, Playlist } from "@musex/core";
+import { listValidator } from "@musex/core";
 import { useCallback } from "react";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 

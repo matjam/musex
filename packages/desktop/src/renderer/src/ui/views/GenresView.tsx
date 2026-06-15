@@ -1,7 +1,11 @@
+import {
+  albumsForGenre,
+  type GenreEntry,
+  genreIndex,
+  listValidator,
+  sampleThumbs,
+} from "@musex/core";
 import { useEffect, useState } from "react";
-import { sampleThumbs } from "../../../../logic/collage";
-import { albumsForGenre, type GenreEntry, genreIndex } from "../../../../logic/genres";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { CardCollage } from "../CardCollage";
 

@@ -1,6 +1,6 @@
 import type { Album, LibrarySort } from "@musex/core";
+import { listValidator } from "@musex/core";
 import { useEffect, useState } from "react";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";

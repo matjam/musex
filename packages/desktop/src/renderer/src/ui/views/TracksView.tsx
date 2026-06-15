@@ -1,7 +1,7 @@
 import type { LibrarySort, Track } from "@musex/core";
+import { listValidator } from "@musex/core";
 import { Play, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";

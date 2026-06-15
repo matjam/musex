@@ -207,6 +207,10 @@ export interface PluginInfo {
   name: string;
   version: string;
   status: PluginStatus;
+  /** "core" = first-party, statically bundled; "user" = dynamically loaded from
+   *  userData/plugins/. Core plugins toggle like user plugins but load statically
+   *  (never via dynamic import()). */
+  origin: "core" | "user";
   error?: string;
 }
 /** Main → renderer navigation push (application menu items). Deliberately a

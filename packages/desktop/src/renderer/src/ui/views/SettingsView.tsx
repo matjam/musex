@@ -494,7 +494,9 @@ function statusChip(p: PluginInfo) {
   return <span className={`plugin-chip plugin-chip--${p.status}`}>{p.status}</span>;
 }
 
-/** Overview pane: reload row + per-plugin enable toggles + status chips.
+/** Overview pane: reload row + per-user-plugin enable toggles + status chips.
+ *  Core plugins appear as their own nav entries above Plugins; this pane covers
+ *  user plugins only — folders dropped into the app's plugins directory.
  *  Settings fields are NOT shown here — use the plugin:<id> sub-entry for that. */
 function PluginsOverview({
   plugins,
@@ -507,6 +509,7 @@ function PluginsOverview({
   onReload: () => void;
   onChanged: () => void;
 }) {
+  const userPlugins = plugins === null ? null : plugins.filter((p) => p.origin === "user");
   return (
     <div className="settings-section">
       <div className="settings-section-title">Plugins</div>
@@ -514,28 +517,29 @@ function PluginsOverview({
         <div className="settings-row-text">
           <div className="settings-row-label">Installed plugins</div>
           <div className="settings-row-desc">
-            Plugins are folders containing a plugin.json and an ESM entry. Drop one into the app's
-            plugins directory and reload.
+            User plugins are folders containing a plugin.json and an ESM entry dropped into the
+            app's plugins directory. They run with full trust in the main process. Reload to pick up
+            changes.
           </div>
         </div>
         <button type="button" className="settings-btn" disabled={reloading} onClick={onReload}>
           {reloading ? "Reloading…" : "Reload plugins"}
         </button>
       </div>
-      {plugins === null ? (
+      {userPlugins === null ? (
         <div className="settings-row">
           <div className="settings-row-text">
             <div className="settings-row-desc">Loading plugins…</div>
           </div>
         </div>
-      ) : plugins.length === 0 ? (
+      ) : userPlugins.length === 0 ? (
         <div className="settings-row">
           <div className="settings-row-text">
             <div className="settings-row-desc">No plugins installed.</div>
           </div>
         </div>
       ) : (
-        plugins.map((p) => <PluginsOverviewRow key={p.id} plugin={p} onChanged={onChanged} />)
+        userPlugins.map((p) => <PluginsOverviewRow key={p.id} plugin={p} onChanged={onChanged} />)
       )}
     </div>
   );
@@ -837,10 +841,16 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
     }
   }
 
+  const corePlugins = (plugins ?? []).filter((p) => p.origin === "core");
+  const userPlugins = (plugins ?? []).filter((p) => p.origin === "user");
+
   return (
     <div className="settings-layout">
       <nav className="settings-nav">
-        {CATEGORIES.map((c) => (
+        {CATEGORIES.slice(
+          0,
+          CATEGORIES.findIndex((c) => c.id === "plugins"),
+        ).map((c) => (
           <button
             key={c.id}
             type="button"
@@ -851,7 +861,29 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
             {c.label}
           </button>
         ))}
-        {(plugins ?? []).map((p) => (
+        {corePlugins.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`nav-item${category === `plugin:${p.id}` ? " active" : ""}`}
+            onClick={() => setCategory(`plugin:${p.id}`)}
+          >
+            <Puzzle size={16} />
+            {p.name}
+          </button>
+        ))}
+        {CATEGORIES.slice(CATEGORIES.findIndex((c) => c.id === "plugins")).map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className={`nav-item${category === c.id ? " active" : ""}`}
+            onClick={() => setCategory(c.id)}
+          >
+            <c.icon size={16} />
+            {c.label}
+          </button>
+        ))}
+        {userPlugins.map((p) => (
           <button
             key={p.id}
             type="button"

@@ -86,7 +86,9 @@ describe("PluginHost", () => {
     const { host } = makeHost();
     await host.loadAll();
 
-    expect(host.list()).toEqual([{ id: "good", name: "good", version: "1.0.0", status: "active" }]);
+    expect(host.list()).toEqual([
+      { id: "good", name: "good", version: "1.0.0", status: "active", origin: "user" },
+    ]);
     expect(activations()).toBe(1);
 
     const settings = await host.getSettings("good");
@@ -99,33 +101,21 @@ describe("PluginHost", () => {
     expect(host.registry.trackActions).toHaveLength(1);
   });
 
-  it("finds plugins under the dev <sub>/dist/ layout", async () => {
-    await writePlugin("devkit", GOOD_ENTRY, undefined, { dist: true });
+  it("finds plugins in the direct root layout (<sub>/plugin.json)", async () => {
+    await writePlugin("devkit", GOOD_ENTRY);
     const { host } = makeHost();
     await host.loadAll();
     expect(host.list()[0]?.status).toBe("active");
   });
 
-  it("prefers dist/ over a root source manifest (real first-party package layout)", async () => {
-    // Source packages keep plugin.json at the package root (no entry beside it)
-    // AND ship the built dist/{plugin.json,index.mjs}. The root manifest must
-    // not win — regression for lastfm failing with ERR_MODULE_NOT_FOUND.
-    await writePlugin("pkg", GOOD_ENTRY, undefined, { dist: true });
-    const rootDir = join(root, "scan", "pkg");
-    await writeFile(
-      join(rootDir, "plugin.json"),
-      JSON.stringify({
-        id: "pkg",
-        name: "pkg",
-        version: "1.0.0",
-        apiVersion: 1,
-        entry: "index.mjs",
-      }),
-    );
-    // note: no index.mjs at the package root
+  it("skips a plugin nested under dist/ — only root layout is scanned", async () => {
+    // The old dev-repo dist/ convention has been removed. A plugin.json inside
+    // <sub>/dist/ is not a valid scan target; only <sub>/plugin.json wins.
+    await writePlugin("nested", GOOD_ENTRY, undefined, { dist: true });
+    // Note: no plugin.json at <sub>/ root — so nothing is found.
     const { host } = makeHost();
     await host.loadAll();
-    expect(host.list()[0]?.status).toBe("active");
+    expect(host.list()).toHaveLength(0);
   });
 
   it("skips a manifest whose entry file is missing (unbuilt source tree)", async () => {
@@ -983,5 +973,103 @@ describe("PluginHost", () => {
     await host.loadAll();
     expect(host.list()).toHaveLength(1);
     expect(host.list()[0]?.name).toBe("first"); // readdir order: a-dupe first
+  });
+
+  // ── core plugin tests (M4) ──────────────────────────────────────────────
+
+  it("loadCore activates a core plugin and lists it with origin 'core'", async () => {
+    let activated = false;
+    const corePlugin = {
+      manifest: { id: "core-test", name: "Core Test", version: "1.0.0", apiVersion: 1 },
+      activate: (_ctx: import("@musex/plugin-api").PluginContext) => {
+        activated = true;
+      },
+    };
+    const { host } = makeHost({ corePlugins: [corePlugin] });
+    await host.loadAll();
+
+    expect(activated).toBe(true);
+    const info = host.list().find((p) => p.id === "core-test");
+    expect(info).toMatchObject({ id: "core-test", status: "active", origin: "core" });
+  });
+
+  it("disabled core plugin stays inactive after loadAll; setEnabled re-activates via static path (C1 regression)", async () => {
+    let activationCount = 0;
+    const corePlugin = {
+      manifest: { id: "core-toggle", name: "Core Toggle", version: "1.0.0", apiVersion: 1 },
+      activate: (_ctx: import("@musex/plugin-api").PluginContext) => {
+        activationCount += 1;
+      },
+    };
+    const { host, disabled } = makeHost({ corePlugins: [corePlugin] });
+    disabled.add("core-toggle");
+    await host.loadAll();
+
+    expect(host.list().find((p) => p.id === "core-toggle")?.status).toBe("disabled");
+    expect(activationCount).toBe(0);
+
+    // Re-enable — must NOT attempt dynamic import (dir="") and must go active.
+    await host.setEnabled("core-toggle", true);
+    const info = host.list().find((p) => p.id === "core-toggle");
+    expect(info?.status).toBe("active");
+    expect(activationCount).toBe(1);
+  });
+
+  it("a scanned user plugin whose id collides with a core plugin is skipped", async () => {
+    let coreActivated = false;
+    const corePlugin = {
+      manifest: { id: "conflict-id", name: "Core", version: "1.0.0", apiVersion: 1 },
+      activate: (_ctx: import("@musex/plugin-api").PluginContext) => {
+        coreActivated = true;
+      },
+    };
+    // Write a user plugin with the same id — its entry must never be imported.
+    await writePlugin(
+      "conflict-id",
+      `export function activate() { globalThis.__userImported = true; }`,
+    );
+    const { host } = makeHost({ corePlugins: [corePlugin] });
+    await host.loadAll();
+
+    expect(coreActivated).toBe(true);
+    expect((globalThis as Record<string, unknown>).__userImported).toBeUndefined();
+    // Only one entry with this id — the core one.
+    expect(host.list().filter((p) => p.id === "conflict-id")).toHaveLength(1);
+    expect(host.list().find((p) => p.id === "conflict-id")?.origin).toBe("core");
+  });
+
+  it("deactivating a core plugin calls its deactivate fn (I1 regression)", async () => {
+    let deactivateCalled = false;
+    const corePlugin = {
+      manifest: { id: "core-deactivate", name: "Core Deactivate", version: "1.0.0", apiVersion: 1 },
+      activate: (_ctx: import("@musex/plugin-api").PluginContext) => {},
+      deactivate: () => {
+        deactivateCalled = true;
+      },
+    };
+    const { host } = makeHost({ corePlugins: [corePlugin] });
+    await host.loadAll();
+    expect(host.list().find((p) => p.id === "core-deactivate")?.status).toBe("active");
+
+    await host.setEnabled("core-deactivate", false);
+    expect(deactivateCalled).toBe(true);
+    expect(host.list().find((p) => p.id === "core-deactivate")?.status).toBe("disabled");
+  });
+
+  it("apiVersion-incompatible core plugin lists as incompatible with origin 'core' (M3)", async () => {
+    const corePlugin = {
+      manifest: { id: "core-future", name: "Core Future", version: "9.0.0", apiVersion: 2 },
+      activate: (_ctx: import("@musex/plugin-api").PluginContext) => {},
+    };
+    const { host } = makeHost({ corePlugins: [corePlugin] });
+    await host.loadAll();
+
+    const info = host.list().find((p) => p.id === "core-future");
+    expect(info).toMatchObject({
+      id: "core-future",
+      status: "incompatible",
+      origin: "core",
+      error: "incompatible: requires API v2, host is v1",
+    });
   });
 });

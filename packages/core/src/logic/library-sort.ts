@@ -1,4 +1,4 @@
-import type { LibrarySort } from "@musex/core";
+import type { LibrarySort } from "../models/index";
 
 /** Map our sort enum to Plex's `sort` query field.
  *  NOTE: the exact Plex sort field strings are confirmed in Task 2 against

@@ -11,7 +11,7 @@ import {
   expansionParams,
   planPicks,
   type SimilarNeighbor,
-} from "../../logic/taste-expansion.js";
+} from "@musex/core";
 import { type ExpansionPrefs, persistence } from "../adapters/persistence.js";
 import type { PluginHost } from "../plugins/plugin-host.js";
 
@@ -61,7 +61,7 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : String(e
 
 /** Host-owned taste-expansion coordinator: advances attempt lifecycles and,
  *  while under the weekly budget, requests new discovery/deepening picks.
- *  All decisions are made by the pure logic/taste-expansion module; this
+ *  All decisions are made by the pure taste-expansion module in @musex/core; this
  *  class only fetches inputs, applies actions, and persists the ledger. */
 export class ExpansionCoordinator {
   private running = false;

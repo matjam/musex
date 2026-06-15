@@ -1,5 +1,5 @@
+import type { SmartKind } from "@musex/core";
 import { Car, Code, Dumbbell, Flame, History, Moon, PartyPopper, Star, Wand2 } from "lucide-react";
-import type { SmartKind } from "../../../logic/smart-playlists";
 
 /** Icons for the Smart Mixes (sidebar + Home cards). One shared map so the
  *  two surfaces can't drift. */

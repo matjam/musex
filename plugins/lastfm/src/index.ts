@@ -5,6 +5,16 @@
  * @musex/plugin-api types (compile-time only) + node:crypto. Never imports
  * electron or any @musex runtime code.
  */
+
+/** Static manifest — core plugins register through this instead of a
+ *  plugin.json (which remains the format for USER plugins only). */
+export const manifest = {
+  id: "lastfm",
+  name: "Last.fm",
+  version: "0.1.0",
+  apiVersion: 1,
+} as const;
+
 import type {
   PluginContext,
   PluginEvents,

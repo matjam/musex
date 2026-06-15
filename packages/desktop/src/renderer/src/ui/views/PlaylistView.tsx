@@ -1,7 +1,7 @@
 import type { Playlist } from "@musex/core";
+import { listValidator } from "@musex/core";
 import { MoreHorizontal, Play, Shuffle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listValidator } from "../../../../shared/list-validator";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { usePlaylists } from "../../state/playlists";

@@ -1,4 +1,4 @@
-import type { Album, Track } from "@musex/core";
+import type { Album, Track } from "../models/index";
 import { smartTrackKey } from "./smart-playlists";
 
 /** One curated mood mix: keywords are matched as case-insensitive SUBSTRINGS
