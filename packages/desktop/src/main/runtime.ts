@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Library, Pin, Track } from "@musex/core";
 import { isHttpUrl, TasteProfile } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
-import { app, safeStorage, shell } from "electron";
+import { app, shell } from "electron";
 import { buildAf, replaygainMode } from "../logic/audio-filters.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
@@ -14,6 +14,7 @@ import { MpvController } from "./adapters/mpv-controller.js";
 import { resolveMpvPaths } from "./adapters/mpv-paths.js";
 import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
+import { isSecureStorageAvailable, secureDecrypt, secureEncrypt } from "./adapters/secure-store.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";
@@ -123,6 +124,14 @@ export class Runtime {
       },
     });
 
+    // Warn once at startup when the OS keyring is unavailable — the token and
+    // plugin secrets fall back to tagged plaintext in that case (see secure-store.ts).
+    if (!isSecureStorageAvailable()) {
+      console.warn(
+        "[musex] OS secure storage unavailable — Plex token and plugin secrets stored as plaintext. Install gnome-keyring or kwallet to enable encryption.",
+      );
+    }
+
     // Plugin host: core plugins (lastfm, lidarr) are statically bundled —
     // no filesystem scan for them. Only userData/plugins is scanned for
     // user-installed plugins; core plugin ids win on collision.
@@ -131,16 +140,8 @@ export class Runtime {
       scanDirs: [path.join(app.getPath("userData"), "plugins")],
       dataDir: path.join(app.getPath("userData"), "plugin-data"),
       secretsDir: path.join(app.getPath("userData"), "plugin-secrets"),
-      encrypt: async (s) => {
-        if (!safeStorage.isEncryptionAvailable()) {
-          throw new Error("OS secure storage is unavailable; cannot store plugin secret");
-        }
-        return (await safeStorage.encryptStringAsync(s)).toString("base64");
-      },
-      decrypt: async (s) => {
-        const { result } = await safeStorage.decryptStringAsync(Buffer.from(s, "base64"));
-        return result;
-      },
+      encrypt: async (s) => secureEncrypt(s).toString("base64"),
+      decrypt: async (s) => secureDecrypt(Buffer.from(s, "base64")) ?? "",
       isEnabled: (id) => persistence.isPluginEnabled(id),
       setEnabled: (id, v) => persistence.setPluginEnabled(id, v),
       notifySink: (p) => this.pluginNotifySink?.(p),

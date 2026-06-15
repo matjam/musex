@@ -22,6 +22,7 @@ import type {
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
+import { isSecureStorageAvailable } from "./adapters/secure-store.js";
 import { LOG_LEVELS, logBuffer } from "./logging.js";
 import { resolveRecommendations } from "./plugins/radio-resolve.js";
 import {
@@ -266,6 +267,7 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.getPreferences, () => ({
     cacheEnabled: persistence.getCacheEnabled(),
     cacheMaxBytes: persistence.getCacheMaxBytes(),
+    secureStorageAvailable: isSecureStorageAvailable(),
   }));
   ipcMain.handle(IPC.setCacheEnabled, (_e, enabled: boolean) => {
     if (typeof enabled !== "boolean") throw new Error("invalid cacheEnabled");
