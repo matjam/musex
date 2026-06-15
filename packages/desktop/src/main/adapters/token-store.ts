@@ -2,7 +2,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TokenStore } from "@musex/core";
 import { app } from "electron";
-import { secureDecrypt, secureEncrypt } from "./secure-store.js";
+import { secureDecrypt, secureEncrypt } from "./secure-store-host.js";
 
 /** Persists the Plex token encrypted via the OS keychain when available.
  *  On systems without a keyring (e.g. minimal Linux without gnome-keyring or

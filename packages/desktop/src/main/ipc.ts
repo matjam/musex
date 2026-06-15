@@ -22,7 +22,7 @@ import type {
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 import { persistence } from "./adapters/persistence.js";
-import { isSecureStorageAvailable } from "./adapters/secure-store.js";
+import { isSecureStorageAvailable } from "./adapters/secure-store-host.js";
 import { LOG_LEVELS, logBuffer } from "./logging.js";
 import { resolveRecommendations } from "./plugins/radio-resolve.js";
 import {

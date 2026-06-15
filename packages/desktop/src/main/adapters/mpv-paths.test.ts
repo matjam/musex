@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findSystemMpv } from "./mpv-paths";
+import { findSystemMpv } from "./find-system-mpv";
 
 describe("findSystemMpv", () => {
   /** Simulate a filesystem where `files` are regular files and `dirs` are directories. */

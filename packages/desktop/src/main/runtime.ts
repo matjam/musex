@@ -14,7 +14,11 @@ import { MpvController } from "./adapters/mpv-controller.js";
 import { resolveMpvPaths } from "./adapters/mpv-paths.js";
 import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
-import { isSecureStorageAvailable, secureDecrypt, secureEncrypt } from "./adapters/secure-store.js";
+import {
+  isSecureStorageAvailable,
+  secureDecrypt,
+  secureEncrypt,
+} from "./adapters/secure-store-host.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";

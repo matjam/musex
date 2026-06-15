@@ -1,5 +1,3 @@
-import { safeStorage as electronSafeStorage } from "electron";
-
 /** The slice of Electron safeStorage we use — injectable for tests. */
 export interface SecureBackend {
   isEncryptionAvailable(): boolean;
@@ -14,10 +12,7 @@ const PLAINTEXT_TAG = "musex-plaintext:v1:";
  *  TAGGED plaintext so the app stays usable — a deliberate, surfaced downgrade
  *  (the Plex token is revocable and self-hosted). The tag lets decrypt tell the
  *  two apart; real safeStorage ciphertext never starts with it. */
-export async function secureEncrypt(
-  plain: string,
-  backend: SecureBackend = electronSafeStorage as unknown as SecureBackend,
-): Promise<Buffer> {
+export async function secureEncrypt(plain: string, backend: SecureBackend): Promise<Buffer> {
   if (backend.isEncryptionAvailable()) return backend.encryptStringAsync(plain);
   return Buffer.from(PLAINTEXT_TAG + plain, "utf8");
 }
@@ -27,7 +22,7 @@ export async function secureEncrypt(
  *  Tagged plaintext and empty inputs never need re-encryption. */
 export async function secureDecrypt(
   buf: Buffer,
-  backend: SecureBackend = electronSafeStorage as unknown as SecureBackend,
+  backend: SecureBackend,
 ): Promise<{ value: string | null; shouldReEncrypt: boolean }> {
   if (buf.length === 0) return { value: null, shouldReEncrypt: false };
   const asText = buf.toString("utf8");
@@ -39,8 +34,6 @@ export async function secureDecrypt(
 }
 
 /** Whether real OS encryption is in effect (false → plaintext fallback active). */
-export function isSecureStorageAvailable(
-  backend: SecureBackend = electronSafeStorage as unknown as SecureBackend,
-): boolean {
+export function isSecureStorageAvailable(backend: SecureBackend): boolean {
   return backend.isEncryptionAvailable();
 }
