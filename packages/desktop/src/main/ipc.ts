@@ -80,11 +80,26 @@ function titleArtistPairs(v: unknown): { title: string; artist: string }[] {
   });
 }
 
+/** Suppress repeated toasts for the same mpv-unavailable message (e.g. rapid
+ *  load+preload+play attempts). One notification per unique message per 5s. */
+const mpvNotifyLastAt = new Map<string, number>();
+const MPV_NOTIFY_DEBOUNCE_MS = 5_000;
+
 /** Throws with the user-facing unavailability reason when mpv isn't running.
+ *  Also pushes a toast through the plugin-notify channel so the user sees it.
  *  Used by every playback handler so the renderer surfaces a clear message
  *  rather than a generic "Cannot read properties of null" crash. */
 function requireMpv(rt: Runtime) {
-  if (!rt.mpv) throw new Error(rt.mpvUnavailableReason ?? "mpv unavailable");
+  if (!rt.mpv) {
+    const reason = rt.mpvUnavailableReason ?? "mpv unavailable";
+    const now = Date.now();
+    const last = mpvNotifyLastAt.get(reason) ?? 0;
+    if (now - last > MPV_NOTIFY_DEBOUNCE_MS) {
+      mpvNotifyLastAt.set(reason, now);
+      rt.pushNotification({ pluginId: "musex", message: reason, level: "error" });
+    }
+    throw new Error(reason);
+  }
   return rt.mpv;
 }
 

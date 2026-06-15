@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
@@ -10,17 +10,25 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
  *  from the GUI-launched process env). Pure + injectable for testing. */
 const COMMON_MPV_PATHS = ["/usr/bin/mpv", "/usr/local/bin/mpv", "/opt/homebrew/bin/mpv"];
 
+function defaultIsFile(p: string): boolean {
+  try {
+    return statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
 export function findSystemMpv(
   pathEnv: string | undefined,
-  exists: (p: string) => boolean = existsSync,
+  isFile: (p: string) => boolean = defaultIsFile,
 ): string | null {
   const dirs = (pathEnv ?? "").split(delimiter).filter(Boolean);
   for (const dir of dirs) {
     const candidate = join(dir, "mpv");
-    if (exists(candidate)) return candidate;
+    if (isFile(candidate)) return candidate;
   }
   for (const p of COMMON_MPV_PATHS) {
-    if (exists(p)) return p;
+    if (isFile(p)) return p;
   }
   return null;
 }

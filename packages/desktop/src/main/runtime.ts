@@ -73,6 +73,11 @@ export class Runtime {
     this.pluginNotifySink = sink;
   }
 
+  /** Push a system notification through the same toast channel as plugin notifications. */
+  pushNotification(n: PluginNotification): void {
+    this.pluginNotifySink?.(n);
+  }
+
   setLibraryChangedSink(sink: ((lib: Library) => void) | null): void {
     this.libraryChangedSink = sink;
   }

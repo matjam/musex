@@ -96,6 +96,29 @@ describe("PlaybackSession", () => {
     expect(session.getState().error).toBe("decode failed");
   });
 
+  it("sets status:error when engine.load() rejects during playIndex", async () => {
+    const { engine, session } = setup();
+    engine.loadError = new Error("mpv is required for playback — install it first");
+    await session.loadQueue({ tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" });
+    expect(session.getState().status).toBe("error");
+    expect(session.getState().error).toBe("mpv is required for playback — install it first");
+    // engine.play() must NOT be called — we stopped on load failure
+    expect(engine.playCalls).toBe(0);
+  });
+
+  it("sets status:error when engine.load() rejects during restore", async () => {
+    const { engine, session } = setup();
+    engine.loadError = new Error("mpv is required for playback — install it first");
+    await session.restore(
+      { tracks: [makeTrack("1")], index: 0, shuffle: false, repeat: "none" },
+      30,
+    );
+    expect(session.getState().status).toBe("error");
+    expect(session.getState().error).toBe("mpv is required for playback — install it first");
+    // seek must NOT be called — we stopped on load failure
+    expect(engine.seekCalls).toEqual([]);
+  });
+
   it("notifies subscribers on state change", async () => {
     const { session } = setup();
     const states: string[] = [];
