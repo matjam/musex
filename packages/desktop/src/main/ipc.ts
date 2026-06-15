@@ -80,6 +80,14 @@ function titleArtistPairs(v: unknown): { title: string; artist: string }[] {
   });
 }
 
+/** Throws with the user-facing unavailability reason when mpv isn't running.
+ *  Used by every playback handler so the renderer surfaces a clear message
+ *  rather than a generic "Cannot read properties of null" crash. */
+function requireMpv(rt: Runtime) {
+  if (!rt.mpv) throw new Error(rt.mpvUnavailableReason ?? "mpv unavailable");
+  return rt.mpv;
+}
+
 /** Bake a plugin-supplied artwork URL through the proxy's /ext endpoint so
  *  it's disk-cached (art cache) and loads offline. Non-https/unparseable URLs
  *  are dropped rather than handed to the renderer. */
@@ -233,7 +241,11 @@ export function registerIpc(rt: Runtime): void {
     const prefs = sanitizeAudioPrefs(raw);
     // Apply to mpv FIRST; persist only after it accepted (an mpv rejection
     // propagates to the renderer and the old prefs stay in force).
-    await rt.mpv.applyAudioConfig({ af: buildAf(prefs), replaygain: replaygainMode(prefs) });
+    // No-op when mpv is unavailable — prefs are persisted so they take effect
+    // if mpv becomes available on a future launch.
+    if (rt.mpv) {
+      await rt.mpv.applyAudioConfig({ af: buildAf(prefs), replaygain: replaygainMode(prefs) });
+    }
     persistence.setAudioPrefs(prefs);
   });
   ipcMain.handle(IPC.getPreferences, () => ({
@@ -428,25 +440,26 @@ export function registerIpc(rt: Runtime): void {
   }));
 
   // mpv playback engine — load lazily spawns mpv; the rest are no-ops if it
-  // isn't running (nothing is playing).
+  // isn't running (nothing is playing). requireMpv() surfaces a user-facing
+  // reason when mpv is unavailable (e.g. missing system mpv on Linux).
   ipcMain.handle(IPC.playbackLoad, (_e, args: { url: string; startSec?: number }) => {
     if (typeof args?.url !== "string" || !args.url) throw new Error("invalid url");
-    return rt.mpv.load(args.url, { startSec: args.startSec });
+    return requireMpv(rt).load(args.url, { startSec: args.startSec });
   });
   ipcMain.handle(IPC.playbackPreload, (_e, url: string) => {
     if (typeof url !== "string" || !url) throw new Error("invalid url");
-    return rt.mpv.preload(url);
+    return requireMpv(rt).preload(url);
   });
-  ipcMain.handle(IPC.playbackPlay, () => rt.mpv.play());
-  ipcMain.handle(IPC.playbackPause, () => rt.mpv.pause());
+  ipcMain.handle(IPC.playbackPlay, () => requireMpv(rt).play());
+  ipcMain.handle(IPC.playbackPause, () => requireMpv(rt).pause());
   ipcMain.handle(IPC.playbackSeek, (_e, sec: number) => {
     if (typeof sec !== "number" || !Number.isFinite(sec) || sec < 0)
       throw new Error("invalid seek");
-    return rt.mpv.seek(sec);
+    return requireMpv(rt).seek(sec);
   });
   ipcMain.handle(IPC.playbackSetVolume, (_e, v: number) => {
     if (typeof v !== "number" || v < 0 || v > 1) throw new Error("invalid volume");
-    return rt.mpv.setVolume(v);
+    return requireMpv(rt).setVolume(v);
   });
 
   // Playback transitions from the renderer session → PlaybackMonitor → plugin

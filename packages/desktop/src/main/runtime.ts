@@ -42,9 +42,11 @@ export class Runtime {
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
   readonly artCache = new MediaCache(path.join(app.getPath("userData"), "art-cache"));
   /** Constructed in init() — resolveMpvPaths needs `app` ready and throws if
-   *  mpv isn't vendored. Not start()ed here: the controller spawns mpv lazily
-   *  on the first load, keeping app startup fast. */
-  mpv!: MpvController;
+   *  mpv can't be found. Null when mpv is unavailable (Linux with no system mpv,
+   *  or unsupported platform); playback IPC handlers surface mpvUnavailableReason. */
+  mpv: MpvController | null = null;
+  /** Human-readable reason set when mpv construction fails; null when mpv is available. */
+  mpvUnavailableReason: string | null = null;
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
@@ -76,14 +78,21 @@ export class Runtime {
   }
 
   async init(): Promise<void> {
-    this.mpv = new MpvController(resolveMpvPaths());
+    try {
+      this.mpv = new MpvController(resolveMpvPaths());
+    } catch (err) {
+      this.mpvUnavailableReason = err instanceof Error ? err.message : String(err);
+      console.error("[musex mpv]", this.mpvUnavailableReason);
+    }
     // Seed the controller's cached audio config from persisted prefs — mpv
     // isn't running yet, so this only sets what the next spawn will apply.
     const audioPrefs = persistence.getAudioPrefs();
-    await this.mpv.applyAudioConfig({
-      af: buildAf(audioPrefs),
-      replaygain: replaygainMode(audioPrefs),
-    });
+    if (this.mpv) {
+      await this.mpv.applyAudioConfig({
+        af: buildAf(audioPrefs),
+        replaygain: replaygainMode(audioPrefs),
+      });
+    }
     await this.cache.init();
     await this.listCache.init();
     this.proxy.configureCache(this.cache, () => ({

@@ -59,7 +59,7 @@ app.whenReady().then(async () => {
       if (!win.isDestroyed()) win.webContents.send(IPC.logsEvent, entry);
     });
     win.on("closed", offLogs);
-    runtime.mpv.setSink((e) => {
+    runtime.mpv?.setSink((e) => {
       // The playback monitor taps position ticks for scrobble accounting,
       // independent of (and before) the renderer forward.
       if (e.type === "position") runtime.playbackMonitor.handleEnginePosition(e.sec);
@@ -115,7 +115,7 @@ app.whenReady().then(async () => {
   app.on("will-quit", () => {
     runtime.expansion.dispose();
     runtime.libraryWatcher.dispose();
-    void runtime.mpv.dispose();
+    void runtime.mpv?.dispose();
   });
 });
 
