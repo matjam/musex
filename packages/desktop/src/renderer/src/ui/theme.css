@@ -185,6 +185,11 @@ textarea:focus {
   user-select: none;
 }
 
+/* Only macOS has the in-window traffic lights the left inset clears. */
+html:not([data-platform="darwin"]) .topbar {
+  padding-left: 16px;
+}
+
 .topbar-logo {
   font-weight: 700;
   font-size: 16px;

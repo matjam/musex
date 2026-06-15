@@ -6,45 +6,58 @@ import { useSelection } from "../../state/selection";
 
 /** Display table for the Settings "Keyboard Shortcuts" section. Kept in this
  *  file, next to the handler, so the documentation and the behavior can't
- *  drift apart. Combos use mac glyphs: ⌘ cmd, ⌥ option, ⇧ shift. */
-export const SHORTCUT_GROUPS: { title: string; items: { combo: string; label: string }[] }[] = [
-  {
-    title: "Playback",
-    items: [
-      { combo: "Space", label: "Play / Pause" },
-      { combo: "M", label: "Mute / Unmute" },
-      { combo: "⌘→ / ⌘←", label: "Next / Previous track" },
-      { combo: "⇧→ / ⇧←", label: "Seek forward / back 5 seconds" },
-      { combo: "⌘↑ / ⌘↓", label: "Volume up / down" },
-      { combo: "⌥S", label: "Toggle shuffle" },
-      { combo: "⌥R", label: "Cycle repeat" },
-    ],
-  },
-  {
-    title: "Navigation",
-    items: [
-      { combo: "⌘K", label: "Focus the search box" },
-      { combo: "⌘,", label: "Open Settings" },
-      { combo: "⌘/", label: "Help / keyboard shortcuts" },
-      { combo: "⌘[", label: "Back" },
-      { combo: "⌘]", label: "Forward" },
-      { combo: "⌥⇧H", label: "Go to Home" },
-      { combo: "⌥⇧0", label: "Go to Tracks" },
-      { combo: "⌥⇧3", label: "Go to Artists" },
-      { combo: "⌥⇧4", label: "Go to Albums" },
-      { combo: "⌥⇧D", label: "Go to Discover" },
-      { combo: "⌥⇧Q", label: "Toggle the queue" },
-      { combo: "⌥⇧J", label: "Go to Now Playing" },
-    ],
-  },
-  {
-    title: "Ratings",
-    items: [
-      { combo: "1–5", label: "Rate the current track" },
-      { combo: "0", label: "Clear the current track's rating" },
-    ],
-  },
-];
+ *  drift apart. Pass `platform` to get the correct modifier glyphs:
+ *  mac uses ⌘/⌥ symbols; other platforms use Ctrl/Alt text labels. */
+export function getShortcutGroups(
+  platform: string,
+): { title: string; items: { combo: string; label: string }[] }[] {
+  const isMac = platform === "darwin";
+  // Display-only: behavior already uses ctrlKey|metaKey correctly.
+  const mod = isMac ? "⌘" : "Ctrl";
+  const alt = isMac ? "⌥" : "Alt";
+  return [
+    {
+      title: "Playback",
+      items: [
+        { combo: "Space", label: "Play / Pause" },
+        { combo: "M", label: "Mute / Unmute" },
+        { combo: `${mod}→ / ${mod}←`, label: "Next / Previous track" },
+        { combo: "⇧→ / ⇧←", label: "Seek forward / back 5 seconds" },
+        { combo: `${mod}↑ / ${mod}↓`, label: "Volume up / down" },
+        { combo: `${alt}S`, label: "Toggle shuffle" },
+        { combo: `${alt}R`, label: "Cycle repeat" },
+      ],
+    },
+    {
+      title: "Navigation",
+      items: [
+        { combo: `${mod}K`, label: "Focus the search box" },
+        { combo: `${mod},`, label: "Open Settings" },
+        { combo: `${mod}/`, label: "Help / keyboard shortcuts" },
+        { combo: `${mod}[`, label: "Back" },
+        { combo: `${mod}]`, label: "Forward" },
+        { combo: `${alt}⇧H`, label: "Go to Home" },
+        { combo: `${alt}⇧0`, label: "Go to Tracks" },
+        { combo: `${alt}⇧3`, label: "Go to Artists" },
+        { combo: `${alt}⇧4`, label: "Go to Albums" },
+        { combo: `${alt}⇧D`, label: "Go to Discover" },
+        { combo: `${alt}⇧Q`, label: "Toggle the queue" },
+        { combo: `${alt}⇧J`, label: "Go to Now Playing" },
+      ],
+    },
+    {
+      title: "Ratings",
+      items: [
+        { combo: "1–5", label: "Rate the current track" },
+        { combo: "0", label: "Clear the current track's rating" },
+      ],
+    },
+  ];
+}
+
+/** Convenience constant using the mac platform glyphs (default for any caller
+ *  that doesn't pass a platform — ShortcutsModal passes it explicitly). */
+export const SHORTCUT_GROUPS = getShortcutGroups("darwin");
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));

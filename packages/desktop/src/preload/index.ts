@@ -10,6 +10,8 @@ import type {
 import { IPC } from "../shared/ipc-contract.js";
 
 const api: MusexApi = {
+  // Static: no IPC round-trip; sandboxed preloads can read process.platform.
+  platform: process.platform,
   signInStart: () => ipcRenderer.invoke(IPC.signInStart),
   signInPoll: () => ipcRenderer.invoke(IPC.signInPoll),
   restoreSession: () => ipcRenderer.invoke(IPC.restoreSession),

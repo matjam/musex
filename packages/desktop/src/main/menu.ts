@@ -18,8 +18,13 @@ export interface AppMenuDeps {
 /** Application menu: standard mac roles plus a Help submenu (shortcuts,
  *  GitHub, issues, logs). Dev-only entries (reload/devtools) are gated on
  *  `app.isPackaged`; keeping the default ⌘R reload accelerator in dev is
- *  deliberate — our repeat shortcut is ⌥R, so there's no conflict. */
+ *  deliberate — our repeat shortcut is ⌥R, so there's no conflict.
+ *
+ *  macOS gets the standard appMenu role (with traffic-light, Services,
+ *  Hide/HideOthers). Non-mac gets a plain File menu — no mac-only roles. */
 export function buildAppMenu(deps: AppMenuDeps): Menu {
+  const isMac = process.platform === "darwin";
+
   const devViewItems: MenuItemConstructorOptions[] = app.isPackaged
     ? []
     : [
@@ -29,7 +34,48 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
         { type: "separator" },
       ];
 
-  const template: MenuItemConstructorOptions[] = [
+  const helpSubmenu: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? []
+      : [
+          { label: "About musex", click: () => deps.showAbout() },
+          {
+            label: "Keyboard Shortcuts",
+            accelerator: "CmdOrCtrl+/",
+            click: () => deps.showShortcuts(),
+          },
+          { type: "separator" as const },
+        ]),
+    ...(isMac
+      ? [
+          {
+            label: "Keyboard Shortcuts",
+            accelerator: "CmdOrCtrl+/",
+            click: () => deps.showShortcuts(),
+          },
+          { type: "separator" as const },
+        ]
+      : []),
+    {
+      label: "musex on GitHub",
+      click: () => void shell.openExternal("https://github.com/matjam/musex"),
+    },
+    {
+      label: "Report an Issue",
+      click: () => void shell.openExternal("https://github.com/matjam/musex/issues"),
+    },
+    { type: "separator" },
+    {
+      label: "Show Logs",
+      click: () => deps.showLogs(),
+    },
+    {
+      label: "Open Logs Folder",
+      click: () => deps.openLogsFolder(),
+    },
+  ];
+
+  const macTemplate: MenuItemConstructorOptions[] = [
     // The appMenu role expanded by hand so "Check for Updates…" can sit
     // under About (same items/roles the built-in appMenu provides).
     {
@@ -67,32 +113,40 @@ export function buildAppMenu(deps: AppMenuDeps): Menu {
     { role: "windowMenu" },
     {
       role: "help",
-      submenu: [
-        {
-          label: "Keyboard Shortcuts",
-          accelerator: "CmdOrCtrl+/",
-          click: () => deps.showShortcuts(),
-        },
-        { type: "separator" },
-        {
-          label: "musex on GitHub",
-          click: () => void shell.openExternal("https://github.com/matjam/musex"),
-        },
-        {
-          label: "Report an Issue",
-          click: () => void shell.openExternal("https://github.com/matjam/musex/issues"),
-        },
-        { type: "separator" },
-        {
-          label: "Show Logs",
-          click: () => deps.showLogs(),
-        },
-        {
-          label: "Open Logs Folder",
-          click: () => deps.openLogsFolder(),
-        },
-      ],
+      submenu: helpSubmenu,
     },
   ];
+
+  const nonMacTemplate: MenuItemConstructorOptions[] = [
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Settings…",
+          accelerator: "CmdOrCtrl+,",
+          click: () => deps.showSettings(),
+        },
+        { type: "separator" },
+        {
+          label: "Check for Updates…",
+          click: () => deps.checkForUpdates(),
+        },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    // editMenu is required so Ctrl+C/V/X/A keep working in inputs.
+    { role: "editMenu" },
+    {
+      label: "View",
+      submenu: [...devViewItems, { role: "togglefullscreen" }],
+    },
+    {
+      label: "Help",
+      submenu: helpSubmenu,
+    },
+  ];
+
+  const template = isMac ? macTemplate : nonMacTemplate;
   return Menu.buildFromTemplate(template);
 }

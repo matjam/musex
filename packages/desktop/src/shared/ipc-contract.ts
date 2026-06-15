@@ -326,6 +326,9 @@ export type RadioNextArgs = {
 
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
+  /** The platform the main process is running on (e.g. "darwin", "linux",
+   *  "win32"). Set as a static field by the preload — no IPC round-trip. */
+  readonly platform: string;
   signInStart(): Promise<SignInStartResult>;
   signInPoll(): Promise<SignInPollResult>;
   restoreSession(): Promise<RestoreSessionResult>;
