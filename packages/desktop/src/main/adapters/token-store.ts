@@ -14,14 +14,16 @@ export class SafeStorageTokenStore implements TokenStore {
   private readonly file = join(app.getPath("userData"), "plex-token.enc");
 
   async save(token: string): Promise<void> {
-    const buf = secureEncrypt(token);
+    const buf = await secureEncrypt(token);
     writeFileSync(this.file, buf);
   }
 
   async load(): Promise<string | null> {
     if (!existsSync(this.file)) return null;
     const buf = readFileSync(this.file);
-    return secureDecrypt(buf);
+    const { value, shouldReEncrypt } = await secureDecrypt(buf);
+    if (value !== null && shouldReEncrypt) await this.save(value);
+    return value;
   }
 
   async clear(): Promise<void> {
