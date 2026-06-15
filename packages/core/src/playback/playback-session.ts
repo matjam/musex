@@ -113,7 +113,12 @@ export class PlaybackSession {
     });
     const ref = await this.resolver.resolve(track);
     if (token !== this.loadToken) return;
-    await this.engine.load(ref);
+    try {
+      await this.engine.load(ref);
+    } catch (err) {
+      this.patch({ status: "error", error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
     if (token !== this.loadToken) return;
     this.engine.seek(positionSec);
     this.patch({ status: "paused", positionSec });
@@ -131,7 +136,12 @@ export class PlaybackSession {
     this.patch({ queue: { ...queue, index }, status: "loading", positionSec: 0 });
     const ref = await this.resolver.resolve(track);
     if (token !== this.loadToken) return; // superseded by a newer load
-    await this.engine.load(ref);
+    try {
+      await this.engine.load(ref);
+    } catch (err) {
+      this.patch({ status: "error", error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
     if (token !== this.loadToken) return; // superseded by a newer load
     this.engine.play();
     this.patch({ status: "playing", durationSec: track.durationMs / 1000 });

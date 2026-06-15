@@ -85,6 +85,41 @@ function AccountSection() {
   );
 }
 
+/** Warning row shown when the OS keyring is unavailable and the Plex token is
+ *  stored as plaintext. Fetches secureStorageAvailable from getPreferences.
+ *  Renders nothing when secure storage is available (the common case on macOS). */
+function SecurityWarningSection() {
+  const [available, setAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .getPreferences()
+      .then((p) => {
+        if (!cancelled) setAvailable(p.secureStorageAvailable);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailable(true); // assume available on error
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (available !== false) return null;
+
+  return (
+    <div className="settings-section">
+      <div className="settings-row">
+        <div className="settings-row-desc error-text">
+          Secure storage unavailable — your Plex token is stored unencrypted. Install a keyring
+          (gnome-keyring/kwallet) to enable encryption.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** App version + manual update check. Results surface as native dialogs in
  *  main (same flow as the menu item), so no result plumbing here. */
 function AppSection() {
@@ -899,6 +934,7 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
         <div className="settings-page">
           {category === "general" && (
             <>
+              <SecurityWarningSection />
               <AccountSection />
               <AppSection />
             </>

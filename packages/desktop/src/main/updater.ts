@@ -108,7 +108,13 @@ export function setupAutoUpdater(deps: AutoUpdaterDeps): AutoUpdaterHandle {
     promptRestart(info.version);
   });
 
+  // On Linux, only AppImage builds can self-update. .deb / other installs
+  // must go through the system package manager — electron-updater has no
+  // path to update them and would error trying.
+  const isPackageManagerInstall = process.platform === "linux" && !process.env.APPIMAGE;
+
   const silentCheck = (): void => {
+    if (isPackageManagerInstall) return; // package-manager installs can't self-update
     try {
       // Failures (offline, rate-limit, no feed yet) emit "error" which we
       // log above; the promise rejection mirrors it, so just swallow-log.
@@ -129,6 +135,15 @@ export function setupAutoUpdater(deps: AutoUpdaterDeps): AutoUpdaterHandle {
   }
 
   const checkForUpdatesInteractive = (): void => {
+    if (isPackageManagerInstall) {
+      void showDialog({
+        type: "info",
+        message: "Update via your package manager",
+        detail:
+          "musex was installed via a package — update it through your package manager (e.g. apt upgrade musex).",
+      });
+      return;
+    }
     if (!app.isPackaged) {
       void showDialog({
         type: "info",

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Library, Pin, Track } from "@musex/core";
 import { isHttpUrl, TasteProfile } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
-import { app, safeStorage, shell } from "electron";
+import { app, shell } from "electron";
 import { buildAf, replaygainMode } from "../logic/audio-filters.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
@@ -14,6 +14,11 @@ import { MpvController } from "./adapters/mpv-controller.js";
 import { resolveMpvPaths } from "./adapters/mpv-paths.js";
 import { persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
+import {
+  isSecureStorageAvailable,
+  secureDecrypt,
+  secureEncrypt,
+} from "./adapters/secure-store-host.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";
@@ -42,9 +47,11 @@ export class Runtime {
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
   readonly artCache = new MediaCache(path.join(app.getPath("userData"), "art-cache"));
   /** Constructed in init() — resolveMpvPaths needs `app` ready and throws if
-   *  mpv isn't vendored. Not start()ed here: the controller spawns mpv lazily
-   *  on the first load, keeping app startup fast. */
-  mpv!: MpvController;
+   *  mpv can't be found. Null when mpv is unavailable (Linux with no system mpv,
+   *  or unsupported platform); playback IPC handlers surface mpvUnavailableReason. */
+  mpv: MpvController | null = null;
+  /** Human-readable reason set when mpv construction fails; null when mpv is available. */
+  mpvUnavailableReason: string | null = null;
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
@@ -71,19 +78,31 @@ export class Runtime {
     this.pluginNotifySink = sink;
   }
 
+  /** Push a system notification through the same toast channel as plugin notifications. */
+  pushNotification(n: PluginNotification): void {
+    this.pluginNotifySink?.(n);
+  }
+
   setLibraryChangedSink(sink: ((lib: Library) => void) | null): void {
     this.libraryChangedSink = sink;
   }
 
   async init(): Promise<void> {
-    this.mpv = new MpvController(resolveMpvPaths());
+    try {
+      this.mpv = new MpvController(resolveMpvPaths());
+    } catch (err) {
+      this.mpvUnavailableReason = err instanceof Error ? err.message : String(err);
+      console.error("[musex mpv]", this.mpvUnavailableReason);
+    }
     // Seed the controller's cached audio config from persisted prefs — mpv
     // isn't running yet, so this only sets what the next spawn will apply.
     const audioPrefs = persistence.getAudioPrefs();
-    await this.mpv.applyAudioConfig({
-      af: buildAf(audioPrefs),
-      replaygain: replaygainMode(audioPrefs),
-    });
+    if (this.mpv) {
+      await this.mpv.applyAudioConfig({
+        af: buildAf(audioPrefs),
+        replaygain: replaygainMode(audioPrefs),
+      });
+    }
     await this.cache.init();
     await this.listCache.init();
     this.proxy.configureCache(this.cache, () => ({
@@ -109,6 +128,14 @@ export class Runtime {
       },
     });
 
+    // Warn once at startup when the OS keyring is unavailable — the token and
+    // plugin secrets fall back to tagged plaintext in that case (see secure-store.ts).
+    if (!isSecureStorageAvailable()) {
+      console.warn(
+        "[musex] OS secure storage unavailable — Plex token and plugin secrets stored as plaintext. Install gnome-keyring or kwallet to enable encryption.",
+      );
+    }
+
     // Plugin host: core plugins (lastfm, lidarr) are statically bundled —
     // no filesystem scan for them. Only userData/plugins is scanned for
     // user-installed plugins; core plugin ids win on collision.
@@ -117,16 +144,8 @@ export class Runtime {
       scanDirs: [path.join(app.getPath("userData"), "plugins")],
       dataDir: path.join(app.getPath("userData"), "plugin-data"),
       secretsDir: path.join(app.getPath("userData"), "plugin-secrets"),
-      encrypt: async (s) => {
-        if (!safeStorage.isEncryptionAvailable()) {
-          throw new Error("OS secure storage is unavailable; cannot store plugin secret");
-        }
-        return (await safeStorage.encryptStringAsync(s)).toString("base64");
-      },
-      decrypt: async (s) => {
-        const { result } = await safeStorage.decryptStringAsync(Buffer.from(s, "base64"));
-        return result;
-      },
+      encrypt: async (s) => (await secureEncrypt(s)).toString("base64"),
+      decrypt: async (s) => (await secureDecrypt(Buffer.from(s, "base64"))).value ?? "",
       isEnabled: (id) => persistence.isPluginEnabled(id),
       setEnabled: (id, v) => persistence.setPluginEnabled(id, v),
       notifySink: (p) => this.pluginNotifySink?.(p),

@@ -32,7 +32,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  build:
+  build-macos:
     needs: release-please
     # Runs when release-please just cut a release, or on manual dispatch for an
     # existing tag (needs.release-please is skipped then — always() lets the
@@ -84,4 +84,49 @@ jobs:
             packages/desktop/release/*.zip \
             packages/desktop/release/*.blockmap \
             packages/desktop/release/latest-mac.yml \
+            --clobber
+
+  build-linux:
+    needs: release-please
+    # Same gating as build-macos: fires on a new release or manual dispatch.
+    if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        # version read from package.json "packageManager"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # No vendor step — Linux uses system mpv; the desktop package step does
+      # not require the vendor binary to be present for AppImage/deb builds.
+      # No signing env — Linux builds are unsigned.
+      # If the deb build fails on a missing tool, add:
+      #   sudo apt-get update && sudo apt-get install -y fakeroot
+      # before the package step (ubuntu-latest usually has what electron-builder
+      # needs for AppImage+deb, so try without it first).
+      - name: Check (typecheck + lint + tests)
+        run: pnpm check
+
+      - name: Package (AppImage + deb)
+        run: pnpm --filter @musex/desktop run package
+
+      # latest-linux.yml is the electron-updater feed for Linux.
+      - name: Upload artifacts to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+        run: |
+          gh release upload "$TAG_NAME" \
+            packages/desktop/release/*.AppImage \
+            packages/desktop/release/*.deb \
+            packages/desktop/release/*.blockmap \
+            packages/desktop/release/latest-linux.yml \
             --clobber

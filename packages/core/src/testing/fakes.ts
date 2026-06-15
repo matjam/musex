@@ -258,8 +258,11 @@ export class FakePlaybackEngine implements PlaybackEngine {
   private advancedCb: (() => void) | null = null;
   private endedCb: (() => void) | null = null;
   private errorCb: ((e: Error) => void) | null = null;
+  /** Set to an Error to make the next load() call reject with it. */
+  loadError: Error | null = null;
 
   async load(ref: StreamRef): Promise<void> {
+    if (this.loadError) throw this.loadError;
     this.loaded.push(ref);
   }
   async preload(ref: StreamRef): Promise<void> {

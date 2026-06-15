@@ -26,6 +26,12 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 async function main() {
   const key = `${process.platform}-${process.arch}`;
+
+  if (process.platform === "linux") {
+    console.log("fetch-mpv: Linux uses system mpv — nothing to vendor");
+    return;
+  }
+
   const pin = PINS[key];
   if (!pin) {
     console.error(`fetch-mpv: no mpv pin for ${key}`);

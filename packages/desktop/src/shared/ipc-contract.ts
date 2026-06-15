@@ -118,7 +118,14 @@ export type SignInPollResult = { status: "pending" | "ok" | "error"; message?: s
 export type DiscoverResult = { libraries: Library[]; unreachable: Server[] };
 
 export type RestoreSessionResult = { library: Library | null };
-export type Preferences = { cacheEnabled: boolean; cacheMaxBytes: number };
+export type Preferences = {
+  cacheEnabled: boolean;
+  cacheMaxBytes: number;
+  /** False when the OS keyring is unavailable (e.g. Linux without gnome-keyring/
+   *  kwallet). The Plex token and plugin secrets are stored as tagged plaintext in
+   *  that case. The Settings → General pane shows a warning to the user. */
+  secureStorageAvailable: boolean;
+};
 /** Volume leveling + EQ preset. Structurally identical to
  *  `logic/audio-filters.ts`'s AudioPrefs — duplicated (like
  *  PlaybackEngineEvent) so preload never imports main-process logic. */
@@ -326,6 +333,9 @@ export type RadioNextArgs = {
 
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
+  /** The platform the main process is running on (e.g. "darwin", "linux",
+   *  "win32"). Set as a static field by the preload — no IPC round-trip. */
+  readonly platform: string;
   signInStart(): Promise<SignInStartResult>;
   signInPoll(): Promise<SignInPollResult>;
   restoreSession(): Promise<RestoreSessionResult>;

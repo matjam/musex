@@ -1,11 +1,14 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
-import { SHORTCUT_GROUPS } from "./hooks/useKeyboardShortcuts";
+import { getShortcutGroups } from "./hooks/useKeyboardShortcuts";
 
 /** Keyboard-shortcuts reference as a centered modal (⌘/ or Help menu).
- *  Rendered from the same SHORTCUT_GROUPS table the handler uses, so the
- *  reference can't drift from the behavior. Esc / backdrop / X close it. */
+ *  Rendered from the same shortcut groups table the handler uses, so the
+ *  reference can't drift from the behavior. Esc / backdrop / X close it.
+ *  Modifier glyphs adapt to the current platform (⌘/⌥ on mac, Ctrl/Alt elsewhere). */
 export function ShortcutsModal({ onClose }: { onClose: () => void }) {
+  const groups = getShortcutGroups(window.musex.platform);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -37,7 +40,7 @@ export function ShortcutsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="shortcuts-modal-body">
-          {SHORTCUT_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group.title} className="shortcuts-modal-group">
               <div className="settings-kbd-group-title">{group.title}</div>
               {group.items.map((item) => (

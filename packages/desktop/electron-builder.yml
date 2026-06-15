@@ -45,6 +45,12 @@ mac:
   # nested binaries.
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  extraResources:
+    # `from` resolves relative to the project directory (packages/desktop) — vendor/
+    # lives at the repo root.
+    # mpv lands at Resources/mpv/mpv.app/Contents/MacOS/mpv (matches mpv-paths.ts).
+    - from: ../../vendor/mpv/darwin-arm64/
+      to: mpv/
 # Auto-update feed (electron-updater). Having a `publish` config makes
 # electron-builder embed app-update.yml into the .app (Resources/) and emit
 # latest-mac.yml into release/ even with --publish never (CI uploads artifacts
@@ -55,9 +61,35 @@ publish:
   provider: github
   owner: matjam
   repo: musex
-extraResources:
-  # `from` resolves relative to the project directory (packages/desktop) — vendor/
-  # lives at the repo root.
-  # mpv lands at Resources/mpv/mpv.app/Contents/MacOS/mpv (matches mpv-paths.ts).
-  - from: ../../vendor/mpv/darwin-arm64/
-    to: mpv/
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: AudioVideo
+  maintainer: Nathan Ollerenshaw <nathan@ollerenshaw.org>
+  synopsis: Spotify-style desktop player for your Plex music library
+  description: >-
+    musex streams your own Plex music library with gapless, all-codec direct
+    play (via mpv), smart mixes, and Lidarr-powered discovery.
+  desktop:
+    entry:
+      Categories: AudioVideo;Audio;Player;
+deb:
+  priority: optional
+  depends:
+    # electron-builder 26's default deb depends (verified from
+    # node_modules/app-builder-lib/out/targets/FpmTarget.js getDefaultDepends("deb"))
+    # plus mpv (musex shells out to the system mpv on Linux).
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - mpv

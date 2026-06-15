@@ -48,13 +48,19 @@ playlists, mood mixes, radio, and recommendations.
 
 ## Install
 
-Grab the latest `musex-x.y.z-arm64.dmg` from
-[Releases](https://github.com/matjam/musex/releases). Apple Silicon only for
-now. The app is signed and notarized.
+Grab the latest build from [Releases](https://github.com/matjam/musex/releases):
+
+- **macOS** (Apple Silicon): `musex-x.y.z-arm64.dmg` — signed and notarized.
+- **Linux** (x64): `musex-x.y.z.AppImage` (`chmod +x` and run; auto-updates) or
+  `musex_x.y.z_amd64.deb` (`sudo apt install ./musex_*.deb`). **Linux requires
+  `mpv`** — the `.deb` installs it automatically; AppImage users install it with
+  their package manager (`sudo apt install mpv`, or dnf/pacman). musex shows a
+  reminder if mpv is missing.
 
 You'll need a [Plex Media Server](https://www.plex.tv/) with a music library.
 On first launch musex signs you in via plex.tv (PIN flow) and stores the token
-in the macOS Keychain.
+in the OS keychain (macOS Keychain / libsecret or kwallet on Linux; if no
+keyring is available the token is stored unencrypted with a warning).
 
 The last.fm and Lidarr plugins are optional — configure them in Settings with
 your own API keys.

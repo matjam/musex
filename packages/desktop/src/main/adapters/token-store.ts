@@ -1,26 +1,29 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TokenStore } from "@musex/core";
-import { app, safeStorage } from "electron";
+import { app } from "electron";
+import { secureDecrypt, secureEncrypt } from "./secure-store-host.js";
 
-/** Persists the Plex token encrypted via the OS keychain (macOS Keychain).
- *  safeStorage only encrypts/decrypts — we persist the ciphertext to userData. */
+/** Persists the Plex token encrypted via the OS keychain when available.
+ *  On systems without a keyring (e.g. minimal Linux without gnome-keyring or
+ *  kwallet) the token is stored as tagged plaintext — a deliberate, surfaced
+ *  downgrade. The Settings → General pane warns the user when that fallback is
+ *  active. safeStorage handles encryption/decryption; we persist the bytes to
+ *  userData ourselves. */
 export class SafeStorageTokenStore implements TokenStore {
   private readonly file = join(app.getPath("userData"), "plex-token.enc");
 
   async save(token: string): Promise<void> {
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("OS secure storage is unavailable; cannot persist Plex token");
-    }
-    const buf = await safeStorage.encryptStringAsync(token);
+    const buf = await secureEncrypt(token);
     writeFileSync(this.file, buf);
   }
 
   async load(): Promise<string | null> {
-    if (!existsSync(this.file) || !safeStorage.isEncryptionAvailable()) return null;
+    if (!existsSync(this.file)) return null;
     const buf = readFileSync(this.file);
-    const { result } = await safeStorage.decryptStringAsync(buf);
-    return result;
+    const { value, shouldReEncrypt } = await secureDecrypt(buf);
+    if (value !== null && shouldReEncrypt) await this.save(value);
+    return value;
   }
 
   async clear(): Promise<void> {
