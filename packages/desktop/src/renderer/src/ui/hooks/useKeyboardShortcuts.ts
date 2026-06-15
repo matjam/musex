@@ -12,7 +12,7 @@ export function getShortcutGroups(
   platform: string,
 ): { title: string; items: { combo: string; label: string }[] }[] {
   const isMac = platform === "darwin";
-  // Display-only: behavior already uses ctrlKey|metaKey correctly.
+  // Display-only: on mac the modifier is Cmd (metaKey); on other platforms it is Ctrl (ctrlKey).
   const mod = isMac ? "⌘" : "Ctrl";
   const alt = isMac ? "⌥" : "Alt";
   return [
@@ -55,16 +55,12 @@ export function getShortcutGroups(
   ];
 }
 
-/** Convenience constant using the mac platform glyphs (default for any caller
- *  that doesn't pass a platform — ShortcutsModal passes it explicitly). */
-export const SHORTCUT_GROUPS = getShortcutGroups("darwin");
-
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
 /** App-wide keyboard shortcuts (Spotify mac bindings where they exist, musex
- *  ones for the rest — see SHORTCUT_GROUPS). Matching uses `e.code` whenever
+ *  ones for the rest — see getShortcutGroups). Matching uses `e.code` whenever
  *  Alt is involved because macOS substitutes symbols for Alt+letter/digit
  *  (Alt+S → "ß", Alt+Shift+0 → "º"), which breaks `e.key` matching. */
 export function useKeyboardShortcuts(
@@ -107,8 +103,8 @@ export function useKeyboardShortcuts(
       const st = player.state;
       const track = st.queue ? st.queue.tracks[st.queue.index] : undefined;
 
-      // ── ⌘ combos ────────────────────────────────────────────────────────
-      if (meta && !alt && !shift && !ctrl) {
+      // ── ⌘/Ctrl combos (Cmd on mac, Ctrl elsewhere — matches Electron's CmdOrCtrl) ──
+      if ((meta || ctrl) && !alt && !shift && !(meta && ctrl)) {
         // ⌘K / ⌘, work even while typing in an input.
         if (e.code === "KeyK") {
           handled();
