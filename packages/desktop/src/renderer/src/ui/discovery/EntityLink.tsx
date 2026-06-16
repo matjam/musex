@@ -12,7 +12,13 @@ export function EntityLink({ entity, children }: { entity: EntityRef; children: 
     <button
       type="button"
       className="link-quiet"
-      onClick={() => dispatch({ type: "navigate", view: target })}
+      // Clicks never propagate, so it's safe inside clickable rows (a track
+      // row's select / double-click-to-play must not fire when a name is clicked).
+      onClick={(e) => {
+        e.stopPropagation();
+        dispatch({ type: "navigate", view: target });
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
     >
       {children}
     </button>
