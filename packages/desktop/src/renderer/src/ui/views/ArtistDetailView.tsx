@@ -1,14 +1,17 @@
 import type { Album, Artist, Track } from "@musex/core";
 import { listValidator } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal, Play, Radio, Shuffle, Sparkles } from "lucide-react";
+import { ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
+import { useMonitoring } from "../../state/monitoring";
 import { AlbumArt } from "../AlbumArt";
+import { ActionBar } from "../discovery/ActionBar";
+import { useMonitorAction } from "../discovery/MonitorButton";
+import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
 import { MissingAlbumsSection } from "../MissingAlbumsSection";
 import { StarRating } from "../StarRating";
-import { WatchNewReleasesButton } from "../WatchNewReleasesButton";
 
 type FetchState =
   | { status: "loading" }
@@ -24,6 +27,8 @@ export function ArtistDetailView({ artist }: Props) {
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
     usePlayer();
   const { ratingFor, rate, seed } = useRatings();
+  const monitor = useMonitorAction(artist.name);
+  const { isWatched } = useMonitoring();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
@@ -145,53 +150,40 @@ export function ArtistDetailView({ artist }: Props) {
           size={16}
           className="artist-stars"
         />
-        <div className="album-actions">
-          {fetch.status === "ok" && fetch.albums.length > 0 && (
-            <>
+        <ActionBar
+          onPlay={
+            fetch.status === "ok" && fetch.albums.length > 0
+              ? () => void handlePlayAll()
+              : undefined
+          }
+          onShuffle={
+            fetch.status === "ok" && fetch.albums.length > 0
+              ? () => void handleShuffleAll()
+              : undefined
+          }
+          onSimilar={() =>
+            dispatch({
+              type: "navigate",
+              view: { name: "similar", target: { kind: "artist", name: artist.name } },
+            })
+          }
+          monitor={monitor.supported ? monitor : undefined}
+          overflow={
+            fetch.status === "ok" && fetch.albums.length > 0 ? (
               <button
                 type="button"
-                className="play-btn"
-                title="Play all"
-                disabled={queueFetch === "busy"}
-                onClick={() => void handlePlayAll()}
-              >
-                <Play size={18} />
-              </button>
-              <button
-                type="button"
-                className="shuffle-btn"
-                title="Shuffle all"
-                disabled={queueFetch === "busy"}
-                onClick={() => void handleShuffleAll()}
-              >
-                <Shuffle size={16} />
-              </button>
-              <button
-                type="button"
-                className="album-more-btn"
+                className="action-icon"
                 title={queueFetch === "busy" ? "Loading…" : "More actions"}
                 disabled={queueFetch === "busy"}
                 onClick={handleMoreClick}
               >
                 <MoreHorizontal size={18} />
               </button>
-            </>
-          )}
-          <button
-            type="button"
-            className="shuffle-btn"
-            title="Similar artists"
-            onClick={() =>
-              dispatch({
-                type: "navigate",
-                view: { name: "similar", target: { kind: "artist", name: artist.name } },
-              })
-            }
-          >
-            <Sparkles size={16} />
-          </button>
-          <WatchNewReleasesButton artistName={artist.name} />
-        </div>
+            ) : undefined
+          }
+        />
+        {/* TODO: real download count (Phase F) */}
+        <MonitorStatusLine watching={isWatched(artist.name)} downloading={0} />
       </div>
 
       {fetch.status === "loading" && <div className="content-placeholder">Loading albums…</div>}
