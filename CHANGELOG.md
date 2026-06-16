@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/matjam/musex/compare/v0.7.0...v0.8.0) (2026-06-16)
+
+
+### Features
+
+* Linux hamburger menu + native Wayland, and fix release packaging ([#30](https://github.com/matjam/musex/issues/30)) ([c6c1ebb](https://github.com/matjam/musex/commit/c6c1ebbbe2a27800c5f6af13e2f4b435bce6a435))
+
 ## [0.7.0](https://github.com/matjam/musex/compare/v0.6.0...v0.7.0) (2026-06-16)
 
 
