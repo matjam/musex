@@ -10,7 +10,8 @@
       "bundleIdentifier": "net.stupendous.musex",
       "supportsTablet": false,
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio"],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "plugins": ["expo-router", "expo-audio", "expo-secure-store"],
