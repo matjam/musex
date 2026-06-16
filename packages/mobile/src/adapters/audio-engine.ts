@@ -1,5 +1,6 @@
 import type { PlaybackEngine, StreamRef } from "@musex/core";
 import {
+  type AudioMetadata,
   type AudioPlayer,
   type AudioStatus,
   createAudioPlayer,
@@ -23,11 +24,16 @@ export class ExpoAudioEngine implements PlaybackEngine {
   private errorCb: ((err: Error) => void) | null = null;
 
   private lastEnded = false;
+  private lockScreenActive = false;
 
   /** Must be awaited once before first playback (sets the iOS audio session so
    *  audio plays even when the ringer is silent). Call from app bootstrap. */
   async init(): Promise<void> {
-    await setAudioModeAsync({ playsInSilentMode: true });
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: "doNotMix",
+    });
   }
 
   async load(ref: StreamRef): Promise<void> {
@@ -81,7 +87,37 @@ export class ExpoAudioEngine implements PlaybackEngine {
     this.errorCb = cb;
   }
 
+  /** Mobile-only: push now-playing metadata to the lock screen / Control Center.
+   *  Called by the store on track change. No-op if no player is loaded.
+   *  Note: AudioMetadata uses `albumTitle` (not `album`) and `artworkUrl` (plain string,
+   *  not `{ uri }`), as per the installed expo-audio typings. */
+  setNowPlaying(meta: { title: string; artist: string; album?: string; artwork?: string }): void {
+    const player = this.player;
+    if (!player) return;
+    const md: AudioMetadata = {
+      title: meta.title,
+      artist: meta.artist,
+      albumTitle: meta.album,
+      artworkUrl: meta.artwork,
+    };
+    try {
+      if (this.lockScreenActive) {
+        player.updateLockScreenMetadata(md);
+      } else {
+        player.setActiveForLockScreen(true, md);
+        this.lockScreenActive = true;
+      }
+    } catch {
+      // lock screen optional; never break playback over it
+    }
+  }
+
   dispose(): void {
+    try {
+      this.player?.clearLockScreenControls();
+    } catch {
+      // ignore
+    }
     this.teardownPlayer();
   }
 
@@ -117,7 +153,15 @@ export class ExpoAudioEngine implements PlaybackEngine {
   private teardownPlayer(): void {
     this.sub?.remove();
     this.sub = null;
+    // Pause BEFORE remove: expo-audio's remove() doesn't reliably halt the
+    // native player synchronously, so a rapid next-load otherwise overlaps.
+    try {
+      this.player?.pause();
+    } catch {
+      // player may already be released; ignore
+    }
     this.player?.remove();
     this.player = null;
+    this.lockScreenActive = false;
   }
 }
