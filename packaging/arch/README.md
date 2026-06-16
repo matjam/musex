@@ -1,30 +1,41 @@
 # Arch Linux package
 
-`PKGBUILD` builds a `musex-bin` package by repackaging the official x86_64
-AppImage from [GitHub Releases](https://github.com/matjam/musex/releases).
-Playback uses your **system `mpv`** (a hard dependency), matching musex's
-Linux design.
+musex ships a `-bin` `PKGBUILD` (repackages the official x86_64 AppImage;
+playback uses your **system `mpv`**, a hard dependency).
 
-## Build & install locally
+## Install (recommended)
+
+Each release attaches a `PKGBUILD` already pinned to that release's version and
+AppImage checksum. Grab the latest and build it:
+
+```sh
+curl -LO https://github.com/matjam/musex/releases/latest/download/PKGBUILD
+makepkg -si
+```
+
+`latest/download/PKGBUILD` always resolves to the newest release, so this same
+command upgrades you too (re-run it when a new version ships). Requires
+`base-devel`.
+
+## The file in this directory
+
+`PKGBUILD` here is the **template** — `pkgver` and `sha256sums` are
+placeholders (`SKIP`). The release CI fills them in per release and publishes
+the result as the asset above; you normally don't build this copy directly. If
+you do want to build straight from the repo, pin it first:
 
 ```sh
 cd packaging/arch
-updpkgsums          # pin sha256sums to the published AppImage for this pkgver
-makepkg -si         # build and install (pulls deps incl. mpv)
+# edit pkgver to a released version (Linux artifacts exist from v0.7.0 on)
+updpkgsums
+makepkg -si
 ```
-
-> The committed `sha256sums=('SKIP')` is a placeholder. `updpkgsums` replaces it
-> with the real checksum of the AppImage for the `pkgver` in the file. Linux
-> artifacts exist from **v0.7.0** onward — bump `pkgver` to a version that
-> actually shipped an AppImage before building.
 
 ## Notes
 
-- This is a `-bin` package (repackaged AppImage), not a from-source build —
-  `makepkg`'s network-restricted build sandbox doesn't play well with the
-  Electron/pnpm toolchain's build-time downloads.
-- AUR submission: after pinning the checksum, generate the metadata with
-  `makepkg --printsrcinfo > .SRCINFO` and push to the AUR repo.
-- This recipe is published for convenience and hasn't yet been validated on a
-  live Arch system against a real release AppImage — verify paths
-  (icon/desktop/`chrome-sandbox`) against the first v0.7.0 AppImage.
+- `-bin` (repackaged AppImage), not from-source — `makepkg`'s network-restricted
+  build sandbox doesn't suit the Electron/pnpm toolchain's build-time downloads.
+- Not yet on the AUR. If that changes, `yay -S musex-bin` would be the install
+  command and updates would track with the system.
+- Not yet validated on a live Arch system against a real release AppImage —
+  verify the icon/desktop/`chrome-sandbox` paths against the first v0.7.0 build.

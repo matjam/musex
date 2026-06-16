@@ -130,3 +130,23 @@ jobs:
             packages/desktop/release/*.blockmap \
             packages/desktop/release/latest-linux.yml \
             --clobber
+
+      # Per-release Arch PKGBUILD: the repo file (packaging/arch/PKGBUILD) is the
+      # template; here we pin it to THIS release's version + the real AppImage
+      # sha256 and upload it as a release asset named `PKGBUILD`. Arch users:
+      #   curl -LO https://github.com/matjam/musex/releases/latest/download/PKGBUILD
+      #   makepkg -si
+      # (latest/download/PKGBUILD always resolves to the newest release's copy.)
+      - name: Publish Arch PKGBUILD asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+        run: |
+          VER=$(node -p "require('./packages/desktop/package.json').version")
+          APPIMAGE="packages/desktop/release/musex-${VER}-x86_64.AppImage"
+          SHA=$(sha256sum "$APPIMAGE" | cut -d' ' -f1)
+          mkdir -p /tmp/aur
+          sed -e "s/^pkgver=.*/pkgver=${VER}/" \
+              -e "s|^sha256sums=.*|sha256sums=('${SHA}')|" \
+              packaging/arch/PKGBUILD > /tmp/aur/PKGBUILD
+          gh release upload "$TAG_NAME" /tmp/aur/PKGBUILD --clobber
