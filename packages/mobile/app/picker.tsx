@@ -21,7 +21,7 @@ export default function Picker() {
     const only = libs[0];
     if (libs.length === 1 && only) {
       dispatch({ type: "library-selected", library: only });
-      router.replace("/artists");
+      router.replace("/(tabs)/library");
     }
   }
 
@@ -68,7 +68,7 @@ export default function Picker() {
           subtitle={item.serverName}
           onPress={() => {
             dispatch({ type: "library-selected", library: item });
-            router.push("/artists");
+            router.push("/(tabs)/library");
           }}
         />
       )}

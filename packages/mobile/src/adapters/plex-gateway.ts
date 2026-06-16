@@ -10,7 +10,7 @@ import type {
   Server,
   Track,
 } from "@musex/core";
-import { PlexAuthError } from "@musex/core";
+import { PlexAuthError, plexSort } from "@musex/core";
 import { plexHeaders } from "../logic/plex-headers";
 import {
   parseAlbums,
@@ -180,11 +180,30 @@ export class PlexGatewayImpl implements PlexGateway {
   deletePlaylist(): Promise<void> {
     throw new Error("playlists not implemented in Phase 1");
   }
-  listAllAlbums(_l: Library, _s: LibrarySort, _t: string): Promise<Album[]> {
-    throw new Error("listAllAlbums not implemented in Phase 1");
+  async listAllAlbums(library: Library, sort: LibrarySort, token: string): Promise<Album[]> {
+    const base = this.requireBase(library.serverId);
+    const json = await this.getJson(
+      `${base}/library/sections/${library.id}/all?type=9&sort=${plexSort(sort)}`,
+      token,
+    );
+    return parseAlbums(json, library.serverId);
   }
-  listAllTracks(_l: Library, _s: LibrarySort, _t: string): Promise<Track[]> {
-    throw new Error("listAllTracks not implemented in Phase 1");
+
+  async listAllTracks(library: Library, sort: LibrarySort, token: string): Promise<Track[]> {
+    const base = this.requireBase(library.serverId);
+    const json = await this.getJson(
+      `${base}/library/sections/${library.id}/all?type=10&sort=${plexSort(sort)}`,
+      token,
+    );
+    return parseTracks(json, library.serverId);
+  }
+
+  /** All tracks for an artist (Plex allLeaves). Mobile-only — feeds the Artist
+   *  action bar; not part of the core PlexGateway port. */
+  async listArtistTracks(artistId: string, library: Library, token: string): Promise<Track[]> {
+    const base = this.requireBase(library.serverId);
+    const json = await this.getJson(`${base}/library/metadata/${artistId}/allLeaves`, token);
+    return parseTracks(json, library.serverId);
   }
   listAllTracksPage(): Promise<{ items: Track[]; total: number }> {
     throw new Error("listAllTracksPage not implemented in Phase 1");

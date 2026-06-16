@@ -12,5 +12,6 @@ export default function Index() {
       </View>
     );
   }
-  return <Redirect href={state.phase === "signed-in" ? "/picker" : "/sign-in"} />;
+  if (state.phase !== "signed-in") return <Redirect href="/sign-in" />;
+  return <Redirect href={state.library ? "/(tabs)/library" : "/picker"} />;
 }
