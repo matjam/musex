@@ -125,6 +125,15 @@ app.whenReady().then(async () => {
   // Settings → General → "Check for Updates" — results surface as the same
   // native dialogs the menu item uses, so the renderer needs no result.
   ipcMain.handle(IPC.updaterCheck, () => updater.checkForUpdatesInteractive());
+  // Non-mac topbar hamburger: pop up the live application menu (the same
+  // File/Edit/View/Help we build in menu.ts and set per-window) at the
+  // button's coords. getApplicationMenu() keeps it in sync — nothing
+  // duplicated. macOS never calls this (it has a native menu bar).
+  ipcMain.handle(IPC.menuPopup, (event, x: number, y: number) => {
+    const menu = Menu.getApplicationMenu();
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (menu && win) menu.popup({ window: win, x: Math.round(x), y: Math.round(y) });
+  });
   wireEngineEvents(firstWindow);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) wireEngineEvents(createWindow());

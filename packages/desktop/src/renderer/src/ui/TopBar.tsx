@@ -1,5 +1,9 @@
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu as MenuIcon, Search } from "lucide-react";
 import { useApp } from "../state/app";
+
+// Non-mac windows are frameless, so the File/Edit/View/Help menu has no
+// visible menu bar; a hamburger pops it up. macOS keeps its native menu bar.
+const isMac = window.musex.platform === "darwin";
 
 /**
  * Persistent top bar. The whole bar is a macOS drag region (so the window can be
@@ -12,6 +16,20 @@ export function TopBar() {
 
   return (
     <header className="topbar">
+      {!isMac && (
+        <button
+          type="button"
+          className="topbar-menu-btn"
+          title="Menu"
+          aria-label="Menu"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            void window.musex.popupMenu(r.left, r.bottom);
+          }}
+        >
+          <MenuIcon size={18} />
+        </button>
+      )}
       <div className="topbar-logo brand">
         mus<span>ex</span>
       </div>
