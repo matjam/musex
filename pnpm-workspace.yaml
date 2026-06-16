@@ -8,6 +8,16 @@ packages:
 # .npmrc).
 nodeLinker: hoisted
 
+# Single React version across the monorepo. Expo SDK 56 / RN 0.85 hard-pin
+# react 19.2.3; the hoisted linker can't give desktop a different react without
+# splitting react/react-dom (root react-dom@19.2.7 ended up paired with root
+# react@19.2.3 while desktop used a nested react@19.2.7 -> two React copies ->
+# blank renderer window). Force ONE version everywhere; desktop drops 19.2.7->
+# 19.2.3 (patch-level, safe), mobile stays SDK-correct.
+overrides:
+  react: "19.2.3"
+  react-dom: "19.2.3"
+
 # pnpm 11 gates dependency build scripts; allowlist the ones that need them.
 allowBuilds:
   esbuild: true

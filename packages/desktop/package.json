@@ -34,7 +34,7 @@
     "electron": "42.3.3",
     "electron-builder": "^26.15.2",
     "electron-vite": "^5.0.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   }
 }
