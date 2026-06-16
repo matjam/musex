@@ -1450,25 +1450,6 @@ img.np-art {
   justify-content: flex-start;
 }
 
-/* Album/artist action bar: sits next to the play button */
-.album-more-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.album-more-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
 /* Inline dropdown for album/artist more-menu */
 .more-dropdown {
   position: fixed;
@@ -2625,22 +2606,6 @@ img.queue-row-art {
   font-size: 11.5px;
 }
 
-.expansion-chip--requested,
-.expansion-chip--suggested {
-  color: var(--yellow);
-  border-color: color-mix(in srgb, var(--yellow) 45%, transparent);
-}
-
-.expansion-chip--landed {
-  color: var(--green);
-  border-color: color-mix(in srgb, var(--green) 45%, transparent);
-}
-
-.expansion-chip--abandoned,
-.expansion-chip--rejected {
-  color: var(--muted);
-}
-
 .expansion-reject {
   background: none;
   border: none;
@@ -2667,10 +2632,6 @@ img.queue-row-art {
   vertical-align: -2px;
   color: var(--green);
   margin-right: 4px;
-}
-
-.watch-btn--on {
-  color: var(--green);
 }
 
 /* ---- Settings modal (musex menu → Settings…, ⌘,) ---- */
@@ -2831,20 +2792,6 @@ img.queue-row-art {
   white-space: pre-wrap;
   word-break: break-word;
   min-width: 0;
-}
-
-/* Secondary action button in the detail panel (e.g. "Similar Songs") */
-.detail-secondary {
-  margin-top: 0;
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-}
-
-.detail-secondary:hover {
-  filter: none;
-  color: var(--green);
-  border-color: var(--green);
 }
 
 /* ---- Acquisition (External Artist + Downloads views) ---- */

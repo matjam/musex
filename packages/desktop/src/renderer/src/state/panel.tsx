@@ -1,7 +1,7 @@
 import type { Album, Track } from "@musex/core";
 import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
 
-export type PanelKind = "track" | "queue" | "artist-info" | "entity";
+export type PanelKind = "queue" | "entity";
 
 /** Payload for the unified entity panel — one of artist/album/song. */
 export type EntityPanelPayload =
@@ -16,7 +16,7 @@ interface PanelApi {
   /** Payload for the unified entity panel (set by openEntity). */
   entityPayload: EntityPanelPayload | null;
   /** Open a payload-free panel. Use openEntity/openArtistInfo for payload panels. */
-  openPanel(kind: Exclude<PanelKind, "artist-info" | "entity">): void;
+  openPanel(kind: Exclude<PanelKind, "entity">): void;
   /** Open the unified entity panel (artist/album/song). */
   openEntity(payload: EntityPanelPayload): void;
   /** Thin wrapper over openEntity for legacy artist-info callers. */
@@ -24,7 +24,7 @@ interface PanelApi {
   /** Close the open panel; with `kind`, only if that panel is the open one. */
   closePanel(kind?: PanelKind): void;
   /** Toggle a panel open/closed. Use openEntity/openArtistInfo for payload panels. */
-  togglePanel(kind: Exclude<PanelKind, "artist-info" | "entity">): void;
+  togglePanel(kind: Exclude<PanelKind, "entity">): void;
 }
 
 const Ctx = createContext<PanelApi | null>(null);
