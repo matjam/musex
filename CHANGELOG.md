@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/matjam/musex/compare/v0.8.0...v0.8.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **arch:** repair broken /usr/bin/musex symlink and app-menu launcher ([#33](https://github.com/matjam/musex/issues/33)) ([aee7532](https://github.com/matjam/musex/commit/aee75323725530b6f71eab37ac56bb79e88c28af))
+
 ## [0.8.0](https://github.com/matjam/musex/compare/v0.7.0...v0.8.0) (2026-06-16)
 
 
