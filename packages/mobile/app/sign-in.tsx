@@ -1,4 +1,5 @@
 import type { Pin } from "@musex/core";
+import { PlexAuthError } from "@musex/core";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
@@ -19,16 +20,23 @@ export default function SignIn() {
       const p = await gateway.createPin();
       setPin(p);
       await Linking.openURL(p.authUrl);
-      // Poll until the token appears (cap ~2 min).
-      for (let i = 0; i < 60; i++) {
+      // Poll until the token appears (cap ~2.5 min). plex.tv can be slow or
+      // return transient 5xx (504 gateway timeout) under load — keep polling
+      // through those; only a genuine 401 (PlexAuthError) is terminal.
+      for (let i = 0; i < 75; i++) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        const { authToken } = await gateway.pollPin(p.id);
-        if (authToken) {
-          await tokenStore.save(authToken);
-          const servers = await gateway.listServers(authToken);
-          dispatch({ type: "signed-in", token: authToken, servers });
-          router.replace("/picker");
-          return;
+        try {
+          const { authToken } = await gateway.pollPin(p.id);
+          if (authToken) {
+            await tokenStore.save(authToken);
+            const servers = await gateway.listServers(authToken);
+            dispatch({ type: "signed-in", token: authToken, servers });
+            router.replace("/picker");
+            return;
+          }
+        } catch (err) {
+          if (err instanceof PlexAuthError) throw err; // real auth failure — stop
+          // transient network / 5xx — swallow and keep polling until timeout
         }
       }
       setError("Sign-in timed out. Try again.");
