@@ -12,7 +12,7 @@ Playback Core + Plex Connection":** a running iOS app that proves the pure
 
 | Decision | Choice | Why |
 |---|---|---|
-| RN framework | **Expo SDK 55 + dev client** | First-party native modules, EAS Build, config plugins; New Architecture is always-on in SDK 55. Dev client (not Expo Go) so background-audio entitlements / Keychain / native config work while keeping the managed workflow. |
+| RN framework | **Expo SDK 56 + dev client** | First-party native modules, EAS Build, config plugins; New Architecture is always-on in SDK 56. Dev client (not Expo Go) so background-audio entitlements / Keychain / native config work while keeping the managed workflow. |
 | Audio engine | **`expo-audio`** | First-party, MIT, New-Architecture, background + lock-screen capable. `react-native-track-player` V5 went commercial (`@rntp/player`, paid for commercial use) — a license conflict for an MIT project; V4 is frozen. Our `PlaybackSession` already owns the queue, so we only need a thin engine. |
 | Codec strategy | **Direct-play + HLS transcode fallback** | Direct-play codecs AVPlayer supports (aac/mp3/alac/flac/pcm/aiff/wav); fall back to Plex HLS transcode only for what it can't (Opus/OGG/WavPack/…). Reverses desktop's "never transcode" invariant — unavoidable on iOS, where AVPlayer's codec set is narrower than mpv/ffmpeg's. |
 | Platform scope | **iOS-first, cross-platform-capable** | Build and test iOS now; every choice (Expo, `expo-audio`, RN) is Android-capable so Android is a cheap later phase. No Android testing burden in Phase 1. |
@@ -33,7 +33,7 @@ genuinely portable — **not** to be visually polished (that's Phase 2).
 
 ## Architecture
 
-A new workspace package **`packages/mobile`** (`@musex/mobile`), an Expo SDK 55
+A new workspace package **`packages/mobile`** (`@musex/mobile`), an Expo SDK 56
 app, joins the existing pnpm workspace. It is a thin adapter over `@musex/core`,
 exactly as `packages/desktop` is. Core is consumed **as TS source**
 (`@musex/core` → `./src/index.ts`), compiled by Metro — the same

@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A React Native (Expo SDK 55 + dev client) iOS app that signs into Plex, browses Artists → Albums → Tracks, and plays a queue through `expo-audio`, proving `@musex/core` + its four ports port to mobile.
+**Goal:** A React Native (Expo SDK 56 + dev client) iOS app that signs into Plex, browses Artists → Albums → Tracks, and plays a queue through `expo-audio`, proving `@musex/core` + its four ports port to mobile.
 
 **Architecture:** New `packages/mobile` Expo app, a thin adapter over the pure `@musex/core` (consumed as TS source via Metro). Four port adapters (`TokenStore`→expo-secure-store, `PlexGateway`→hand-rolled `fetch`, `StreamResolver`→codec-decision, `PlaybackEngine`→expo-audio) plus a small app-local state store hosting the core `PlaybackSession`.
 
-**Tech Stack:** Expo SDK 55, React Native 0.83 (New Architecture), `expo-audio`, `expo-router`, `expo-secure-store`, `react-native-url-polyfill`, Metro (monorepo), Vitest + Biome + tsc.
+**Tech Stack:** Expo SDK 56, React Native 0.85 (New Architecture), `expo-audio`, `expo-router`, `expo-secure-store`, `react-native-url-polyfill`, Metro (monorepo), Vitest + Biome + tsc.
 
 **Spec:** `docs/superpowers/specs/2026-06-15-ios-foundation-design.md`
 
@@ -15,7 +15,7 @@
 - `@musex/core` is **pure** — never add Node/DOM/Electron/RN imports to it. New pure logic could go in core, but Phase 1 keeps mobile-only adapters in `packages/mobile`.
 - TypeScript base config (`tsconfig.base.json`) sets `moduleResolution: "Bundler"`, `verbatimModuleSyntax: true` (use `import type`/`export type`), `noUncheckedIndexedAccess: true`.
 - Biome ignores `_`-prefixed unused params. `pnpm check` at the root is the bar (biome + tsc + vitest across packages).
-- **Verify every Expo dependency version before pinning** with `npx expo install --check` / `npm view <pkg> version`; never trust a version written in this plan from memory — `expo install` resolves the SDK-55-correct version. When a step pins a version, it is a starting point; let `expo install` correct it.
+- **Verify every Expo dependency version before pinning** with `npx expo install --check` / `npm view <pkg> version`; never trust a version written in this plan from memory — `expo install` resolves the SDK-56-correct version. When a step pins a version, it is a starting point; let `expo install` correct it.
 - Commit after each task with a conventional-commit message (`feat:` / `chore:` / `test:`). Push is handled at the branch level; commit locally per task.
 
 ---
@@ -92,14 +92,14 @@ packages/mobile/
   },
   "dependencies": {
     "@musex/core": "workspace:*",
-    "expo": "^55.0.0",
+    "expo": "^56.0.0",
     "expo-audio": "*",
     "expo-router": "*",
     "expo-secure-store": "*",
     "expo-constants": "*",
     "expo-linking": "*",
     "react": "19.2.0",
-    "react-native": "0.83.0",
+    "react-native": "0.85.0",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-safe-area-context": "*",
     "react-native-screens": "*"
@@ -113,7 +113,7 @@ packages/mobile/
 }
 ```
 
-Note: the `"*"` Expo packages are corrected to SDK-55-exact versions by `expo install` in Step 5. `react`/`react-native`/`expo` are starting points — verify against the SDK 55 release notes.
+Note: the `"*"` Expo packages are corrected to SDK-56-exact versions by `expo install` in Step 5. `react`/`react-native`/`expo` are starting points — verify against the SDK 56 release notes.
 
 - [ ] **Step 2: Create `packages/mobile/tsconfig.json`**
 
@@ -152,7 +152,6 @@ module.exports = (api) => {
     "scheme": "musex",
     "version": "0.0.1",
     "orientation": "portrait",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "net.stupendous.musex",
       "supportsTablet": false,
@@ -165,16 +164,16 @@ module.exports = (api) => {
 }
 ```
 
-Note: `UIBackgroundModes: ["audio"]` is **groundwork only** — the background playback path is Phase 4. It is harmless to declare now and avoids a later prebuild churn.
+Note: SDK 56 runs the New Architecture unconditionally — there is **no `newArchEnabled` field** (removed in SDK 55+), so it is omitted here. `UIBackgroundModes: ["audio"]` is **groundwork only** — the background playback path is Phase 4. It is harmless to declare now and avoids a later prebuild churn.
 
-- [ ] **Step 5: Add Expo deps and let `expo install` pin SDK-55-correct versions**
+- [ ] **Step 5: Add Expo deps and let `expo install` pin SDK-56-correct versions**
 
 Run (repo root):
 ```bash
 pnpm --filter @musex/mobile install
 pnpm --filter @musex/mobile exec expo install expo-audio expo-router expo-secure-store expo-constants expo-linking react-native-url-polyfill react-native-safe-area-context react-native-screens
 ```
-Expected: `package.json` dependency versions are rewritten to the exact versions Expo SDK 55 expects. Commit those exact versions.
+Expected: `package.json` dependency versions are rewritten to the exact versions Expo SDK 56 expects. Commit those exact versions.
 
 - [ ] **Step 6: Update `.gitignore`** — append:
 
@@ -188,16 +187,16 @@ packages/mobile/dist/
 
 Note: `ios/`/`android/` are generated by `expo prebuild`; they stay out of git (managed-with-prebuild model). If a config plugin ever requires committed native dirs, that's a later decision.
 
-- [ ] **Step 7: Verify Expo is installed at SDK 55**
+- [ ] **Step 7: Verify Expo is installed at SDK 56**
 
 Run: `pnpm --filter @musex/mobile exec expo --version`
-Expected: a 55.x SDK-compatible Expo CLI. Also run `pnpm --filter @musex/mobile exec expo-doctor` and resolve any reported issues.
+Expected: a 56.x SDK-compatible Expo CLI. Also run `pnpm --filter @musex/mobile exec expo-doctor` and resolve any reported issues.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add -A
-git commit -m "chore(mobile): scaffold @musex/mobile Expo SDK 55 package"
+git commit -m "chore(mobile): scaffold @musex/mobile Expo SDK 56 package"
 ```
 
 ---
@@ -231,7 +230,7 @@ config.resolver.nodeModulesPaths = [
 ];
 
 // 3. @musex/core ships TS source via package.json "exports"; package-exports
-//    resolution is on by default in SDK 55. Keep it explicit.
+//    resolution is on by default in SDK 56. Keep it explicit.
 config.resolver.unstable_enablePackageExports = true;
 
 module.exports = config;
@@ -1092,7 +1091,7 @@ git commit -m "feat(mobile): PlexGateway over fetch (auth + browse)"
 
 The adapter creates a fresh `AudioPlayer` per `load()` (disposing the previous), attaches one internal `playbackStatusUpdate` listener that fans out to the stored core callbacks, and maps the rest of the port directly. `preload()` is a no-op (gapless deferred per the spec); `onAdvanced` is registered but only fires via the manual-advance path the session drives, so the adapter never calls it (it routes end-of-track through `onEnded`).
 
-**Reference (verified against expo-audio SDK 55 docs):** `createAudioPlayer(source, { updateInterval })` → `AudioPlayer`; methods `play()`, `pause()`, `seekTo(seconds)`; properties `volume` (0–1, settable), `currentTime`, `isLoaded`; `addListener("playbackStatusUpdate", (status) => …)` where `status` has `currentTime`, `didJustFinish`, `isLoaded`, `playing`; `setAudioModeAsync({ playsInSilentMode })`. Confirm method/property names against the installed `expo-audio` typings before finishing this task.
+**Reference (verified against expo-audio SDK 56 docs):** `createAudioPlayer(source, { updateInterval })` → `AudioPlayer`; methods `play()`, `pause()`, `seekTo(seconds)`; properties `volume` (0–1, settable), `currentTime`, `isLoaded`; `addListener("playbackStatusUpdate", (status) => …)` where `status` has `currentTime`, `didJustFinish`, `isLoaded`, `playing`; `setAudioModeAsync({ playsInSilentMode })`. Confirm method/property names against the installed `expo-audio` typings before finishing this task.
 
 - [ ] **Step 1: Implement `audio-engine.ts`**
 
@@ -2126,7 +2125,7 @@ Walk the flow and confirm each:
 
 Capture anything that fails as a follow-up task; do not mark Phase 1 done until 1–4 pass.
 
-- [ ] **Step 7: Update docs** — add a `## iOS (mobile)` section to the project `CLAUDE.md` Tooling notes capturing the verified-current facts discovered during the build (exact Expo SDK 55 dep versions, expo-audio method/property names as they actually shipped, any Hermes polyfill needed, the `expo prebuild`/`run:ios` dev loop). This is required by the repo's "persist what you learn" rule.
+- [ ] **Step 7: Update docs** — add a `## iOS (mobile)` section to the project `CLAUDE.md` Tooling notes capturing the verified-current facts discovered during the build (exact Expo SDK 56 dep versions, expo-audio method/property names as they actually shipped, any Hermes polyfill needed, the `expo prebuild`/`run:ios` dev loop). This is required by the repo's "persist what you learn" rule.
 
 - [ ] **Step 8: Commit**
 
@@ -2140,7 +2139,7 @@ git commit -m "feat(mobile): mini player + end-to-end playback wiring"
 ## Self-review (completed by plan author)
 
 **Spec coverage:**
-- Expo SDK 55 + dev client → Task 1 (app.json `newArchEnabled`, dev-client scripts), Task 13 (prebuild/run).
+- Expo SDK 56 + dev client → Task 1 (dev-client scripts; New Arch always-on, no `newArchEnabled` field), Task 13 (prebuild/run).
 - Metro monorepo + Hermes polyfills → Task 2.
 - `TokenStore` (Keychain) → Task 9.
 - `PlexGateway` hand-rolled fetch, auth+browse, 401→PlexAuthError, `@ctrl/plex` not reused → Tasks 4/6/7.
@@ -2156,4 +2155,4 @@ git commit -m "feat(mobile): mini player + end-to-end playback wiring"
 
 **Type consistency:** `decideStreamRef(track, baseUrl, token, clientId)` is defined in Task 5 and called identically in Task 9. `PlexGatewayImpl(fetch, clientId)` + `baseUrlFor(serverId)` defined in Task 7, used in Tasks 9/12. `parse*` signatures defined in Task 6, used in Task 7. `ExpoAudioEngine` (`init/load/play/pause/seek/setVolume/on*/dispose`) defined in Task 8, used in Task 9. Store actions/`playTracks` defined in Task 9, used in Tasks 10–13.
 
-**Known execution-time unknowns (flagged, not placeholders):** exact `expo-audio` 55 method/property names (Task 8); exact SDK-55 dependency versions (resolved by `expo install`, Task 1). Each is called out at the point it matters with the authoritative source to check.
+**Known execution-time unknowns (flagged, not placeholders):** exact `expo-audio` method/property names (Task 8); exact SDK-56 dependency versions (resolved by `expo install`, Task 1). Each is called out at the point it matters with the authoritative source to check.
