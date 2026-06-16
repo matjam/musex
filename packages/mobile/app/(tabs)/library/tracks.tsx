@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
+import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { theme } from "../../../src/ui/theme";
 
-export default function Tracks() {
+export default function AlbumTracks() {
   const { albumId } = useLocalSearchParams<{ albumId: string }>();
-  const { state, gateway, playTracks, artBaseFor, token } = useStore();
+  const { state, gateway, session, playTracks, artBaseFor, token } = useStore();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +39,7 @@ export default function Tracks() {
 
   const first = tracks[0];
   const base = first ? artBaseFor(first.serverId) : null;
-  const headerUrl = first && base && token ? artUrl(base, first.thumb, token) : null;
+  const headerArt = first && base && token ? artUrl(base, first.thumb, token) : null;
 
   return (
     <FlatList
@@ -46,14 +47,17 @@ export default function Tracks() {
       data={tracks}
       keyExtractor={(t) => t.id}
       ListHeaderComponent={
-        <View style={{ alignItems: "center", paddingVertical: theme.space(2) }}>
-          <AlbumArt url={headerUrl} size={200} />
-          {first?.albumTitle ? (
-            <Text style={{ color: theme.text, fontSize: 18, fontWeight: "700", marginTop: 10 }}>
-              {first.albumTitle}
-            </Text>
-          ) : null}
-          {first ? <Text style={{ color: theme.textDim }}>{first.artistName}</Text> : null}
+        <View>
+          <View style={{ alignItems: "center", paddingVertical: theme.space(2) }}>
+            <AlbumArt url={headerArt} size={200} />
+            {first?.albumTitle ? (
+              <Text style={{ color: theme.text, fontSize: 18, fontWeight: "700", marginTop: 10 }}>
+                {first.albumTitle}
+              </Text>
+            ) : null}
+            {first ? <Text style={{ color: theme.textDim }}>{first.artistName}</Text> : null}
+          </View>
+          <ActionBar session={session} getTracks={() => tracks} />
         </View>
       }
       renderItem={({ item, index }) => (

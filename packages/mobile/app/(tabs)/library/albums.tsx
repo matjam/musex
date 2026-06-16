@@ -1,18 +1,21 @@
 import type { Album } from "@musex/core";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, useWindowDimensions, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
-import { AlbumArt } from "../../../src/ui/AlbumArt";
+import { ActionBar } from "../../../src/ui/ActionBar";
+import { Tile } from "../../../src/ui/Tile";
 import { theme } from "../../../src/ui/theme";
 
-export default function Albums() {
+export default function ArtistAlbums() {
   const { artistId } = useLocalSearchParams<{ artistId: string }>();
-  const { state, gateway, artBaseFor, token } = useStore();
+  const { state, gateway, session, artBaseFor, token } = useStore();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
+  const tileSize = (width - 8) / 2;
 
   useEffect(() => {
     let alive = true;
@@ -40,28 +43,32 @@ export default function Albums() {
   return (
     <FlatList
       style={{ backgroundColor: theme.bg }}
-      contentContainerStyle={{ padding: theme.space(1) }}
       data={albums}
-      keyExtractor={(a) => a.id}
       numColumns={2}
+      keyExtractor={(a) => a.id}
+      ListHeaderComponent={
+        <ActionBar
+          session={session}
+          getTracks={() =>
+            state.library && state.token && artistId
+              ? gateway.listArtistTracks(artistId, state.library, state.token)
+              : []
+          }
+        />
+      }
       renderItem={({ item }) => {
         const base = artBaseFor(item.serverId);
-        const url = base && token ? artUrl(base, item.thumb, token) : null;
+        const art = base && token ? artUrl(base, item.thumb, token) : null;
         return (
-          <Pressable
+          <Tile
+            art={art}
+            size={tileSize}
+            label={item.title}
+            sublabel={item.year ? String(item.year) : undefined}
             onPress={() =>
               router.push({ pathname: "/(tabs)/library/tracks", params: { albumId: item.id } })
             }
-            style={{ flex: 1, padding: theme.space(1), maxWidth: "50%" }}
-          >
-            <AlbumArt url={url} size={170} />
-            <Text numberOfLines={1} style={{ color: theme.text, fontSize: 14, marginTop: 6 }}>
-              {item.title}
-            </Text>
-            {item.year ? (
-              <Text style={{ color: theme.textDim, fontSize: 12 }}>{item.year}</Text>
-            ) : null}
-          </Pressable>
+          />
         );
       }}
     />
