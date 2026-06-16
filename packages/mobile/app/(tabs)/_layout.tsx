@@ -2,13 +2,16 @@ import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from "ex
 import { Cog, Library, type LucideIcon } from "lucide-react-native";
 import { forwardRef } from "react";
 import { Pressable, type View as RNView, Text } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MiniPlayer } from "../../src/ui/MiniPlayer";
 import { theme } from "../../src/ui/theme";
 
 // SDK 56: expo-router dropped react-navigation, so the tab bar is built with
-// expo-router/ui's headless Tabs (TabSlot = content, TabList = the bar). The
-// mini-player is a plain sibling rendered above the bar.
+// expo-router/ui's headless Tabs (TabSlot = content, TabList = the bar). TabList
+// MUST be a direct child of Tabs — the navigator scans direct children for it,
+// so it cannot be wrapped (e.g. in a SafeAreaView). The mini-player is a plain
+// sibling rendered above the bar; the bottom safe-area inset is applied as
+// padding on TabList instead of a wrapper.
 type TabButtonProps = TabTriggerSlotProps & { icon: LucideIcon; label: string };
 
 const TabButton = forwardRef<RNView, TabButtonProps>(
@@ -29,26 +32,26 @@ const TabButton = forwardRef<RNView, TabButtonProps>(
 TabButton.displayName = "TabButton";
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   return (
     <Tabs>
       <TabSlot />
       <MiniPlayer />
-      <SafeAreaView edges={["bottom"]} style={{ backgroundColor: theme.surface }}>
-        <TabList
-          style={{
-            backgroundColor: theme.surface,
-            borderTopWidth: 1,
-            borderTopColor: theme.border,
-          }}
-        >
-          <TabTrigger name="library" href="/(tabs)/library" asChild>
-            <TabButton icon={Library} label="Library" />
-          </TabTrigger>
-          <TabTrigger name="settings" href="/(tabs)/settings" asChild>
-            <TabButton icon={Cog} label="Settings" />
-          </TabTrigger>
-        </TabList>
-      </SafeAreaView>
+      <TabList
+        style={{
+          backgroundColor: theme.surface,
+          borderTopWidth: 1,
+          borderTopColor: theme.border,
+          paddingBottom: insets.bottom,
+        }}
+      >
+        <TabTrigger name="library" href="/(tabs)/library" asChild>
+          <TabButton icon={Library} label="Library" />
+        </TabTrigger>
+        <TabTrigger name="settings" href="/(tabs)/settings" asChild>
+          <TabButton icon={Cog} label="Settings" />
+        </TabTrigger>
+      </TabList>
     </Tabs>
   );
 }
