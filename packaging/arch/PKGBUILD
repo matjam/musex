@@ -49,6 +49,14 @@ package() {
   # AppRun is the AppImage's own launcher; not needed once installed.
   rm -f "$pkgdir/opt/$_appname/AppRun"
 
+  # The AppImage squashfs stores every directory mode 700 (root-only), and
+  # `cp -a` preserves it — including onto /opt/musex itself. Left as-is, a
+  # non-root user can't traverse the tree, so /usr/bin/musex resolves to a
+  # "broken" link and the .desktop launcher can't start. Normalize to world-
+  # readable files / world-traversable dirs, keeping existing execute bits so
+  # the musex ELF and helper binaries stay runnable.
+  chmod -R u+rwX,go+rX "$pkgdir/opt/$_appname"
+
   # Chromium's sandbox helper must be setuid root.
   chmod 4755 "$pkgdir/opt/$_appname/chrome-sandbox"
 
@@ -62,17 +70,13 @@ package() {
   sed -i "s|^Exec=.*|Exec=$_appname %U|" \
     "$pkgdir/usr/share/applications/$_appname.desktop"
 
-  # Hicolor icons electron-builder bakes into the AppImage.
-  for size in 16 32 48 64 128 256 512; do
-    local icon="squashfs-root/usr/share/icons/hicolor/${size}x${size}/apps/$_appname.png"
-    if [ -f "$icon" ]; then
-      install -Dm644 "$icon" \
-        "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/$_appname.png"
-    fi
+  # Hicolor icons electron-builder bakes into the AppImage. The size set
+  # varies (currently just 1024x1024), so install whatever is present rather
+  # than guessing fixed sizes — otherwise the app-menu launcher gets no icon.
+  local icon size
+  for icon in squashfs-root/usr/share/icons/hicolor/*/apps/"$_appname".png; do
+    [ -f "$icon" ] || continue
+    size="${icon#squashfs-root/usr/share/icons/hicolor/}"  # e.g. 1024x1024/apps/musex.png
+    install -Dm644 "$icon" "$pkgdir/usr/share/icons/hicolor/$size"
   done
-  # Top-level icon fallback if the hicolor tree is absent.
-  if [ ! -d "$pkgdir/usr/share/icons" ] && [ -f "squashfs-root/$_appname.png" ]; then
-    install -Dm644 "squashfs-root/$_appname.png" \
-      "$pkgdir/usr/share/icons/hicolor/512x512/apps/$_appname.png"
-  fi
 }
