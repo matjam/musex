@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ExternalArtistResultDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
+import { useMonitoring } from "../../state/monitoring";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
@@ -21,6 +22,7 @@ export function SearchView() {
   const { library, dispatch, searchQuery: query } = useApp();
   const { state, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
+  const monitoring = useMonitoring();
   const acquisitionAvailable = useAcquisitionAvailable();
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
@@ -98,23 +100,14 @@ export function SearchView() {
     };
   }, [query, acquisitionAvailable]);
 
-  // Optimistic flip to "monitored"; revert + log on failure (the plugin
-  // itself toasts success/failure — no extra toast here).
+  // Monitor via the precise providerRef, then refresh the live monitoring
+  // store so the marker lights up (the plugin itself toasts success/failure).
   function monitorArtist(artist: ExternalArtistResultDto) {
-    const flip = (monitored: boolean) =>
-      setExternal((prev) =>
-        prev.map((a) =>
-          a.providerId === artist.providerId && a.providerRef === artist.providerRef
-            ? { ...a, monitored }
-            : a,
-        ),
-      );
-    flip(true);
     window.musex
       .acquisitionAcquireArtist({ providerId: artist.providerId, providerRef: artist.providerRef })
+      .then(() => monitoring.refresh())
       .catch((err: unknown) => {
         console.error("[acquisition] acquireArtist failed:", err);
-        flip(false);
       });
   }
 
@@ -227,26 +220,28 @@ export function SearchView() {
           <h3 className="browse-title">Not in your library</h3>
           <div className="browse-sub">via your acquisition plugin — monitor to download</div>
           <div className="browse-grid">
-            {externalArtists.map((artist) => (
-              <GridCard
-                key={`${artist.providerId}:${artist.providerRef}`}
-                round
-                thumb={artist.imageUrl}
-                title={artist.name}
-                subtitle={artist.disambiguation}
-                badge={artist.monitored ? "monitored" : undefined}
-                badgeVariant={artist.monitored ? "monitored" : undefined}
-                onOpen={() =>
-                  dispatch({
-                    type: "navigate",
-                    view: { name: "external-artist", artistName: artist.name },
-                  })
-                }
-                actionIcon={artist.monitored ? undefined : Download}
-                actionTitle="Monitor artist — download everything"
-                onAction={artist.monitored ? undefined : () => monitorArtist(artist)}
-              />
-            ))}
+            {externalArtists.map((artist) => {
+              const monitored = monitoring.isMonitored(artist.name);
+              return (
+                <GridCard
+                  key={`${artist.providerId}:${artist.providerRef}`}
+                  round
+                  thumb={artist.imageUrl}
+                  title={artist.name}
+                  subtitle={artist.disambiguation}
+                  monitored={monitored}
+                  onOpen={() =>
+                    dispatch({
+                      type: "navigate",
+                      view: { name: "external-artist", artistName: artist.name },
+                    })
+                  }
+                  actionIcon={monitored ? undefined : Download}
+                  actionTitle="Monitor artist — download everything"
+                  onAction={monitored ? undefined : () => monitorArtist(artist)}
+                />
+              );
+            })}
           </div>
         </div>
       )}

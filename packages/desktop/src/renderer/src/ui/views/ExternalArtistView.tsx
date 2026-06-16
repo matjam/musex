@@ -1,10 +1,12 @@
-import { Download } from "lucide-react";
+import { Bell, BellRing, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
-import { badgeFor } from "../acquisition-badges";
+import { useMonitoring } from "../../state/monitoring";
+import { ActionBar } from "../discovery/ActionBar";
+import { useMonitorAction, useWatchAction } from "../discovery/MonitorButton";
+import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
 import { GridCard } from "../GridCard";
-import { WatchNewReleasesButton } from "../WatchNewReleasesButton";
 
 type FetchState =
   | { status: "loading" }
@@ -17,16 +19,14 @@ type FetchState =
  *  last.fm-only titles are shown dimmed as unavailable. */
 export function ExternalArtistView({ artistName }: { artistName: string }) {
   const { dispatch } = useApp();
+  const monitoring = useMonitoring();
+  // "Monitor entire artist" (one-way acquire) + "Watch new releases" (toggle).
+  const monitor = useMonitorAction(artistName);
+  const watch = useWatchAction(artistName);
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
-  const [monitorState, setMonitorState] = useState<"idle" | "busy" | "done" | "error">("idle");
-  const [monitorError, setMonitorError] = useState<string | null>(null);
-  const [artistMonitored, setArtistMonitored] = useState(false);
 
   useEffect(() => {
     setFetch({ status: "loading" });
-    setMonitorState("idle");
-    setMonitorError(null);
-    setArtistMonitored(false);
     let cancelled = false;
     window.musex
       .acquisitionDiscography(artistName)
@@ -41,16 +41,6 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
             message: err instanceof Error ? err.message : "Failed to look up artist",
           });
         }
-      });
-    window.musex
-      .acquisitionMonitoredArtists()
-      .then((names) => {
-        if (!cancelled && names.some((n) => n.toLowerCase() === artistName.toLowerCase())) {
-          setArtistMonitored(true);
-        }
-      })
-      .catch(() => {
-        // badge only — fine without it
       });
     return () => {
       cancelled = true;
@@ -108,51 +98,45 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
       });
   }
 
-  // Monitor the WHOLE artist (downloads everything). No optimistic state on
-  // the album grid — states refresh on the next visit; the plugin toasts.
-  function monitorEntireArtist() {
-    setMonitorState("busy");
-    setMonitorError(null);
-    window.musex
-      .acquisitionAcquireArtistByName(artistName)
-      .then(() => setMonitorState("done"))
-      .catch((err: unknown) => {
-        console.error("[acquisition] acquireArtistByName failed:", err);
-        setMonitorState("error");
-        setMonitorError(err instanceof Error ? err.message : "Failed to monitor artist");
-      });
-  }
-
   return (
     <div className="browse-section external-artist-view">
       <div className="artist-header">
         <h3 className="browse-title">{artistName}</h3>
-        <button
-          type="button"
-          className="shuffle-btn"
-          title="Monitor entire artist — download everything"
-          disabled={monitorState === "busy" || monitorState === "done" || artistMonitored}
-          onClick={monitorEntireArtist}
+        {/* Monitoring the entire artist is ONE-WAY: there's no un-monitor IPC,
+         *  so once on, the pill is shown lit + disabled (can't be undone here). */}
+        <ActionBar
+          monitor={
+            monitor.supported
+              ? {
+                  on: monitor.on,
+                  busy: monitor.busy || monitor.on,
+                  onToggle: monitor.on ? () => {} : monitor.onToggle,
+                }
+              : undefined
+          }
         >
-          <Download size={16} />
-        </button>
-        <span className="album-meta-muted">
-          {monitorState === "busy"
-            ? "Monitoring…"
-            : monitorState === "done"
-              ? "Monitoring entire artist"
-              : "Monitor entire artist"}
-        </span>
-        <WatchNewReleasesButton artistName={artistName} />
-        {artistMonitored && (
-          <span className="grid-card-badge grid-card-badge--monitored">monitoring artist</span>
-        )}
+          {watch.supported && (
+            <button
+              type="button"
+              className="action-icon"
+              disabled={watch.busy}
+              title={
+                watch.on
+                  ? "Watching for new releases — click to stop"
+                  : "Fetch new releases by this artist automatically"
+              }
+              onClick={() => void watch.onToggle()}
+            >
+              {watch.on ? <BellRing size={16} /> : <Bell size={16} />}
+            </button>
+          )}
+        </ActionBar>
       </div>
+      <MonitorStatusLine watching={monitoring.isWatched(artistName)} downloading={0} />
       <div className="browse-sub">
         Discography via last.fm + your download manager — albums you own open in your library;
         dimmed ones aren't available to fetch.
       </div>
-      {monitorError !== null && <div className="browse-sub error-text">{monitorError}</div>}
 
       {fetch.status === "loading" && (
         <div className="content-placeholder">Looking up discography…</div>
@@ -169,7 +153,6 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
       {fetch.status === "ok" && fetch.albums.length > 0 && (
         <div className="browse-grid">
           {fetch.albums.map((album) => {
-            const chip = badgeFor(album);
             const owned = album.state === "owned" && album.albumId && album.serverId;
             return (
               <GridCard
@@ -177,8 +160,7 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
                 thumb={album.imageUrl}
                 title={album.title}
                 subtitle={album.year != null ? String(album.year) : undefined}
-                badge={chip?.badge}
-                badgeVariant={chip?.variant}
+                state={album.state}
                 dim={album.state === "unavailable"}
                 onOpen={owned ? () => openOwned(album) : () => {}}
                 actionIcon={album.state === "available" ? Download : undefined}
