@@ -2,6 +2,7 @@
   "expo": {
     "name": "musex",
     "slug": "musex",
+    "owner": "stupendous-net",
     "scheme": "musex",
     "version": "0.0.1",
     "orientation": "portrait",
@@ -12,6 +13,12 @@
         "UIBackgroundModes": ["audio"]
       }
     },
-    "plugins": ["expo-router", "expo-audio", "expo-secure-store"]
+    "plugins": ["expo-router", "expo-audio", "expo-secure-store"],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5206eae6-c9d8-4a2a-be51-60da521a6c62"
+      }
+    }
   }
 }
