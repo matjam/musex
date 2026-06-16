@@ -1,8 +1,7 @@
 import { Stack } from "expo-router";
-import { StatusBar, View } from "react-native";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StoreProvider } from "../src/state/store";
-import { MiniPlayer } from "../src/ui/MiniPlayer";
 import { theme } from "../src/ui/theme";
 
 export default function RootLayout() {
@@ -10,20 +9,12 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StoreProvider>
         <StatusBar barStyle="light-content" />
-        <View style={{ flex: 1, backgroundColor: theme.bg }}>
-          <View style={{ flex: 1 }}>
-            <Stack
-              screenOptions={{
-                headerStyle: { backgroundColor: theme.surface },
-                headerTintColor: theme.text,
-                contentStyle: { backgroundColor: theme.bg },
-              }}
-            />
-          </View>
-          <SafeAreaView edges={["bottom"]} style={{ backgroundColor: theme.surface }}>
-            <MiniPlayer />
-          </SafeAreaView>
-        </View>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.bg } }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="sign-in" />
+          <Stack.Screen name="picker" options={{ headerShown: true, title: "Choose library" }} />
+          <Stack.Screen name="now-playing" options={{ presentation: "modal" }} />
+        </Stack>
       </StoreProvider>
     </SafeAreaProvider>
   );
