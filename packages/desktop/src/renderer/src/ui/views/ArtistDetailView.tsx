@@ -8,7 +8,7 @@ import { useRatings } from "../../state/ratings";
 import { useMonitoring } from "../../state/monitoring";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
-import { useMonitorAction } from "../discovery/MonitorButton";
+import { useWatchAction } from "../discovery/MonitorButton";
 import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
 import { MissingAlbumsSection } from "../MissingAlbumsSection";
 import { StarRating } from "../StarRating";
@@ -27,7 +27,9 @@ export function ArtistDetailView({ artist }: Props) {
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
     usePlayer();
   const { ratingFor, rate, seed } = useRatings();
-  const monitor = useMonitorAction(artist.name);
+  // Owned artist: the pill toggles "watch new releases" (the toggleable
+  // ongoing relationship). "Acquire entire artist" is for unowned artists.
+  const monitor = useWatchAction(artist.name);
   const { isWatched } = useMonitoring();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
