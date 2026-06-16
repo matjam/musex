@@ -1,0 +1,78 @@
+# Maintainer: Nathan Ollerenshaw <nathan@ollerenshaw.org>
+#
+# musex — a Spotify-style desktop player for your Plex music library.
+#
+# This is a -bin package: it repackages the official AppImage published by
+# musex's release CI (the same x86_64 AppImage you'd download from GitHub
+# Releases). Building Electron apps from source under makepkg's
+# network-restricted build is painful (pnpm/electron fetch at build time), so
+# the -bin route is the reliable, idiomatic choice.
+#
+# Playback uses the SYSTEM mpv (a hard dependency) — matching musex's Linux
+# design, where mpv is a system package rather than bundled.
+#
+# Releasing a new version:
+#   1. bump pkgver to the released version (must be a tag that shipped an
+#      x86_64 AppImage — Linux artifacts exist from v0.7.0 onward),
+#   2. run `updpkgsums` to pin sha256sums to the published AppImage,
+#   3. run `makepkg --printsrcinfo > .SRCINFO` before submitting to the AUR.
+
+pkgname=musex-bin
+_appname=musex
+pkgver=0.7.0
+pkgrel=1
+pkgdesc="Spotify-style desktop player for your Plex music library (streams from Plex, plays via mpv)"
+arch=('x86_64')
+url="https://github.com/matjam/musex"
+license=('MIT')
+# mpv: the playback engine — musex shells out to the system mpv on Linux.
+# The remainder are the Electron/Chromium runtime libraries.
+depends=('mpv' 'gtk3' 'nss' 'alsa-lib' 'libnotify' 'libxss' 'libsecret')
+optdepends=('libappindicator-gtk3: system tray icon support')
+provides=('musex')
+conflicts=('musex')
+options=('!strip')  # never strip the prebuilt Electron/Chromium binaries
+source=("${_appname}-${pkgver}-x86_64.AppImage::${url}/releases/download/v${pkgver}/${_appname}-${pkgver}-x86_64.AppImage")
+# SKIP until the matching release is published; pin it with `updpkgsums`.
+sha256sums=('SKIP')
+
+package() {
+  cd "$srcdir"
+  chmod +x "${_appname}-${pkgver}-x86_64.AppImage"
+  # Extract rather than run the AppImage directly so there is no libfuse2
+  # runtime dependency.
+  "./${_appname}-${pkgver}-x86_64.AppImage" --appimage-extract >/dev/null
+
+  # App tree → /opt/musex
+  install -dm755 "$pkgdir/opt/$_appname"
+  cp -a squashfs-root/. "$pkgdir/opt/$_appname/"
+  # AppRun is the AppImage's own launcher; not needed once installed.
+  rm -f "$pkgdir/opt/$_appname/AppRun"
+
+  # Chromium's sandbox helper must be setuid root.
+  chmod 4755 "$pkgdir/opt/$_appname/chrome-sandbox"
+
+  # Launcher on PATH.
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s "/opt/$_appname/$_appname" "$pkgdir/usr/bin/$_appname"
+
+  # Desktop entry (rewrite Exec away from the AppImage's AppRun).
+  install -Dm644 "squashfs-root/$_appname.desktop" \
+    "$pkgdir/usr/share/applications/$_appname.desktop"
+  sed -i "s|^Exec=.*|Exec=$_appname %U|" \
+    "$pkgdir/usr/share/applications/$_appname.desktop"
+
+  # Hicolor icons electron-builder bakes into the AppImage.
+  for size in 16 32 48 64 128 256 512; do
+    local icon="squashfs-root/usr/share/icons/hicolor/${size}x${size}/apps/$_appname.png"
+    if [ -f "$icon" ]; then
+      install -Dm644 "$icon" \
+        "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/$_appname.png"
+    fi
+  done
+  # Top-level icon fallback if the hicolor tree is absent.
+  if [ ! -d "$pkgdir/usr/share/icons" ] && [ -f "squashfs-root/$_appname.png" ]; then
+    install -Dm644 "squashfs-root/$_appname.png" \
+      "$pkgdir/usr/share/icons/hicolor/512x512/apps/$_appname.png"
+  fi
+}

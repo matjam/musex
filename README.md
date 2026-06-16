@@ -51,11 +51,15 @@ playlists, mood mixes, radio, and recommendations.
 Grab the latest build from [Releases](https://github.com/matjam/musex/releases):
 
 - **macOS** (Apple Silicon): `musex-x.y.z-arm64.dmg` — signed and notarized.
-- **Linux** (x64): `musex-x.y.z.AppImage` (`chmod +x` and run; auto-updates) or
-  `musex_x.y.z_amd64.deb` (`sudo apt install ./musex_*.deb`). **Linux requires
-  `mpv`** — the `.deb` installs it automatically; AppImage users install it with
-  their package manager (`sudo apt install mpv`, or dnf/pacman). musex shows a
-  reminder if mpv is missing.
+- **Linux** (x64): `musex-x.y.z-x86_64.AppImage` (`chmod +x` and run;
+  auto-updates) or `musex_x.y.z_amd64.deb` (`sudo apt install ./musex_*.deb`).
+  **Linux requires `mpv`** — the `.deb` installs it automatically; AppImage
+  users install it with their package manager (`sudo apt install mpv`, or
+  dnf/pacman). musex shows a reminder if mpv is missing.
+- **Arch Linux:** each release attaches a ready-pinned `-bin` `PKGBUILD` —
+  `curl -LO https://github.com/matjam/musex/releases/latest/download/PKGBUILD &&
+  makepkg -si` (repackages the AppImage; pulls `mpv`). See
+  [`packaging/arch`](packaging/arch/).
 
 You'll need a [Plex Media Server](https://www.plex.tv/) with a music library.
 On first launch musex signs you in via plex.tv (PIN flow) and stores the token
