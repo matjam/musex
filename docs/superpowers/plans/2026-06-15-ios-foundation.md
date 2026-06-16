@@ -268,7 +268,7 @@ import type { Track } from "@musex/core";
 
 // Compile-only: prove the barrel resolves and types flow.
 export const _smoke = (t: Track[]): unknown => {
-  const q = buildQueue(t, 0, false, "none");
+  const q = buildQueue(t, 0);
   return { PlaybackSession, q };
 };
 ```
