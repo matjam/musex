@@ -20,4 +20,23 @@ config.resolver.nodeModulesPaths = [
 //    resolution is on by default in SDK 56. Keep it explicit.
 config.resolver.unstable_enablePackageExports = true;
 
+// 4. @musex/core's TS source uses NodeNext-style ".js" import specifiers (e.g.
+//    `import { buildQueue } from "../usecases/build-queue.js"` where the real
+//    file is build-queue.ts). Vite/tsc rewrite .js->.ts automatically; Metro
+//    does not. Rewrite .js->.ts for relative imports originating INSIDE
+//    packages/core (all .ts there), scoped so real .js modules elsewhere are
+//    untouched.
+const coreDir = `${path.sep}packages${path.sep}core${path.sep}`;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // context.resolveRequest is Metro's default resolver (documented chaining API).
+  if (
+    context.originModulePath.includes(coreDir) &&
+    /^\.\.?\//.test(moduleName) &&
+    moduleName.endsWith(".js")
+  ) {
+    return context.resolveRequest(context, moduleName.replace(/\.js$/, ".ts"), platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = config;
