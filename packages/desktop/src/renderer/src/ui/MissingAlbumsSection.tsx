@@ -1,7 +1,6 @@
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../shared/ipc-contract";
-import { badgeFor } from "./acquisition-badges";
 import { GridCard } from "./GridCard";
 import { useAcquisitionAvailable } from "./hooks/useAcquisitionAvailable";
 
@@ -72,24 +71,20 @@ export function MissingAlbumsSection({ artistName }: { artistName: string }) {
     <section className="home-row">
       <h3 className="browse-title">Not in your library</h3>
       <div className="browse-grid">
-        {fetch.albums.map((album) => {
-          const chip = badgeFor(album);
-          return (
-            <GridCard
-              key={`${album.providerId}:${album.providerRef}`}
-              thumb={album.imageUrl}
-              title={album.title}
-              subtitle={album.year != null ? String(album.year) : undefined}
-              badge={chip?.badge}
-              badgeVariant={chip?.variant}
-              dim={album.state === "unavailable"}
-              onOpen={() => {}}
-              actionIcon={album.state === "available" ? Download : undefined}
-              actionTitle="Monitor album — download it"
-              onAction={album.state === "available" ? () => acquire(album) : undefined}
-            />
-          );
-        })}
+        {fetch.albums.map((album) => (
+          <GridCard
+            key={`${album.providerId}:${album.providerRef}`}
+            thumb={album.imageUrl}
+            title={album.title}
+            subtitle={album.year != null ? String(album.year) : undefined}
+            state={album.state}
+            dim={album.state === "unavailable"}
+            onOpen={() => {}}
+            actionIcon={album.state === "available" ? Download : undefined}
+            actionTitle="Monitor album — download it"
+            onAction={album.state === "available" ? () => acquire(album) : undefined}
+          />
+        ))}
       </div>
     </section>
   );
