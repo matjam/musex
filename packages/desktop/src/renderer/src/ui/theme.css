@@ -3133,3 +3133,43 @@ img.queue-row-art {
   width: 64px;
   flex-shrink: 0;
 }
+
+/* ---- Shared discovery action bar (one icon-button size everywhere) ---- */
+:root { --icon-btn: 40px; }
+.action-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.action-play {
+  width: 46px; height: 46px; border-radius: 50%; border: none;
+  background: var(--green); color: #0d0e12; display: grid; place-items: center;
+  cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  transition: transform .12s ease, opacity .12s ease;
+}
+.action-play:hover { transform: scale(1.05); }
+.action-icon {
+  width: var(--icon-btn); height: var(--icon-btn); border-radius: 50%;
+  background: transparent; border: 1px solid var(--line); color: var(--text);
+  display: grid; place-items: center; cursor: pointer; transition: all .12s ease;
+}
+.action-icon:hover { border-color: var(--green); color: var(--green); }
+.action-pill {
+  height: 34px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line);
+  background: transparent; color: var(--text); display: inline-flex; align-items: center;
+  gap: 7px; font-size: 13px; cursor: pointer; transition: all .12s ease;
+}
+.action-pill:hover { border-color: var(--green); }
+.action-pill--on { border-color: var(--green); color: var(--green); background: rgba(84,210,160,.12); }
+.action-pill:disabled, .action-icon:disabled { opacity: .5; cursor: default; }
+.monitor-status { margin-top: 11px; font-size: 12px; color: var(--green); display: flex; align-items: center; gap: 6px; }
+
+/* ---- Unified acquisition state badge (replaces grid-card-badge--x / expansion-chip--x) ---- */
+.state-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.state-badge--owned { background: var(--green); color: #0d0e12; }
+.state-badge--downloaded { background: rgba(0,0,0,.5); border: 1px solid var(--green); color: var(--green); }
+.state-badge--downloading { background: rgba(0,0,0,.5); border: 1px solid var(--yellow); color: var(--yellow); }
+.state-badge--requested { background: rgba(0,0,0,.5); border: 1px solid var(--purple); color: #b9a8ff; }
+.state-badge--available { background: rgba(84,210,160,.14); border: 1px solid var(--green); color: var(--green); }
+.state-badge--unavailable { background: rgba(0,0,0,.5); border: 1px solid rgba(255,95,87,.6); color: #ff8a84; }
+/* small bell corner-marker on monitored artist cards */
+.card-monitored { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.6); border: 1px solid var(--green); color: var(--green); display: grid; place-items: center; }
