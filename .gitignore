@@ -33,3 +33,9 @@ pnpm-debug.log*
 
 # electron-builder buildResources (entitlements etc.) — source, not build output
 !packages/desktop/build/
+
+# Expo / RN
+packages/mobile/.expo/
+packages/mobile/ios/
+packages/mobile/android/
+packages/mobile/dist/

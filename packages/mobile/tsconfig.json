@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022"],
+    "types": ["react", "vitest/globals"],
+    "moduleResolution": "Bundler",
+    "noEmit": true
+  },
+  "include": ["index.ts", "src/**/*", "app/**/*", "*.config.ts"]
+}
