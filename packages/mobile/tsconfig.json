@@ -7,5 +7,5 @@
     "moduleResolution": "Bundler",
     "noEmit": true
   },
-  "include": ["index.ts", "src/**/*", "app/**/*", "*.config.ts"]
+  "include": ["index.ts", "src/**/*", "app/**/*", "*.config.ts", "../core/src/globals.d.ts"]
 }
