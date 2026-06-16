@@ -1,10 +1,11 @@
 # musex
 
-A Spotify-style macOS music player for your own Plex library.
+A Spotify-style desktop music player (macOS and Linux) for your own Plex
+library.
 
 musex streams directly from your Plex Media Server and plays the **original
 files** — every codec Plex can store (FLAC, ALAC, Opus, MP3, …) is decoded by
-a bundled mpv engine, so nothing is ever transcoded. On top of that it builds
+mpv, so nothing is ever transcoded. On top of that it builds
 a listening profile from what you actually play, and turns it into smart
 playlists, mood mixes, radio, and recommendations.
 
@@ -14,8 +15,8 @@ playlists, mood mixes, radio, and recommendations.
 
 ## Features
 
-- **Direct play, every codec, gapless** — audio is decoded by a vendored mpv,
-  not the browser. No transcoding, no quality loss, gapless album playback.
+- **Direct play, every codec, gapless** — audio is decoded by mpv, not the
+  browser. No transcoding, no quality loss, gapless album playback.
 - **Volume leveling & EQ** — optional ReplayGain or real-time loudness
   leveling, plus EQ presets (Bass Boost, Vocal, Loudness, …) applied in the
   audio engine, not the UI.
@@ -44,7 +45,9 @@ playlists, mood mixes, radio, and recommendations.
     Bandcamp, a different download manager, anything) plugs into the same
     search, downloads, and taste-expansion machinery with no app changes.
     See [docs/plugins.md](docs/plugins.md).
-- **Auto-update** — checks GitHub Releases silently and updates in place.
+- **Auto-update** — checks GitHub Releases silently and updates in place on
+  macOS and the Linux AppImage; `.deb`/package installs update through your
+  package manager.
 
 ## Install
 
@@ -71,14 +74,17 @@ your own API keys.
 
 ## Development
 
-Requires Node 24+ and [pnpm](https://pnpm.io/) 11.
+Requires Node 24 (the version CI uses) and [pnpm](https://pnpm.io/) 11.
 
 ```sh
 pnpm install
-pnpm vendor          # fetch the pinned mpv build (checksum-verified)
+pnpm vendor          # fetch the pinned mpv build (macOS; no-op on Linux)
 pnpm dev             # run the app with hot reload
 pnpm check           # lint + typecheck + format + tests (the CI bar)
 ```
+
+On Linux, mpv is a **system dependency** rather than bundled, so `pnpm vendor`
+is a no-op there — install mpv from your package manager before `pnpm dev`.
 
 ### Architecture
 
@@ -95,14 +101,15 @@ narrow API (`@musex/plugin-api`) that never exposes Plex tokens or URLs; see
 [docs/plugins.md](docs/plugins.md).
 
 Releases are automated with release-please: conventional commits on `main`
-roll up into a release PR, and merging it builds, signs, notarizes, and
-publishes the DMG.
+roll up into a release PR, and merging it builds and publishes the macOS DMG
+(signed + notarized) alongside the Linux AppImage and `.deb`.
 
 ## License
 
-[MIT](LICENSE). The packaged app bundles an unmodified
+[MIT](LICENSE). The macOS app bundles an unmodified
 [mpv](https://mpv.io/) binary (GPL-2.0-or-later) as a separate process for
 audio playback; mpv's source is available at
 [mpv-player/mpv](https://github.com/mpv-player/mpv), and the exact build we
-ship is fetched by [`scripts/fetch-mpv.mjs`](scripts/fetch-mpv.mjs). Full
-dependency attribution is in the app's About window.
+ship is fetched by [`scripts/fetch-mpv.mjs`](scripts/fetch-mpv.mjs). On Linux
+mpv is the system package, not bundled. Full dependency attribution is in the
+app's About window.
