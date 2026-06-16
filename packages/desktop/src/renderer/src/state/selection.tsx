@@ -14,18 +14,18 @@ const Ctx = createContext<SelectionApi | null>(null);
 
 export function SelectionProvider({ children }: { children: ReactNode }) {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
-  const { openPanel } = usePanel();
+  const { openEntity } = usePanel();
   const api = useMemo<SelectionApi>(
     () => ({
       selectedTrack,
-      // Selecting summons the track detail panel (replacing the queue if open).
+      // Selecting summons the unified entity panel (replacing the queue if open).
       select: (track) => {
         setSelectedTrack(track);
-        openPanel("track");
+        openEntity({ kind: "song", track });
       },
       clear: () => setSelectedTrack(null),
     }),
-    [selectedTrack, openPanel],
+    [selectedTrack, openEntity],
   );
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }
