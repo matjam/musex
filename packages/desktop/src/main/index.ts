@@ -12,6 +12,23 @@ import { setupAutoUpdater } from "./updater.js";
 // in-memory buffer behind Help → Show Logs.
 installConsoleTee(logBuffer);
 
+// Native Wayland on Linux. Electron 42 (Chromium ≥140) already defaults the
+// ozone platform hint to "auto" — picking Wayland in a Wayland session and
+// X11 under Xorg — but we set it explicitly so the packaged app behaves the
+// same regardless of the user's environment (we don't rely on
+// ELECTRON_OZONE_PLATFORM_HINT being set, and that env var is slated for
+// removal).
+//
+// Chromium's Wayland ozone backend can't render with Vulkan ("'--ozone-
+// platform=wayland' is not compatible with Vulkan"); it logs that and falls
+// back to GL. Disable Vulkan on Linux so the GL backend is chosen cleanly —
+// this is the "disable Vulkan" path the warning recommends, keeping us on
+// native Wayland rather than dropping to XWayland. Must run before app ready.
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+  app.commandLine.appendSwitch("disable-features", "Vulkan");
+}
+
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 function createWindow(): BrowserWindow {
