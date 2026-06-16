@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppProvider, useApp } from "./state/app";
+import { MonitoringProvider } from "./state/monitoring";
 import { PanelProvider, usePanel } from "./state/panel";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
@@ -68,25 +69,27 @@ function Inner() {
   }
   if (auth === "signed-in") {
     return (
-      <PlaylistsProvider>
-        <SelectionProvider>
-          <RatingsProvider>
-            <KeyboardShortcuts
-              toggleQueue={() => togglePanel("queue")}
-              toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
-              openSettings={() => setSettingsOpen(true)}
-            />
-            <div className="app-root">
-              <TopBar />
-              <Shell />
-              <NowPlayingBar onToggleQueue={() => togglePanel("queue")} />
-              <Toasts />
-              {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
-              {about}
-            </div>
-          </RatingsProvider>
-        </SelectionProvider>
-      </PlaylistsProvider>
+      <MonitoringProvider>
+        <PlaylistsProvider>
+          <SelectionProvider>
+            <RatingsProvider>
+              <KeyboardShortcuts
+                toggleQueue={() => togglePanel("queue")}
+                toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
+                openSettings={() => setSettingsOpen(true)}
+              />
+              <div className="app-root">
+                <TopBar />
+                <Shell />
+                <NowPlayingBar onToggleQueue={() => togglePanel("queue")} />
+                <Toasts />
+                {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+                {about}
+              </div>
+            </RatingsProvider>
+          </SelectionProvider>
+        </PlaylistsProvider>
+      </MonitoringProvider>
     );
   }
   return (
