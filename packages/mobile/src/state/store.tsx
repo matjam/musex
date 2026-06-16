@@ -14,6 +14,15 @@ import { PlexGatewayImpl } from "../adapters/plex-gateway";
 import { PlexStreamResolver } from "../adapters/stream-resolver";
 import { SecureTokenStore } from "../adapters/token-store";
 import { CLIENT_ID } from "../config-client-id";
+import { artUrl } from "../logic/art-url";
+
+function safeBaseUrl(gateway: PlexGatewayImpl, serverId: string): string | null {
+  try {
+    return gateway.baseUrlFor(serverId);
+  } catch {
+    return null;
+  }
+}
 
 type Phase = "loading" | "signed-out" | "signed-in";
 
@@ -57,6 +66,8 @@ interface Store {
   /** Build a queue from a track list and start playback at `index`. */
   playTracks: (tracks: Track[], index: number) => Promise<void>;
   session: PlaybackSession;
+  artBaseFor: (serverId: string) => string | null;
+  token: string | null;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -96,8 +107,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return new PlaybackSession(engine, resolver);
   }, [engine, gateway]);
 
-  // Mirror session state into the reducer. subscribe() returns the unsubscribe.
-  useEffect(() => session.subscribe((s) => dispatch({ type: "playback", state: s })), [session]);
+  // Mirror session state into the reducer + push lock-screen metadata on track change.
+  const lastTrackId = useRef<string | null>(null);
+  useEffect(
+    () =>
+      session.subscribe((s) => {
+        dispatch({ type: "playback", state: s });
+        const cur = s.queue ? s.queue.tracks[s.queue.index] : undefined;
+        if (cur && cur.id !== lastTrackId.current) {
+          lastTrackId.current = cur.id;
+          const tok = tokenRef.current;
+          const base = tok ? safeBaseUrl(gateway, cur.serverId) : null;
+          engine.setNowPlaying({
+            title: cur.title,
+            artist: cur.artistName,
+            album: cur.albumTitle,
+            artwork: base && tok ? (artUrl(base, cur.thumb, tok) ?? undefined) : undefined,
+          });
+        }
+      }),
+    [session, engine, gateway],
+  );
 
   // Bootstrap: init audio session, restore token, discover servers.
   useEffect(() => {
@@ -133,6 +163,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [session],
   );
 
-  const value: Store = { state, gateway, tokenStore, dispatch, playTracks, session };
+  const value: Store = {
+    state,
+    gateway,
+    tokenStore,
+    dispatch,
+    playTracks,
+    session,
+    artBaseFor: (sid) => safeBaseUrl(gateway, sid),
+    token: state.token,
+  };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }
