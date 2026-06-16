@@ -3,6 +3,9 @@
   "version": "0.7.0",
   "private": true,
   "type": "module",
+  "description": "Spotify-style desktop player for your Plex music library",
+  "author": "Nathan Ollerenshaw <nathan@ollerenshaw.org>",
+  "homepage": "https://github.com/matjam/musex",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "node ../../scripts/fetch-mpv.mjs && electron-vite dev",
