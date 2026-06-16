@@ -12,6 +12,7 @@ import {
 import { artUrl } from "../../../src/logic/art-url";
 import { buildLetterIndex } from "../../../src/logic/az-index";
 import { useStore } from "../../../src/state/store";
+import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { AZScrubber } from "../../../src/ui/AZScrubber";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
@@ -24,8 +25,10 @@ type Item =
   | { kind: "album"; data: Album }
   | { kind: "track"; data: Track };
 
+const TRACK_ROW_H = 64; // fixed track-row height so scrollToIndex is exact
+
 export default function LibraryBrowse() {
-  const { state, gateway, artBaseFor, token, playTracks } = useStore();
+  const { state, gateway, session, artBaseFor, token, playTracks } = useStore();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [segment, setSegment] = useState<Segment>("Artists");
@@ -78,14 +81,22 @@ export default function LibraryBrowse() {
   function scrubTo(letter: string) {
     const idx = indexOf[letter];
     if (idx == null) return;
-    // FlatList scrolls by ROW, so convert the item index to its row (idx/cols).
-    // scrollToIndex lands exactly on the row (FlatList measures); onScrollToIndexFailed
-    // covers far, not-yet-measured rows.
+    // FlatList scrolls by ROW; convert the item index to its row (idx/cols).
     listRef.current?.scrollToIndex({
       index: Math.floor(idx / numCols),
       viewPosition: 0,
       animated: false,
     });
+  }
+
+  // Whole-library tracks for the top action bar ("shuffle all"). On the Tracks
+  // segment the tracks are already loaded; otherwise fetch them.
+  async function allLibraryTracks(): Promise<Track[]> {
+    if (segment === "Tracks") {
+      return items.flatMap((it) => (it.kind === "track" ? [it.data] : []));
+    }
+    if (!state.library || !state.token) return [];
+    return gateway.listAllTracks(state.library, "title", state.token);
   }
 
   return (
@@ -107,6 +118,12 @@ export default function LibraryBrowse() {
             data={items}
             numColumns={numCols}
             keyExtractor={(it, i) => `${it.kind}-${it.data.id}-${i}`}
+            ListHeaderComponent={<ActionBar session={session} getTracks={allLibraryTracks} />}
+            getItemLayout={
+              numCols === 1
+                ? (_d, index) => ({ length: TRACK_ROW_H, offset: TRACK_ROW_H * index, index })
+                : undefined
+            }
             onScrollToIndexFailed={(info) => {
               listRef.current?.scrollToOffset({
                 offset: info.averageItemLength * info.index,
@@ -152,11 +169,11 @@ export default function LibraryBrowse() {
                 <Pressable
                   onPress={() => void playTracks([item.data], 0)}
                   style={{
+                    height: TRACK_ROW_H,
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 12,
                     paddingHorizontal: theme.space(2),
-                    paddingVertical: 8,
                     borderBottomWidth: 1,
                     borderBottomColor: theme.border,
                   }}
