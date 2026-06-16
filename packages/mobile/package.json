@@ -13,7 +13,6 @@
   "dependencies": {
     "@musex/core": "workspace:*",
     "@react-native-community/slider": "5.2.0",
-    "@react-navigation/bottom-tabs": "^7.18.2",
     "expo": "^56.0.12",
     "expo-audio": "^56.0.12",
     "expo-constants": "^56.0.18",
