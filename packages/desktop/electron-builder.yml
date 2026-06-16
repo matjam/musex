@@ -77,6 +77,10 @@ linux:
   desktop:
     entry:
       Categories: AudioVideo;Audio;Player;
+appImage:
+  # Deterministic name so packaging/arch/PKGBUILD can pin the download URL.
+  # electron-updater (latest-linux.yml) tracks whatever name this produces.
+  artifactName: ${productName}-${version}-x86_64.AppImage
 deb:
   priority: optional
   depends:
