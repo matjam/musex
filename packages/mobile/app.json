@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "musex",
+    "slug": "musex",
+    "scheme": "musex",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "ios": {
+      "bundleIdentifier": "net.stupendous.musex",
+      "supportsTablet": false,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "plugins": ["expo-router", "expo-audio", "expo-secure-store"]
+  }
+}
