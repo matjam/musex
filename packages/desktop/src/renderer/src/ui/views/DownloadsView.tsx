@@ -10,11 +10,11 @@ const REFRESH_MS = 10_000;
 
 /** Expansion entries carry their own lifecycle states (suggested/requested/
  *  landed/abandoned/rejected). Map the ones with an acquisition-badge
- *  equivalent; abandoned/rejected have none → render a neutral chip. */
+ *  equivalent; suggested/abandoned/rejected have none → render a neutral chip
+ *  with their own STATE_LABEL (a suggestion isn't a "Requested" download). */
 const EXPANSION_BADGE: Record<string, AcquisitionBadgeState | undefined> = {
   landed: "downloaded",
   requested: "requested",
-  suggested: "requested",
 };
 
 type FetchState =
