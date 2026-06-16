@@ -1,9 +1,8 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRef, useState } from "react";
 import { usePanel } from "../state/panel";
-import { ArtistInfoPanel } from "./ArtistInfoPanel";
+import { EntityPanel } from "./discovery/EntityPanel";
 import { QueueDrawer } from "./QueueDrawer";
-import { TrackDetailPanel } from "./TrackDetailPanel";
 
 const MIN_WIDTH = 260;
 const MAX_WIDTH = 520;
@@ -22,7 +21,7 @@ function savedWidth(): number {
  *  content stays mounted while closed so the exit animation has something to
  *  show (it's clipped to zero width, so it renders nothing visible). */
 export function SidePanelHost() {
-  const { panel, artistInfoName } = usePanel();
+  const { panel, entityPayload } = usePanel();
   const [width, setWidth] = useState(savedWidth);
   const [resizing, setResizing] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -30,10 +29,18 @@ export function SidePanelHost() {
   const lastPanelRef = useRef<typeof panel>(null);
   if (panel !== null) lastPanelRef.current = panel;
   const content = panel ?? lastPanelRef.current;
-  // Mirrors artistInfoName so the exit animation still has an artist to show.
-  const lastArtistRef = useRef<string | null>(null);
-  if (artistInfoName !== null) lastArtistRef.current = artistInfoName;
-  const artistName = artistInfoName ?? lastArtistRef.current;
+  // Mirrors entityPayload so the exit animation still has content to show.
+  const lastEntityRef = useRef<typeof entityPayload>(null);
+  if (entityPayload !== null) lastEntityRef.current = entityPayload;
+  const entity = entityPayload ?? lastEntityRef.current;
+  // Stable per-entity key so switching entities while open re-runs the slide-in.
+  const entityKey = entity
+    ? entity.kind === "song"
+      ? `song:${entity.track.id}`
+      : entity.kind === "album"
+        ? `album:${entity.album.id}`
+        : `artist:${entity.artistName}`
+    : "";
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     dragRef.current = { startX: e.clientX, startWidth: width };
@@ -74,17 +81,14 @@ export function SidePanelHost() {
           onPointerUp={onPointerUp}
         />
         {/* key swaps re-run the slide-in animation when one panel replaces another;
-            for artist-info the key also includes the artist name so switching
-            artists while the panel is open re-runs the slide-in animation. */}
+            for the entity panel the key also includes the entity identity so
+            switching entities while open re-runs the slide-in animation. */}
         <div
           className="side-panel-content"
-          key={`${content ?? "none"}:${content === "artist-info" ? artistName : ""}`}
+          key={`${content ?? "none"}:${content === "entity" ? entityKey : ""}`}
         >
-          {content === "track" && <TrackDetailPanel />}
+          {content === "entity" && entity !== null && <EntityPanel payload={entity} />}
           {content === "queue" && <QueueDrawer />}
-          {content === "artist-info" && artistName !== null && (
-            <ArtistInfoPanel artistName={artistName} />
-          )}
         </div>
       </div>
     </aside>
