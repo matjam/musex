@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/matjam/musex/compare/v0.6.0...v0.7.0) (2026-06-16)
+
+
+### Features
+
+* linux build (AppImage + deb) ([#27](https://github.com/matjam/musex/issues/27)) ([35f38df](https://github.com/matjam/musex/commit/35f38dfdbf297ddca0a5558cf0dfa1758f9d534b))
+
 ## [0.6.0](https://github.com/matjam/musex/compare/v0.5.0...v0.6.0) (2026-06-11)
 
 
