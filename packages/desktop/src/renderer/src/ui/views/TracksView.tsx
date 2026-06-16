@@ -1,10 +1,10 @@
 import type { LibrarySort, Track } from "@musex/core";
 import { listValidator } from "@musex/core";
-import { Play, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
+import { ActionBar } from "../discovery/ActionBar";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import { SortSelector } from "../SortSelector";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -59,24 +59,10 @@ export function TracksView() {
           <h3 className="browse-title">Tracks</h3>
           <div className="tracks-header-actions">
             {fetch.status === "ok" && fetch.tracks.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="play-btn"
-                  title="Play all"
-                  onClick={() => playTracks(fetch.tracks, 0)}
-                >
-                  <Play size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="shuffle-btn"
-                  title="Shuffle all"
-                  onClick={() => playTracksShuffled(fetch.tracks)}
-                >
-                  <Shuffle size={16} />
-                </button>
-              </>
+              <ActionBar
+                onPlay={() => playTracks(fetch.tracks, 0)}
+                onShuffle={() => playTracksShuffled(fetch.tracks)}
+              />
             )}
             <SortSelector value={sort} onChange={setSort} />
           </div>

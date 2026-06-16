@@ -1,12 +1,13 @@
 import type { Playlist } from "@musex/core";
 import { listValidator } from "@musex/core";
-import { MoreHorizontal, Play, Shuffle } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { usePlaylists } from "../../state/playlists";
 import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
+import { ActionBar } from "../discovery/ActionBar";
 import { useProgressiveList } from "../hooks/useProgressiveList";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -207,39 +208,31 @@ export function PlaylistView({ playlist }: Props) {
               </span>
             )}
           </div>
-          <div className="album-actions">
-            {(fetch.status === "ok" || fetch.status === "paging") && tracks.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="play-btn"
-                  title="Play playlist"
-                  onClick={() => playTracks(tracks, 0)}
-                >
-                  <Play size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="shuffle-btn"
-                  title="Shuffle playlist"
-                  onClick={() => playTracksShuffled(tracks)}
-                >
-                  <Shuffle size={16} />
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              className="playlist-actions-btn"
-              title="Playlist options"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActionsPos({ x: e.clientX, y: e.clientY });
-              }}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-          </div>
+          <ActionBar
+            onPlay={
+              (fetch.status === "ok" || fetch.status === "paging") && tracks.length > 0
+                ? () => playTracks(tracks, 0)
+                : undefined
+            }
+            onShuffle={
+              (fetch.status === "ok" || fetch.status === "paging") && tracks.length > 0
+                ? () => playTracksShuffled(tracks)
+                : undefined
+            }
+            overflow={
+              <button
+                type="button"
+                className="action-icon"
+                title="Playlist options"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActionsPos({ x: e.clientX, y: e.clientY });
+                }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+            }
+          />
         </div>
       </div>
 
