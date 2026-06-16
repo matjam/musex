@@ -1,8 +1,10 @@
 import type { LucideIcon } from "lucide-react";
-import { Play } from "lucide-react";
+import { Bell, Play } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { AlbumArt } from "./AlbumArt";
 import { CardCollage } from "./CardCollage";
+import { StateBadge } from "./discovery/StateBadge";
+import type { AcquisitionBadgeState } from "./discovery/state-badge";
 
 interface Props {
   thumb?: string;
@@ -16,6 +18,12 @@ interface Props {
   badge?: string;
   /** Color variant suffix for the badge: `grid-card-badge--<variant>`. */
   badgeVariant?: string;
+  /** Unified acquisition-state badge — takes precedence over `badge` when set. */
+  state?: AcquisitionBadgeState;
+  /** Download percent for `state="downloading"`. */
+  statePercent?: number;
+  /** Show the monitored (watching new releases) corner marker. */
+  monitored?: boolean;
   /** Dim the whole card (e.g. unavailable acquisition albums). */
   dim?: boolean;
   /** Click the card body → open the detail view. */
@@ -38,6 +46,9 @@ export function GridCard({
   round = false,
   badge,
   badgeVariant,
+  state,
+  statePercent,
+  monitored = false,
   dim = false,
   onOpen,
   onPlay,
@@ -72,11 +83,22 @@ export function GridCard({
             kind={round ? "artist" : "album"}
           />
         )}
-        {badge && (
-          <span
-            className={`grid-card-badge${badgeVariant ? ` grid-card-badge--${badgeVariant}` : ""}`}
-          >
-            {badge}
+        {state ? (
+          <span className="grid-card-badge grid-card-badge--state">
+            <StateBadge state={state} percent={statePercent} />
+          </span>
+        ) : (
+          badge && (
+            <span
+              className={`grid-card-badge${badgeVariant ? ` grid-card-badge--${badgeVariant}` : ""}`}
+            >
+              {badge}
+            </span>
+          )
+        )}
+        {monitored && (
+          <span className="card-monitored">
+            <Bell size={12} />
           </span>
         )}
         {onPlay && (

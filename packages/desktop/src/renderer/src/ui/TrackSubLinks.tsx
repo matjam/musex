@@ -1,40 +1,37 @@
 import type { Track } from "@musex/core";
-import { useEntityNav } from "./hooks/useEntityNav";
+import { EntityLink } from "./discovery/EntityLink";
 
-/** "Artist · Album" subtitle as navigation links. Clicks never propagate, so
- *  it's safe inside clickable rows (select/jump/double-click-to-play). */
+/** "Artist · Album" subtitle as navigable names. EntityLink stops click
+ *  propagation, so it's safe inside clickable rows (select/double-click-to-play);
+ *  missing ids render as plain text rather than dead links. */
 export function TrackSubLinks({ track }: { track: Track }) {
-  const { goArtist, goAlbum } = useEntityNav();
-
   return (
     <>
-      <button
-        type="button"
-        className="link-quiet"
-        disabled={!track.artistId}
-        onClick={(e) => {
-          e.stopPropagation();
-          goArtist(track);
+      <EntityLink
+        entity={{
+          kind: "artist",
+          name: track.artistName,
+          artistId: track.artistId,
+          serverId: track.serverId,
         }}
-        onDoubleClick={(e) => e.stopPropagation()}
       >
         {track.artistName}
-      </button>
+      </EntityLink>
       {track.albumTitle != null && (
         <>
           {" · "}
-          <button
-            type="button"
-            className="link-quiet"
-            disabled={!track.albumId}
-            onClick={(e) => {
-              e.stopPropagation();
-              goAlbum(track);
+          <EntityLink
+            entity={{
+              kind: "album",
+              albumId: track.albumId,
+              serverId: track.serverId,
+              artistId: track.artistId,
+              title: track.albumTitle,
+              thumb: track.thumb,
             }}
-            onDoubleClick={(e) => e.stopPropagation()}
           >
             {track.albumTitle}
-          </button>
+          </EntityLink>
         </>
       )}
     </>

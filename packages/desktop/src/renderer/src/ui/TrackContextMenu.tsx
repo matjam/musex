@@ -10,10 +10,12 @@ import {
   Mic2,
   Puzzle,
   Radio,
+  Sparkles,
   Star,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TrackActionDto } from "../../../shared/ipc-contract";
+import { useApp } from "../state/app";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { usePlaylists } from "../state/playlists";
 import { useEntityNav } from "./hooks/useEntityNav";
@@ -50,6 +52,7 @@ interface Props {
 
 export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: Props) {
   const { playlists, addTo, remove } = usePlaylists();
+  const { dispatch } = useApp();
   const { enqueueNext, enqueueEnd, startRadioFromTrack } = usePlayer();
   const { goArtist, goAlbum } = useEntityNav();
   const [submenu, setSubmenu] = useState(false);
@@ -193,6 +196,23 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
       >
         <Radio size={14} />
         Start Radio
+      </button>
+      <button
+        type="button"
+        className="ctx-item ctx-item--icon"
+        onClick={() => {
+          dispatch({
+            type: "navigate",
+            view: {
+              name: "similar",
+              target: { kind: "track", title: target.track.title, artist: target.track.artistName },
+            },
+          });
+          onClose();
+        }}
+      >
+        <Sparkles size={14} />
+        Find similar
       </button>
       {pluginActions.length > 0 && (
         <>

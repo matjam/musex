@@ -1,11 +1,11 @@
 import type { Track } from "@musex/core";
 import { albumsForMix, composeMoodMix, listValidator, MOOD_MIXES, sampleThumbs } from "@musex/core";
-import { Play, Shuffle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
 import { CardCollage } from "../CardCollage";
+import { ActionBar } from "../discovery/ActionBar";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
@@ -104,24 +104,10 @@ export function MixView({ mixId }: { mixId: string }) {
           </div>
           <div className="tracks-header-actions">
             {fetch.status === "ok" && fetch.tracks.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="play-btn"
-                  title="Play all"
-                  onClick={() => playTracks(fetch.tracks, 0)}
-                >
-                  <Play size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="shuffle-btn"
-                  title="Shuffle all"
-                  onClick={() => playTracksShuffled(fetch.tracks)}
-                >
-                  <Shuffle size={16} />
-                </button>
-              </>
+              <ActionBar
+                onPlay={() => playTracks(fetch.tracks, 0)}
+                onShuffle={() => playTracksShuffled(fetch.tracks)}
+              />
             )}
           </div>
         </div>

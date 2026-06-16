@@ -1,8 +1,21 @@
 import { BellRing, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { AcquisitionStatusDto, ExpansionStateDto } from "../../../../shared/ipc-contract";
+import { useMonitoring } from "../../state/monitoring";
+import { EntityLink } from "../discovery/EntityLink";
+import { StateBadge } from "../discovery/StateBadge";
+import type { AcquisitionBadgeState } from "../discovery/state-badge";
 
 const REFRESH_MS = 10_000;
+
+/** Expansion entries carry their own lifecycle states (suggested/requested/
+ *  landed/abandoned/rejected). Map the ones with an acquisition-badge
+ *  equivalent; suggested/abandoned/rejected have none → render a neutral chip
+ *  with their own STATE_LABEL (a suggestion isn't a "Requested" download). */
+const EXPANSION_BADGE: Record<string, AcquisitionBadgeState | undefined> = {
+  landed: "downloaded",
+  requested: "requested",
+};
 
 type FetchState =
   | { status: "loading" }
@@ -53,14 +66,21 @@ function ExpansionsFeed({
               <div className="dl-row-main">
                 <div className="dl-row-title">
                   {e.albumTitle}
-                  <span className="dl-row-artist"> — {e.artistName}</span>
+                  <span className="dl-row-artist">
+                    {" — "}
+                    <EntityLink entity={{ kind: "artist", name: e.artistName, hasProvider: true }}>
+                      {e.artistName}
+                    </EntityLink>
+                  </span>
                   {e.deepening && <span className="expansion-deepening"> · deepening</span>}
                 </div>
                 <div className="dl-row-detail">{e.note ?? provenanceLine(e)}</div>
               </div>
-              <span className={`dl-chip expansion-chip--${e.state}`}>
-                {STATE_LABEL[e.state] ?? e.state}
-              </span>
+              {EXPANSION_BADGE[e.state] ? (
+                <StateBadge state={EXPANSION_BADGE[e.state] as AcquisitionBadgeState} />
+              ) : (
+                <span className="dl-chip">{STATE_LABEL[e.state] ?? e.state}</span>
+              )}
               {e.state !== "rejected" && (
                 <button
                   type="button"
@@ -83,9 +103,12 @@ function ExpansionsFeed({
  *  (Lidarr queue + monitored-but-missing), the taste-expansion feed, and the
  *  artists watched for new releases. Auto-refreshes while open. */
 export function DownloadsView() {
+  const monitoring = useMonitoring();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [expansion, setExpansion] = useState<ExpansionStateDto | null>(null);
-  const [watched, setWatched] = useState<string[]>([]);
+  // Names (original casing) for the watched list; visibility is gated live by
+  // the monitoring store so the X button updates optimistically.
+  const [watchedNames, setWatchedNames] = useState<string[]>([]);
 
   const refresh = useCallback(() => {
     window.musex
@@ -110,7 +133,7 @@ export function DownloadsView() {
       .catch((err: unknown) => console.error("[expansion] state failed:", err));
     window.musex
       .newReleaseWatchList()
-      .then(setWatched)
+      .then(setWatchedNames)
       .catch((err: unknown) => console.error("[watch] list failed:", err));
   }, []);
 
@@ -128,11 +151,14 @@ export function DownloadsView() {
   }
 
   function unwatch(artistName: string) {
-    void window.musex
-      .newReleaseWatchSet(artistName, false)
-      .then(refresh)
+    void monitoring
+      .setWatched(artistName, false)
       .catch((err: unknown) => console.error("[watch] unwatch failed:", err));
   }
+
+  // Live view: hide names the store no longer considers watched (optimistic
+  // unwatch), so the list updates without waiting for the next refresh.
+  const watched = watchedNames.filter((name) => monitoring.isWatched(name));
 
   return (
     <div className="browse-section downloads-view">
@@ -160,7 +186,14 @@ export function DownloadsView() {
               <div className="dl-row-main">
                 <div className="dl-row-title">
                   {row.title}
-                  <span className="dl-row-artist"> — {row.artistName}</span>
+                  <span className="dl-row-artist">
+                    {" — "}
+                    <EntityLink
+                      entity={{ kind: "artist", name: row.artistName, hasProvider: true }}
+                    >
+                      {row.artistName}
+                    </EntityLink>
+                  </span>
                 </div>
                 {row.progress != null && (
                   <div className="dl-progress">
@@ -174,7 +207,14 @@ export function DownloadsView() {
                 )}
                 {row.detail && <div className="dl-row-detail">{row.detail}</div>}
               </div>
-              <span className={`dl-chip grid-card-badge--${row.state}`}>{row.state}</span>
+              <StateBadge
+                state={row.state}
+                percent={
+                  row.state === "downloading" && row.progress != null
+                    ? row.progress * 100
+                    : undefined
+                }
+              />
             </div>
           ))}
         </div>

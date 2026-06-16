@@ -837,54 +837,6 @@ img.album-header-art {
   margin-top: 16px;
 }
 
-.play-btn {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: var(--green);
-  color: #06281d;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  cursor: pointer;
-  box-shadow: 0 6px 18px rgba(84, 210, 160, 0.35);
-  transition: transform 0.1s, opacity 0.1s;
-}
-
-.play-btn:hover {
-  transform: scale(1.05);
-  opacity: 0.9;
-}
-
-.play-btn:disabled,
-.shuffle-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-  transform: none;
-  box-shadow: none;
-}
-
-.shuffle-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: color 0.1s, border-color 0.1s;
-}
-
-.shuffle-btn:hover {
-  color: var(--green);
-  border-color: var(--green);
-}
-
 /* ---- Track list ---- */
 
 .track-list {
@@ -1450,25 +1402,6 @@ img.np-art {
   justify-content: flex-start;
 }
 
-/* Album/artist action bar: sits next to the play button */
-.album-more-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.album-more-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
 /* Inline dropdown for album/artist more-menu */
 .more-dropdown {
   position: fixed;
@@ -1566,28 +1499,6 @@ img.np-art {
 .modal-create:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-/* ---- Playlist detail header actions ---- */
-
-.playlist-actions-btn {
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: inherit;
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  cursor: pointer;
-  opacity: 0.65;
-  transition: opacity 0.1s;
-}
-
-.playlist-actions-btn:hover {
-  opacity: 1;
 }
 
 .ctx-danger {
@@ -1909,6 +1820,15 @@ img.queue-row-art {
   gap: 10px;
 }
 
+.detail-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  opacity: 0.5;
+}
+
 .detail-head {
   display: flex;
   align-items: center;
@@ -1973,26 +1893,6 @@ img.queue-row-art {
 
 .detail-link:disabled {
   cursor: default;
-}
-
-.detail-play {
-  margin-top: 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  align-self: flex-start;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 20px;
-  background: var(--green);
-  color: var(--bg);
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.detail-play:hover {
-  filter: brightness(1.08);
 }
 
 .detail-meta {
@@ -2625,22 +2525,6 @@ img.queue-row-art {
   font-size: 11.5px;
 }
 
-.expansion-chip--requested,
-.expansion-chip--suggested {
-  color: var(--yellow);
-  border-color: color-mix(in srgb, var(--yellow) 45%, transparent);
-}
-
-.expansion-chip--landed {
-  color: var(--green);
-  border-color: color-mix(in srgb, var(--green) 45%, transparent);
-}
-
-.expansion-chip--abandoned,
-.expansion-chip--rejected {
-  color: var(--muted);
-}
-
 .expansion-reject {
   background: none;
   border: none;
@@ -2667,10 +2551,6 @@ img.queue-row-art {
   vertical-align: -2px;
   color: var(--green);
   margin-right: 4px;
-}
-
-.watch-btn--on {
-  color: var(--green);
 }
 
 /* ---- Settings modal (musex menu → Settings…, ⌘,) ---- */
@@ -2833,20 +2713,6 @@ img.queue-row-art {
   min-width: 0;
 }
 
-/* Secondary action button in the detail panel (e.g. "Similar Songs") */
-.detail-secondary {
-  margin-top: 0;
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-}
-
-.detail-secondary:hover {
-  filter: none;
-  color: var(--green);
-  border-color: var(--green);
-}
-
 /* ---- Acquisition (External Artist + Downloads views) ---- */
 
 /* Badge state variants: color-only, shared by the grid-card corner badge and
@@ -2952,17 +2818,21 @@ img.queue-row-art {
   background: var(--green);
 }
 
-/* Static pill chip; state colors come from the shared badge variants above */
+/* Neutral pill for states with no acquisition-badge equivalent
+ * (abandoned/rejected). Matches the muted .state-badge chrome. */
 .dl-chip {
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 7px;
+  padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: rgba(255, 255, 255, 0.85);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--muted);
 }
 
 /* ---- Genres ---- */
@@ -3133,3 +3003,51 @@ img.queue-row-art {
   width: 64px;
   flex-shrink: 0;
 }
+
+/* ---- Shared discovery action bar (one icon-button size everywhere) ---- */
+:root { --icon-btn: 40px; }
+.action-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.action-play {
+  width: 46px; height: 46px; border-radius: 50%; border: none;
+  background: var(--green); color: #0d0e12; display: grid; place-items: center;
+  cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  transition: transform .12s ease, opacity .12s ease;
+}
+.action-play:hover { transform: scale(1.05); }
+.action-icon {
+  width: var(--icon-btn); height: var(--icon-btn); border-radius: 50%;
+  background: transparent; border: 1px solid var(--line); color: var(--text);
+  display: grid; place-items: center; cursor: pointer; transition: all .12s ease;
+}
+.action-icon:hover { border-color: var(--green); color: var(--green); }
+.action-pill {
+  height: 34px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line);
+  background: transparent; color: var(--text); display: inline-flex; align-items: center;
+  gap: 7px; font-size: 13px; cursor: pointer; transition: all .12s ease;
+}
+.action-pill:hover { border-color: var(--green); }
+.action-pill--on { border-color: var(--green); color: var(--green); background: rgba(84,210,160,.12); }
+.action-pill:disabled, .action-icon:disabled { opacity: .5; cursor: default; }
+.monitor-status { margin-top: 11px; font-size: 12px; color: var(--green); display: flex; align-items: center; gap: 6px; }
+
+/* ---- Unified acquisition state badge (replaces grid-card-badge--x / expansion-chip--x) ---- */
+.state-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.state-badge--owned { background: var(--green); color: #0d0e12; }
+.state-badge--downloaded { background: rgba(0,0,0,.5); border: 1px solid var(--green); color: var(--green); }
+.state-badge--downloading { background: rgba(0,0,0,.5); border: 1px solid var(--yellow); color: var(--yellow); }
+.state-badge--requested { background: rgba(0,0,0,.5); border: 1px solid var(--purple); color: #b9a8ff; }
+.state-badge--available { background: rgba(84,210,160,.14); border: 1px solid var(--green); color: var(--green); }
+.state-badge--unavailable { background: rgba(0,0,0,.5); border: 1px solid rgba(255,95,87,.6); color: #ff8a84; }
+/* StateBadge dropped into the grid-card badge corner: keep only positioning,
+ * the inner .state-badge carries its own pill chrome. */
+.grid-card-badge--state {
+  padding: 0;
+  background: none;
+  border: none;
+  pointer-events: none;
+}
+/* small bell corner-marker on monitored artist cards */
+.card-monitored { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.6); border: 1px solid var(--green); color: var(--green); display: grid; place-items: center; }

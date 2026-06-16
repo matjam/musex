@@ -1,12 +1,15 @@
 import type { Album, Track } from "@musex/core";
 import { listValidator } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal, Play, Shuffle } from "lucide-react";
+import { ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
+import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { useSelection } from "../../state/selection";
 import { AlbumArt } from "../AlbumArt";
+import { ActionBar } from "../discovery/ActionBar";
+import { EntityLink } from "../discovery/EntityLink";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import { StarRating } from "../StarRating";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -29,6 +32,7 @@ export function AlbumDetailView({ album }: Props) {
     usePlayer();
   const { selectedTrack, select } = useSelection();
   const { ratingFor, rate, seed } = useRatings();
+  const { openEntity } = usePanel();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
@@ -119,24 +123,16 @@ export function AlbumDetailView({ album }: Props) {
               <>
                 {tracks[0] && tracks[0].artistName !== "" && (
                   <>
-                    <button
-                      type="button"
-                      className="link-quiet"
-                      disabled={!tracks[0].artistId}
-                      onClick={() => {
-                        const t = tracks[0];
-                        if (!t || !t.artistId) return;
-                        dispatch({
-                          type: "navigate",
-                          view: {
-                            name: "artist",
-                            artist: { id: t.artistId, serverId: t.serverId, name: t.artistName },
-                          },
-                        });
+                    <EntityLink
+                      entity={{
+                        kind: "artist",
+                        name: tracks[0].artistName,
+                        artistId: album.artistId || undefined,
+                        serverId: album.serverId,
                       }}
                     >
                       {tracks[0].artistName}
-                    </button>
+                    </EntityLink>
                     <span className="album-meta-muted">{" · "}</span>
                   </>
                 )}
@@ -149,35 +145,24 @@ export function AlbumDetailView({ album }: Props) {
           </div>
           <div className="album-actions">
             {fetch.status === "ok" && tracks.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="play-btn"
-                  title="Play album"
-                  onClick={() => playTracks(tracks, 0)}
-                >
-                  <Play size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="shuffle-btn"
-                  title="Shuffle album"
-                  onClick={() => playTracksShuffled(tracks)}
-                >
-                  <Shuffle size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="album-more-btn"
-                  title="More actions"
-                  onClick={(e) => {
-                    setMorePos({ x: e.clientX, y: e.clientY });
-                    setMoreOpen((o) => !o);
-                  }}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-              </>
+              <ActionBar
+                onPlay={() => playTracks(tracks, 0)}
+                onShuffle={() => playTracksShuffled(tracks)}
+                onInfo={() => openEntity({ kind: "album", album })}
+                overflow={
+                  <button
+                    type="button"
+                    className="action-icon"
+                    title="More actions"
+                    onClick={(e) => {
+                      setMorePos({ x: e.clientX, y: e.clientY });
+                      setMoreOpen((o) => !o);
+                    }}
+                  >
+                    <MoreHorizontal size={18} />
+                  </button>
+                }
+              />
             )}
             <StarRating
               value10={ratingFor(album.id, album.userRating)}
