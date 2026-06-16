@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0](https://github.com/matjam/musex/compare/v0.9.0...v0.10.0) (2026-06-16)
+
+
+### Features
+
+* iOS device distribution (EAS) + React version pin fix ([#41](https://github.com/matjam/musex/issues/41)) ([250cb87](https://github.com/matjam/musex/commit/250cb87497265516e0212348096708682ef790f1))
+* iOS foundation (Phase 1) ([#39](https://github.com/matjam/musex/issues/39)) ([1381fa9](https://github.com/matjam/musex/commit/1381fa9b7e2b5362dbdc2891a792da7c79e9a91c))
+
 ## [0.9.0](https://github.com/matjam/musex/compare/v0.8.1...v0.9.0) (2026-06-16)
 
 
