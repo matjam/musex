@@ -1,10 +1,12 @@
-import { Play, Shuffle, Sparkles } from "lucide-react";
+import { Info, Play, Shuffle, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 
 export interface ActionBarProps {
   onPlay?: () => void; // primary; omit to hide
   onShuffle?: () => void;
   onSimilar?: () => void; // labeled "Similar" pill
+  /** Open the entity info/detail side panel for this entity. Omit to hide. */
+  onInfo?: () => void;
   /** Monitor pill: omit to hide. `on` lights it green and flips the label. */
   monitor?: { on: boolean; busy?: boolean; onToggle: () => void };
   /** Overflow ⋯ menu trigger; render the menu yourself via `overflow`. */
@@ -17,6 +19,7 @@ export function ActionBar({
   onPlay,
   onShuffle,
   onSimilar,
+  onInfo,
   monitor,
   overflow,
   children,
@@ -48,6 +51,17 @@ export function ActionBar({
       {onSimilar && (
         <button type="button" className="action-pill" onClick={onSimilar}>
           <Sparkles size={15} /> Similar
+        </button>
+      )}
+      {onInfo && (
+        <button
+          type="button"
+          className="action-icon"
+          title="Info"
+          aria-label="Info"
+          onClick={onInfo}
+        >
+          <Info size={16} />
         </button>
       )}
       {monitor && (

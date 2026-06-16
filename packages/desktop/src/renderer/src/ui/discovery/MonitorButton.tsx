@@ -28,11 +28,16 @@ export function useMonitorAction(artistName: string) {
   return {
     supported,
     on,
-    busy,
+    // One-way: there is no un-monitor IPC, so once an artist is monitored the
+    // pill is shown lit + disabled (busy) rather than offering a broken
+    // toggle-off that would silently re-acquire. Centralised here so every
+    // consumer (ExternalArtistView, EntityPanel) is safe.
+    busy: busy || on,
     onToggle: async () => {
+      if (on) return;
       setBusy(true);
       try {
-        await mon.setMonitored(artistName, !on);
+        await mon.setMonitored(artistName, true);
       } catch (err) {
         // The store already reverted the optimistic toggle.
         console.error("[monitor] toggle failed:", err);

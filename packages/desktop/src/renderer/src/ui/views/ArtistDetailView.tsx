@@ -4,6 +4,7 @@ import { ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
 import { useMonitoring } from "../../state/monitoring";
+import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { AlbumArt } from "../AlbumArt";
@@ -31,6 +32,7 @@ export function ArtistDetailView({ artist }: Props) {
   // ongoing relationship). "Acquire entire artist" is for unowned artists.
   const monitor = useWatchAction(artist.name);
   const { isWatched } = useMonitoring();
+  const { openEntity } = usePanel();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
@@ -167,6 +169,15 @@ export function ArtistDetailView({ artist }: Props) {
             dispatch({
               type: "navigate",
               view: { name: "similar", target: { kind: "artist", name: artist.name } },
+            })
+          }
+          onInfo={() =>
+            openEntity({
+              kind: "artist",
+              artistName: artist.name,
+              artistId: artist.id,
+              serverId: artist.serverId,
+              thumb: artist.thumb,
             })
           }
           monitor={monitor.supported ? monitor : undefined}

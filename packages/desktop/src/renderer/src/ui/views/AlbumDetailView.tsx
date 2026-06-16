@@ -3,6 +3,7 @@ import { listValidator } from "@musex/core";
 import { ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
+import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { useSelection } from "../../state/selection";
@@ -31,6 +32,7 @@ export function AlbumDetailView({ album }: Props) {
     usePlayer();
   const { selectedTrack, select } = useSelection();
   const { ratingFor, rate, seed } = useRatings();
+  const { openEntity } = usePanel();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
@@ -146,6 +148,7 @@ export function AlbumDetailView({ album }: Props) {
               <ActionBar
                 onPlay={() => playTracks(tracks, 0)}
                 onShuffle={() => playTracksShuffled(tracks)}
+                onInfo={() => openEntity({ kind: "album", album })}
                 overflow={
                   <button
                     type="button"

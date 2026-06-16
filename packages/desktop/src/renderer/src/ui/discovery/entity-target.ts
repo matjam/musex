@@ -24,13 +24,17 @@ export function resolveEntityTarget(ref: EntityRef): View | null {
     if (ref.hasProvider) return { name: "external-artist", artistName: ref.name };
     return null;
   }
-  if (ref.albumId && ref.serverId && ref.artistId) {
+  // Album navigation only needs albumId + serverId (AlbumDetailView fetches by
+  // library + album id). artistId is NOT required — compilations / various-
+  // artist albums often have an empty grandparent id, and gating on it would
+  // wrongly render their names as dead text.
+  if (ref.albumId && ref.serverId) {
     return {
       name: "album",
       album: {
         id: ref.albumId,
         serverId: ref.serverId,
-        artistId: ref.artistId,
+        artistId: ref.artistId ?? "",
         title: ref.title ?? "",
         thumb: ref.thumb,
       },
