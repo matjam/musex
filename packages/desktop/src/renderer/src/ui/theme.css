@@ -3171,5 +3171,13 @@ img.queue-row-art {
 .state-badge--requested { background: rgba(0,0,0,.5); border: 1px solid var(--purple); color: #b9a8ff; }
 .state-badge--available { background: rgba(84,210,160,.14); border: 1px solid var(--green); color: var(--green); }
 .state-badge--unavailable { background: rgba(0,0,0,.5); border: 1px solid rgba(255,95,87,.6); color: #ff8a84; }
+/* StateBadge dropped into the grid-card badge corner: keep only positioning,
+ * the inner .state-badge carries its own pill chrome. */
+.grid-card-badge--state {
+  padding: 0;
+  background: none;
+  border: none;
+  pointer-events: none;
+}
 /* small bell corner-marker on monitored artist cards */
 .card-monitored { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.6); border: 1px solid var(--green); color: var(--green); display: grid; place-items: center; }
