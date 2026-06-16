@@ -30,7 +30,12 @@ describe("resolveEntityTarget", () => {
     });
   });
   it("album without artistId still navigates (compilations / various-artist)", () => {
-    const r = resolveEntityTarget({ kind: "album", albumId: "al1", serverId: "s1", title: "Now 50" });
+    const r = resolveEntityTarget({
+      kind: "album",
+      albumId: "al1",
+      serverId: "s1",
+      title: "Now 50",
+    });
     expect(r).toEqual({
       name: "album",
       album: { id: "al1", serverId: "s1", artistId: "", title: "Now 50", thumb: undefined },

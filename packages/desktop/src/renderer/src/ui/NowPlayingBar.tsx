@@ -1,5 +1,6 @@
 import {
   ListMusic,
+  PanelRight,
   Pause,
   Play,
   Repeat,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useApp } from "../state/app";
+import { usePanel } from "../state/panel";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { useRatings } from "../state/ratings";
 import { formatDuration } from "../util/format";
@@ -28,6 +30,7 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
     usePlayer();
   const { ratingFor, rate } = useRatings();
   const { library } = useApp();
+  const { panel, togglePanel } = usePanel();
 
   const track = state.queue ? state.queue.tracks[state.queue.index] : undefined;
   const hasTrack = track !== undefined;
@@ -159,8 +162,17 @@ export function NowPlayingBar({ onToggleQueue }: NowPlayingBarProps) {
         </div>
       </div>
 
-      {/* Right: queue + volume */}
+      {/* Right: details + queue + volume */}
       <div className="np-right">
+        <button
+          type="button"
+          className={`np-btn${panel === "entity" ? " active" : ""}`}
+          title="Details"
+          aria-pressed={panel === "entity"}
+          onClick={() => togglePanel("entity")}
+        >
+          <PanelRight size={16} />
+        </button>
         <button
           type="button"
           className="np-btn"
