@@ -68,8 +68,11 @@ export default function LibraryBrowse() {
 
   function scrubTo(letter: string) {
     const idx = indexOf[letter];
-    if (idx != null)
-      listRef.current?.scrollToIndex({ index: idx, viewPosition: 0, animated: false });
+    if (idx == null) return;
+    // A numColumns FlatList scrolls by ROW, so an item index can exceed the row
+    // count and make scrollToIndex throw "out of range". Convert item -> row and
+    // use scrollToOffset (pixel-based, never out of range).
+    listRef.current?.scrollToOffset({ offset: Math.floor(idx / 2) * ROW_H, animated: false });
   }
 
   return (
@@ -90,17 +93,6 @@ export default function LibraryBrowse() {
             data={items}
             numColumns={2}
             keyExtractor={(it, i) => `${it.kind}-${it.data.id}-${i}`}
-            getItemLayout={(_d, index) => ({
-              length: ROW_H,
-              offset: ROW_H * Math.floor(index / 2),
-              index,
-            })}
-            onScrollToIndexFailed={(info) => {
-              listRef.current?.scrollToOffset({
-                offset: ROW_H * Math.floor(info.index / 2),
-                animated: false,
-              });
-            }}
             renderItem={({ item }) => {
               const base = artBaseFor(item.data.serverId);
               const art = base && token ? artUrl(base, item.data.thumb, token) : null;
