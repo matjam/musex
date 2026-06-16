@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/matjam/musex/compare/v0.8.1...v0.9.0) (2026-06-16)
+
+
+### Features
+
+* consistent discovery UI — shared action bar, badges, context-following panel, navigable names ([#38](https://github.com/matjam/musex/issues/38)) ([fd6de05](https://github.com/matjam/musex/commit/fd6de05611f610be941073c1ea86af77113045de))
+
+
+### Bug Fixes
+
+* **linux:** associate window with launcher (desktopName) ([#35](https://github.com/matjam/musex/issues/35)) ([f7eab6f](https://github.com/matjam/musex/commit/f7eab6f32dc578fe5b3a775040960454e2721b90))
+
 ## [0.8.1](https://github.com/matjam/musex/compare/v0.8.0...v0.8.1) (2026-06-16)
 
 
