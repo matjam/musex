@@ -68,6 +68,14 @@ publish:
   owner: matjam
   repo: musex
 linux:
+  # Window association: Electron derives the Wayland app_id / WM_CLASS from
+  # `desktopName` in package.json ("musex.desktop"); syncDesktopName makes the
+  # installed .desktop filename + its StartupWMClass match, so desktop
+  # environments (notably GNOME/Wayland) link the running window to the
+  # launcher — correct icon + grouping in the dock/taskbar. Keyed on "musex"
+  # to match executableName, so the AppImage's baked musex.desktop name (which
+  # the Arch PKGBUILD references) is unchanged.
+  syncDesktopName: true
   target:
     - target: AppImage
       arch: [x64]
