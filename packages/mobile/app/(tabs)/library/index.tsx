@@ -1,10 +1,18 @@
 import type { Album, Artist, Track } from "@musex/core";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { buildLetterIndex } from "../../../src/logic/az-index";
 import { useStore } from "../../../src/state/store";
+import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { AZScrubber } from "../../../src/ui/AZScrubber";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { Tile } from "../../../src/ui/Tile";
@@ -25,8 +33,9 @@ export default function LibraryBrowse() {
   const [loading, setLoading] = useState(true);
   const listRef = useRef<FlatList<Item>>(null);
 
+  // Tracks render as single-column rows; artists/albums as a 2-col tile grid.
+  const numCols = segment === "Tracks" ? 1 : 2;
   const tileSize = (width - 22) / 2; // 22 = scrubber gutter
-  const ROW_H = tileSize + 36; // art + labels + padding
 
   useEffect(() => {
     let alive = true;
@@ -69,10 +78,14 @@ export default function LibraryBrowse() {
   function scrubTo(letter: string) {
     const idx = indexOf[letter];
     if (idx == null) return;
-    // A numColumns FlatList scrolls by ROW, so an item index can exceed the row
-    // count and make scrollToIndex throw "out of range". Convert item -> row and
-    // use scrollToOffset (pixel-based, never out of range).
-    listRef.current?.scrollToOffset({ offset: Math.floor(idx / 2) * ROW_H, animated: false });
+    // FlatList scrolls by ROW, so convert the item index to its row (idx/cols).
+    // scrollToIndex lands exactly on the row (FlatList measures); onScrollToIndexFailed
+    // covers far, not-yet-measured rows.
+    listRef.current?.scrollToIndex({
+      index: Math.floor(idx / numCols),
+      viewPosition: 0,
+      animated: false,
+    });
   }
 
   return (
@@ -90,9 +103,16 @@ export default function LibraryBrowse() {
         <View style={{ flex: 1 }}>
           <FlatList
             ref={listRef}
+            key={segment}
             data={items}
-            numColumns={2}
+            numColumns={numCols}
             keyExtractor={(it, i) => `${it.kind}-${it.data.id}-${i}`}
+            onScrollToIndexFailed={(info) => {
+              listRef.current?.scrollToOffset({
+                offset: info.averageItemLength * info.index,
+                animated: false,
+              });
+            }}
             renderItem={({ item }) => {
               const base = artBaseFor(item.data.serverId);
               const art = base && token ? artUrl(base, item.data.thumb, token) : null;
@@ -127,14 +147,32 @@ export default function LibraryBrowse() {
                   />
                 );
               }
+              const sub = [item.data.albumTitle, item.data.artistName].filter(Boolean).join(" · ");
               return (
-                <Tile
-                  art={art}
-                  size={tileSize}
-                  label={item.data.title}
-                  sublabel={item.data.artistName}
+                <Pressable
                   onPress={() => void playTracks([item.data], 0)}
-                />
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    paddingHorizontal: theme.space(2),
+                    paddingVertical: 8,
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.border,
+                  }}
+                >
+                  <AlbumArt url={art} size={48} />
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15 }}>
+                      {item.data.title}
+                    </Text>
+                    {sub ? (
+                      <Text numberOfLines={1} style={{ color: theme.textDim, fontSize: 12 }}>
+                        {sub}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
               );
             }}
           />

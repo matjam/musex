@@ -10,6 +10,8 @@ import {
 const POSITION_UPDATE_MS = 250;
 const LOAD_TIMEOUT_MS = 30000;
 
+type NowPlayingMeta = { title: string; artist: string; album?: string; artwork?: string };
+
 /** PlaybackEngine over expo-audio (AVPlayer on iOS). A fresh AudioPlayer is
  *  created per load() and the previous one disposed; one status listener fans
  *  out to the core callbacks. preload() is a no-op — gapless is deferred to a
@@ -25,6 +27,10 @@ export class ExpoAudioEngine implements PlaybackEngine {
 
   private lastEnded = false;
   private lockScreenActive = false;
+  // Cached now-playing metadata. The store pushes this on track change, which
+  // fires DURING the "loading" patch — before load() has created the new
+  // player. We stash it and apply it once the new player is loaded.
+  private pendingMeta: NowPlayingMeta | null = null;
 
   /** Must be awaited once before first playback (sets the iOS audio session so
    *  audio plays even when the ringer is silent). Call from app bootstrap. */
@@ -46,6 +52,9 @@ export class ExpoAudioEngine implements PlaybackEngine {
     });
     // expo-audio loads asynchronously; resolve when isLoaded flips true (or error).
     await this.waitUntilLoaded(player);
+    // Apply any metadata the store pushed before this player existed, so the
+    // lock-screen / Control Center widget shows for the now-loaded track.
+    this.applyNowPlaying();
   }
 
   preload(_ref: StreamRef): Promise<void> {
@@ -88,12 +97,21 @@ export class ExpoAudioEngine implements PlaybackEngine {
   }
 
   /** Mobile-only: push now-playing metadata to the lock screen / Control Center.
-   *  Called by the store on track change. No-op if no player is loaded.
-   *  Note: AudioMetadata uses `albumTitle` (not `album`) and `artworkUrl` (plain string,
-   *  not `{ uri }`), as per the installed expo-audio typings. */
-  setNowPlaying(meta: { title: string; artist: string; album?: string; artwork?: string }): void {
+   *  Called by the store on track change. Caches the metadata and applies it
+   *  now if a player is loaded; otherwise load() applies it once the new player
+   *  is ready (the store pushes during "loading", before the player exists). */
+  setNowPlaying(meta: NowPlayingMeta): void {
+    this.pendingMeta = meta;
+    if (this.player?.isLoaded) this.applyNowPlaying();
+  }
+
+  /** Applies the cached now-playing metadata to the current player's lock
+   *  screen. Note: AudioMetadata uses `albumTitle` (not `album`) and
+   *  `artworkUrl` (a plain string, not `{ uri }`), per the installed typings. */
+  private applyNowPlaying(): void {
     const player = this.player;
-    if (!player) return;
+    const meta = this.pendingMeta;
+    if (!player || !meta) return;
     const md: AudioMetadata = {
       title: meta.title,
       artist: meta.artist,
