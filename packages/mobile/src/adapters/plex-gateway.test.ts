@@ -61,20 +61,32 @@ describe("PlexGatewayImpl", () => {
       jsonResponse({ MediaContainer: { Metadata: [{ ratingKey: "10", title: "Funeral" }] } }),
     );
     const gw = new PlexGatewayImpl(fetchFn, "CID");
-    const lib = { id: "3", serverId: "srv", serverName: "T", title: "Music", type: "music" as const };
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
     await gw.listMusicLibraries(server, "TOK"); // prime base url
     const albums = await gw.listAllAlbums(lib, "title", "TOK");
     expect(albums[0]).toMatchObject({ id: "10", title: "Funeral" });
     const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
-    expect(urls.some((u) => u.includes("/library/sections/3/all") && u.includes("type=9"))).toBe(true);
+    expect(urls.some((u) => u.includes("/library/sections/3/all") && u.includes("type=9"))).toBe(
+      true,
+    );
   });
 
   it("listAllTracks queries type=10", async () => {
-    const fetchFn = vi.fn(async () =>
-      jsonResponse({ MediaContainer: { Metadata: [] } }),
-    );
+    const fetchFn = vi.fn(async () => jsonResponse({ MediaContainer: { Metadata: [] } }));
     const gw = new PlexGatewayImpl(fetchFn, "CID");
-    const lib = { id: "3", serverId: "srv", serverName: "T", title: "Music", type: "music" as const };
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
     await gw.listMusicLibraries(server, "TOK");
     await gw.listAllTracks(lib, "title", "TOK");
     const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
@@ -86,13 +98,24 @@ describe("PlexGatewayImpl", () => {
       jsonResponse({
         MediaContainer: {
           Metadata: [
-            { ratingKey: "100", title: "Song", grandparentTitle: "BoC", Media: [{ Part: [{ id: "9", key: "/p/9" }] }] },
+            {
+              ratingKey: "100",
+              title: "Song",
+              grandparentTitle: "BoC",
+              Media: [{ Part: [{ id: "9", key: "/p/9" }] }],
+            },
           ],
         },
       }),
     );
     const gw = new PlexGatewayImpl(fetchFn, "CID");
-    const lib = { id: "3", serverId: "srv", serverName: "T", title: "Music", type: "music" as const };
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
     await gw.listMusicLibraries(server, "TOK");
     const tracks = await gw.listArtistTracks("1", lib, "TOK");
     expect(tracks[0]).toMatchObject({ id: "100", artistName: "BoC" });
