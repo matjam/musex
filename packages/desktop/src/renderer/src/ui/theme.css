@@ -197,6 +197,25 @@ html:not([data-platform="darwin"]) .topbar {
   flex-shrink: 0;
 }
 
+/* Non-mac hamburger: reaches the app menu the frameless window can't show.
+   Opts out of the bar's drag region so it's clickable. */
+.topbar-menu-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+.topbar-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* Absolutely centered so the box centers on the WINDOW, not on the space
    left over after the traffic lights + logo (flex would sit it off-center). */
 .topbar-search {

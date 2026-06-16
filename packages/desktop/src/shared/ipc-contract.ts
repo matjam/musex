@@ -111,6 +111,7 @@ export const IPC = {
   acquisitionMonitoredArtists: "musex:acquisition:monitoredArtists", // -> string[] (60s host cache)
   acquisitionDiscography: "musex:acquisition:discography", // (artistName) -> AcquirableAlbumDto[] incl. lastfm-only "unavailable" rows
   updaterCheck: "musex:updater:check", // -> void (results surface as native dialogs in main)
+  menuPopup: "musex:menu:popup", // (x, y) -> void — pops up the app menu at window coords (non-mac hamburger)
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -485,4 +486,9 @@ export interface MusexApi {
   acquisitionDiscography(artistName: string): Promise<AcquirableAlbumDto[]>;
   /** Trigger an interactive update check; results surface as native dialogs in main. */
   updaterCheck(): Promise<void>;
+  /** Pop up the application menu at the given window coordinates (CSS px /
+   *  DIP, relative to the window content area). Used by the non-mac topbar
+   *  hamburger to reach the File/Edit/View/Help menu the frameless window
+   *  has no visible menu bar for. */
+  popupMenu(x: number, y: number): Promise<void>;
 }

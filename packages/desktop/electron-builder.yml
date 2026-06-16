@@ -12,6 +12,12 @@
 # no `binaries` list needed.
 appId: net.stupendous.musex
 productName: musex
+# executableName defaults to the package.json `name` (@musex/desktop), which
+# sanitizes to `@musexdesktop` — the leading `@` is rejected by the Linux
+# AppImage builder ("characters that cannot be safely used in file paths").
+# macOS uses productName for the executable so it's unaffected; pin it here so
+# the Linux binary/AppImage is a clean `musex`.
+executableName: musex
 # Auto-update safety: ShipIt can't strip quarantine xattrs from read-only
 # files (mpv ships some), which aborts the whole install. See the hook.
 afterPack: build/ensure-writable.cjs
@@ -82,6 +88,11 @@ appImage:
   # electron-updater (latest-linux.yml) tracks whatever name this produces.
   artifactName: ${productName}-${version}-x86_64.AppImage
 deb:
+  # Default deb artifactName is ${name}_${version}_${arch} → @musex/desktop_…,
+  # whose `@` and `/` are invalid in a filename (the `/` even nests it in a
+  # subdir, so the release upload glob `release/*.deb` would miss it). Pin a
+  # clean name.
+  artifactName: ${productName}_${version}_amd64.deb
   priority: optional
   depends:
     # electron-builder 26's default deb depends (verified from

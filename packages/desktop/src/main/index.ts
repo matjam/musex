@@ -12,6 +12,23 @@ import { setupAutoUpdater } from "./updater.js";
 // in-memory buffer behind Help → Show Logs.
 installConsoleTee(logBuffer);
 
+// Native Wayland on Linux. Electron 42 (Chromium ≥140) already defaults the
+// ozone platform hint to "auto" — picking Wayland in a Wayland session and
+// X11 under Xorg — but we set it explicitly so the packaged app behaves the
+// same regardless of the user's environment (we don't rely on
+// ELECTRON_OZONE_PLATFORM_HINT being set, and that env var is slated for
+// removal).
+//
+// Chromium's Wayland ozone backend can't render with Vulkan ("'--ozone-
+// platform=wayland' is not compatible with Vulkan"); it logs that and falls
+// back to GL. Disable Vulkan on Linux so the GL backend is chosen cleanly —
+// this is the "disable Vulkan" path the warning recommends, keeping us on
+// native Wayland rather than dropping to XWayland. Must run before app ready.
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+  app.commandLine.appendSwitch("disable-features", "Vulkan");
+}
+
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 function createWindow(): BrowserWindow {
@@ -108,6 +125,15 @@ app.whenReady().then(async () => {
   // Settings → General → "Check for Updates" — results surface as the same
   // native dialogs the menu item uses, so the renderer needs no result.
   ipcMain.handle(IPC.updaterCheck, () => updater.checkForUpdatesInteractive());
+  // Non-mac topbar hamburger: pop up the live application menu (the same
+  // File/Edit/View/Help we build in menu.ts and set per-window) at the
+  // button's coords. getApplicationMenu() keeps it in sync — nothing
+  // duplicated. macOS never calls this (it has a native menu bar).
+  ipcMain.handle(IPC.menuPopup, (event, x: number, y: number) => {
+    const menu = Menu.getApplicationMenu();
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (menu && win) menu.popup({ window: win, x: Math.round(x), y: Math.round(y) });
+  });
   wireEngineEvents(firstWindow);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) wireEngineEvents(createWindow());
