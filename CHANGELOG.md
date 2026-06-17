@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.0](https://github.com/matjam/musex/compare/v0.11.0...v0.12.0) (2026-06-17)
+
+
+### Features
+
+* offline mode, local downloads, and MP3-transcoded storage ([#51](https://github.com/matjam/musex/issues/51)) ([edba5ed](https://github.com/matjam/musex/commit/edba5ed344107e4c0091b1cd12c01d0236d1486b))
+
+
+### Bug Fixes
+
+* update plugin trust copy now that plugins are sandboxed ([#48](https://github.com/matjam/musex/issues/48)) ([32a8959](https://github.com/matjam/musex/commit/32a895931c3d5009b41b6d3b9ea48312dea64b8c))
+
 ## [0.11.0](https://github.com/matjam/musex/compare/v0.10.0...v0.11.0) (2026-06-17)
 
 
