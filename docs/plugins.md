@@ -605,8 +605,13 @@ for a later musex release. For now, the manual drop-in is the only install path.
 
 ## Trust model (read this)
 
-Full trust, by design: a plugin is arbitrary code in the main process. The ctx
-API is the *supported* surface, not a security boundary. musex never hands
-plugins the Plex token, stream URLs, or library ids beyond search results — but a
-malicious plugin doesn't need the API to do harm. **Install only plugins you
-trust.**
+**Sandboxed, by design.** Plugins run in a QuickJS isolate with **no access to
+the filesystem, the OS, Node, Electron, the Plex token/stream URLs, or other
+plugins' data** — they reach the app *only* through the `ctx` API (the bridge is
+the security boundary). What a plugin *can* do: make network requests
+(`ctx.net.fetch`), read/write its own `storage`/`secrets`, and see the
+`TrackInfo`/search/taste data the API exposes. So the residual risk is **data
+exfiltration over the network** — a malicious plugin could send the credentials
+*you* gave it (e.g. a server API key) or your listening data to a remote server.
+It can't harm your machine, but **install only plugins you trust** with the
+settings you enter into them.
