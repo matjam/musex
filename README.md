@@ -34,16 +34,17 @@ playlists, mood mixes, radio, and recommendations.
 - **Plugins** — a small, full-trust plugin system extends the app:
   - **last.fm** — scrobbling, loved tracks (synced with your star ratings),
     similar artists/tracks, listening stats.
-  - **Lidarr** — see an external artist's full discography, add albums (or
-    monitor a whole artist) for download, and watch request status — turning
-    "I wish I had this" into "it's in my library."
+  - **Acquisition plugins** (e.g. Lidarr) — see an external artist's full
+    discography, add albums (or monitor a whole artist) for download, and
+    watch request status — turning "I wish I had this" into "it's in my
+    library." Install acquisition plugins (e.g. Lidarr) from a plugin repo
+    via **Settings → Plugins → Add from GitHub**.
   - Federated search: results show what you own next to what you could
     acquire.
-  - **Bring your own source** — Lidarr is just the first acquisition
-    provider. The plugin API is deliberately source-agnostic: a plugin that
-    can look up an artist's albums and fetch one (an online music store like
-    Bandcamp, a different download manager, anything) plugs into the same
-    search, downloads, and taste-expansion machinery with no app changes.
+  - The plugin API is deliberately source-agnostic: a plugin that can look up
+    an artist's albums and fetch one (an online music store like Bandcamp, a
+    different download manager, anything) plugs into the same search,
+    downloads, and taste-expansion machinery with no app changes.
     See [docs/plugins.md](docs/plugins.md).
 - **Auto-update** — checks GitHub Releases silently and updates in place on
   macOS and the Linux AppImage; `.deb`/package installs update through your
@@ -69,8 +70,8 @@ On first launch musex signs you in via plex.tv (PIN flow) and stores the token
 in the OS keychain (macOS Keychain / libsecret or kwallet on Linux; if no
 keyring is available the token is stored unencrypted with a warning).
 
-The last.fm and Lidarr plugins are optional — configure them in Settings with
-your own API keys.
+The last.fm plugin is bundled. Acquisition plugins (e.g. Lidarr) are installed
+from a plugin repo via Settings → Plugins → Add from GitHub.
 
 ## Development
 

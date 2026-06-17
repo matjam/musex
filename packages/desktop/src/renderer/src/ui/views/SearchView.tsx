@@ -65,7 +65,7 @@ export function SearchView() {
     };
   }, [query, library]);
 
-  // Federated external search (acquisition plugin, e.g. Lidarr) — a second
+  // Federated external search (acquisition plugin) — a second
   // debounced fetch, independent loading flag, never blocks library results.
   useEffect(() => {
     if (!acquisitionAvailable) return;

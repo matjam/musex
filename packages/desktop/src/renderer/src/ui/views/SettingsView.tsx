@@ -491,7 +491,7 @@ function ExpansionSection() {
   const { prefs, available } = state;
   const missing = [
     ...(available.similar ? [] : ["a similar-music plugin (last.fm)"]),
-    ...(available.acquisition ? [] : ["an acquisition plugin (Lidarr)"]),
+    ...(available.acquisition ? [] : ["an acquisition plugin"]),
   ];
   const statusLine = !prefs.enabled
     ? "Off — nothing is downloaded automatically."
@@ -510,8 +510,8 @@ function ExpansionSection() {
           <div className="settings-row-label">Discover and download music you might like</div>
           <div className="settings-row-desc">
             Picks new artists from your listening profile via last.fm and quietly adds an album
-            through Lidarr — a blend of close-to-your-taste and a step beyond it. Every attempt is
-            visible in Downloads → Expansions.
+            through an acquisition plugin — a blend of close-to-your-taste and a step beyond it.
+            Every attempt is visible in Downloads → Expansions.
           </div>
         </div>
         <button

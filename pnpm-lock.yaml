@@ -44,9 +44,6 @@ importers:
       '@musex/plugin-lastfm':
         specifier: workspace:*
         version: link:../../plugins/lastfm
-      '@musex/plugin-lidarr':
-        specifier: workspace:*
-        version: link:../../plugins/lidarr
       '@tanstack/react-virtual':
         specifier: ^3.14.2
         version: 3.14.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -165,15 +162,6 @@ importers:
         version: 25.9.2
 
   plugins/lastfm:
-    devDependencies:
-      '@musex/plugin-api':
-        specifier: workspace:*
-        version: link:../../packages/plugin-api
-      '@types/node':
-        specifier: ^25.0.0
-        version: 25.9.2
-
-  plugins/lidarr:
     devDependencies:
       '@musex/plugin-api':
         specifier: workspace:*

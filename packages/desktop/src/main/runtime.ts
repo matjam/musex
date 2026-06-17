@@ -138,9 +138,9 @@ export class Runtime {
       );
     }
 
-    // Plugin host: core plugins (lastfm, lidarr) are statically bundled —
-    // no filesystem scan for them. Only userData/plugins is scanned for
-    // user-installed plugins; core plugin ids win on collision.
+    // Plugin host: lastfm is the only statically bundled core plugin —
+    // no filesystem scan for it. Only userData/plugins is scanned for
+    // user-installed plugins (e.g. acquisition plugins); core plugin ids win on collision.
     this.plugins = new PluginHost({
       corePlugins: CORE_PLUGINS,
       scanDirs: [path.join(app.getPath("userData"), "plugins")],
@@ -191,8 +191,8 @@ export class Runtime {
     });
 
     // Taste expansion: host-owned coordinator over the plugin providers
-    // (similar/lastfm + acquisition/lidarr). Pure planning lives in
-    // @musex/core's taste-expansion; this just wires its inputs.
+    // (similar via lastfm + acquisition via an installed acquisition plugin).
+    // Pure planning lives in @musex/core's taste-expansion; this wires its inputs.
     this.expansion = new ExpansionCoordinator({
       host: this.plugins,
       getLibrary: () => this.libraries[0] ?? null,

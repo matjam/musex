@@ -609,8 +609,8 @@ export function registerIpc(rt: Runtime): void {
     }
     throw new Error("invalid similarGet kind");
   });
-  // Acquisition (e.g. Lidarr): external-artist discography lookup with an
-  // owned cross-check against the library, acquire routing, download status.
+  // Acquisition (any registered acquisition plugin): external-artist discography
+  // lookup with an owned cross-check against the library, acquire routing, download status.
   ipcMain.handle(IPC.acquisitionAvailable, () => rt.plugins.acquisitionAvailable());
 
   ipcMain.handle(

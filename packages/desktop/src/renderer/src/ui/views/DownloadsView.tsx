@@ -100,8 +100,9 @@ function ExpansionsFeed({
 }
 
 /** Status of requested/downloading albums across acquisition providers
- *  (Lidarr queue + monitored-but-missing), the taste-expansion feed, and the
- *  artists watched for new releases. Auto-refreshes while open. */
+ *  (e.g. an acquisition plugin queue + monitored-but-missing), the
+ *  taste-expansion feed, and the artists watched for new releases.
+ *  Auto-refreshes while open. */
 export function DownloadsView() {
   const monitoring = useMonitoring();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });

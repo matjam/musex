@@ -85,7 +85,7 @@ export const IPC = {
   trackActionsInvoke: "musex:trackActions:invoke", // (actionId, trackInfo) -> void
   trackDetailGet: "musex:trackDetail:get", // (trackInfo) -> TrackDetailDto[]
   similarGet: "musex:similar:get", // (SimilarGetArgs) -> SectionItemDto[]
-  // Acquisition (e.g. Lidarr): external-artist discography + Downloads view
+  // Acquisition (any registered acquisition plugin): external-artist discography + Downloads view
   acquisitionAvailable: "musex:acquisition:available", // -> boolean
   acquisitionLookupArtist: "musex:acquisition:lookupArtist", // (artistName) -> AcquirableAlbumDto[]
   acquisitionAcquire: "musex:acquisition:acquire", // ({ providerId, providerRef }) -> void

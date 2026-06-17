@@ -14,7 +14,7 @@ type FetchState =
   | { status: "ok"; albums: AcquirableAlbumDto[] };
 
 /** Discography of an artist we don't (fully) own, merged from acquisition
- *  providers (Lidarr) and similar providers (last.fm). Owned albums navigate
+ *  providers and similar providers (last.fm). Owned albums navigate
  *  into the library; available ones get a hover Add (acquire) action;
  *  last.fm-only titles are shown dimmed as unavailable. */
 export function ExternalArtistView({ artistName }: { artistName: string }) {

@@ -1,9 +1,11 @@
 /** First-party plugins, statically imported — anything musex ships executes
  *  only bundled code. The dynamic import() path in PluginHost remains
- *  exclusively for user plugins in userData/plugins/. */
+ *  exclusively for user plugins in userData/plugins/.
+ *
+ *  lastfm is the only bundled core plugin. Acquisition plugins (e.g. Lidarr)
+ *  are installed at runtime from a GitHub repo via Settings → Plugins. */
 import type { PluginContext } from "@musex/plugin-api";
 import * as lastfm from "@musex/plugin-lastfm";
-import * as lidarr from "@musex/plugin-lidarr";
 
 export interface CorePlugin {
   manifest: { id: string; name: string; version: string; apiVersion: number };
@@ -13,5 +15,4 @@ export interface CorePlugin {
 
 export const CORE_PLUGINS: readonly CorePlugin[] = [
   { manifest: lastfm.manifest, activate: lastfm.activate },
-  { manifest: lidarr.manifest, activate: lidarr.activate, deactivate: lidarr.deactivate },
 ];

@@ -53,8 +53,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /** Cap on merged Similar-panel results across all providers. */
 const SIMILAR_ITEMS_MAX = 24;
 
-/** Acquisition lookups (Lidarr metadata searches) are slow — a bigger budget
- *  than the section/detail fan-outs. Tests override via providerTimeoutMs. */
+/** Acquisition lookups (metadata searches via an acquisition plugin) are slow —
+ *  a bigger budget than the section/detail fan-outs. Tests override via providerTimeoutMs. */
 const ACQUISITION_TIMEOUT_MS = 15_000;
 
 /** Cap on federated external artist search results (one search section). */
@@ -413,7 +413,7 @@ export class PluginHost {
     return merged;
   }
 
-  // ── acquisition (e.g. Lidarr) ─────────────────────────────────────────────
+  // ── acquisition (any registered acquisition plugin) ───────────────────────
 
   /** True when any plugin registered an AcquisitionProvider — the renderer
    *  uses this to reroute external-artist clicks into the in-app view. */
@@ -491,8 +491,8 @@ export class PluginHost {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`[plugin:${entry.pluginId}] acquire failed: ${msg}`);
     }
-    // Acquiring an album makes its artist monitored in Lidarr (and the
-    // expansion coordinator acquires in the background) — drop the badge cache.
+    // Acquiring an album makes its artist monitored in the acquisition plugin
+    // (and the expansion coordinator acquires in the background) — drop the badge cache.
     this.monitoredCache = null;
   }
 
