@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.11.0](https://github.com/matjam/musex/compare/v0.10.0...v0.11.0) (2026-06-17)
+
+
+### Features
+
+* core Last.fm + third-party QuickJS plugin sandbox (apiVersion 2) ([#47](https://github.com/matjam/musex/issues/47)) ([8bca09d](https://github.com/matjam/musex/commit/8bca09d1e31333d48ad4cf8add9a88a9722aac56))
+* install plugins from a GitHub repo + remove bundled lidarr ([#46](https://github.com/matjam/musex/issues/46)) ([8f58b0e](https://github.com/matjam/musex/commit/8f58b0e6db98800d6bbdd888c928ea9b3c2335af))
+* mobile Home/taste/lock-screen + default-to-owned Plex library with in-app switching ([#44](https://github.com/matjam/musex/issues/44)) ([2bb3c35](https://github.com/matjam/musex/commit/2bb3c35d6586e21124c768b8077bcf8610c85906))
+* mobile UI — tabs, album art, Now Playing, queue, background audio ([#42](https://github.com/matjam/musex/issues/42)) ([42ec825](https://github.com/matjam/musex/commit/42ec8253b7206acef4bd135d402b2a56e666e337))
+* plugin API HTTP capability (ctx.net) + full API docs ([#45](https://github.com/matjam/musex/issues/45)) ([b1697ec](https://github.com/matjam/musex/commit/b1697ec2dc35fa6c4380be2f59fa77105539f20e))
+
 ## [0.10.0](https://github.com/matjam/musex/compare/v0.9.0...v0.10.0) (2026-06-16)
 
 
