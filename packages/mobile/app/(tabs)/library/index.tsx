@@ -1,4 +1,5 @@
 import type { Album, Artist, Track } from "@musex/core";
+import { buildLetterIndex } from "@musex/core";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -10,7 +11,6 @@ import {
   View,
 } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
-import { buildLetterIndex } from "../../../src/logic/az-index";
 import { useStore } from "../../../src/state/store";
 import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";

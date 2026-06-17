@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLetterIndex, letterFor } from "./az-index";
+import { buildLetterIndex, letterFor } from "./az-index.js";
 
 describe("letterFor", () => {
   it("uppercases the first letter", () => {

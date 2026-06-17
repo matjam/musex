@@ -1,6 +1,7 @@
 // Models
 
 // Logic
+export * from "./logic/az-index";
 export * from "./logic/collage";
 export * from "./logic/discography-merge";
 export * from "./logic/download-plan";
