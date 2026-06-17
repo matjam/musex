@@ -17,6 +17,9 @@ describe("acquisitionBadge", () => {
       variant: "downloading",
     });
   });
+  it("maps downloaded to Downloaded", () => {
+    expect(acquisitionBadge("downloaded")).toEqual({ label: "Downloaded", variant: "downloaded" });
+  });
   it("maps available to Get", () => {
     expect(acquisitionBadge("available")).toEqual({ label: "Get", variant: "available" });
   });

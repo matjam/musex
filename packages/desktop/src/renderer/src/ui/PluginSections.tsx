@@ -11,13 +11,14 @@ import { useAcquisitionAvailable } from "./hooks/useAcquisitionAvailable";
  *  side panel (with inline monitor) when an acquisition provider is
  *  registered, else link out via externalUrl (when present). */
 export function PluginSections({ sections }: { sections: SectionDto[] }) {
-  const { dispatch } = useApp();
+  const { dispatch, connectivity } = useApp();
+  const offline = connectivity === "offline";
   const { openArtistInfo } = usePanel();
   const acquisitionAvailable = useAcquisitionAvailable();
   const [monitored, setMonitored] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!acquisitionAvailable) return;
+    if (!acquisitionAvailable || offline) return;
     let cancelled = false;
     window.musex
       .acquisitionMonitoredArtists()
@@ -30,7 +31,7 @@ export function PluginSections({ sections }: { sections: SectionDto[] }) {
     return () => {
       cancelled = true;
     };
-  }, [acquisitionAvailable]);
+  }, [acquisitionAvailable, offline]);
 
   function open(item: SectionItemDto) {
     if (item.artistId && item.serverId) {
@@ -73,7 +74,9 @@ export function PluginSections({ sections }: { sections: SectionDto[] }) {
               {s.items.map((item) => {
                 const external = Boolean(item.external);
                 const isMonitored = external && monitored.has(item.name.toLowerCase());
-                const canMonitor = external && acquisitionAvailable && !isMonitored;
+                // Monitoring is an online-only acquire; hidden offline (owned
+                // items in the row stay navigable).
+                const canMonitor = external && acquisitionAvailable && !isMonitored && !offline;
                 return (
                   <GridCard
                     key={item.name}

@@ -103,7 +103,7 @@ function ExpansionsFeed({
  *  (e.g. an acquisition plugin queue + monitored-but-missing), the
  *  taste-expansion feed, and the artists watched for new releases.
  *  Auto-refreshes while open. */
-export function DownloadsView() {
+export function AcquiringView() {
   const monitoring = useMonitoring();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [expansion, setExpansion] = useState<ExpansionStateDto | null>(null);

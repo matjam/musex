@@ -8,6 +8,7 @@ import { type EntityPanelPayload, usePanel } from "../../state/panel";
 import { toTrackInfo, usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { formatDuration, relativeTime } from "../../util/format";
+import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { StarRating } from "../StarRating";
 import { ActionBar } from "./ActionBar";
@@ -374,7 +375,8 @@ function ArtistPanel({
   serverId?: string;
   thumb?: string;
 }) {
-  const { dispatch } = useApp();
+  const { dispatch, connectivity } = useApp();
+  const offline = connectivity === "offline";
   const { closePanel } = usePanel();
   const monitor = useMonitorAction(artistName);
   const [fetch, setFetch] = useState<ArtistFetch>({ status: "loading" });
@@ -424,7 +426,13 @@ function ArtistPanel({
         }
         monitor={
           monitor.supported
-            ? { on: monitor.on, busy: monitor.busy, onToggle: monitor.onToggle }
+            ? {
+                on: monitor.on,
+                busy: monitor.busy,
+                disabled: offline,
+                title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
+                onToggle: monitor.onToggle,
+              }
             : undefined
         }
       />

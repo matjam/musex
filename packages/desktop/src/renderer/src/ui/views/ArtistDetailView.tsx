@@ -1,12 +1,13 @@
 import type { Album, Artist, Track } from "@musex/core";
 import { listValidator } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react";
+import { Download, ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
 import { useMonitoring } from "../../state/monitoring";
 import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
+import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
 import { useWatchAction } from "../discovery/MonitorButton";
@@ -24,7 +25,8 @@ interface Props {
 }
 
 export function ArtistDetailView({ artist }: Props) {
-  const { library, dispatch } = useApp();
+  const { library, dispatch, connectivity } = useApp();
+  const offline = connectivity === "offline";
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
     usePlayer();
   const { ratingFor, rate, seed } = useRatings();
@@ -86,6 +88,14 @@ export function ArtistDetailView({ artist }: Props) {
   function handleMoreClick(e: React.MouseEvent) {
     setMorePos({ x: e.clientX, y: e.clientY });
     setMoreOpen((o) => !o);
+  }
+
+  function handleDownloadAll() {
+    setMoreOpen(false);
+    if (!library) return;
+    window.musex
+      .downloadArtist(artist.id, library.id)
+      .catch((err: unknown) => console.error("[downloads] downloadArtist failed:", err));
   }
 
   async function handlePlayAll() {
@@ -180,7 +190,17 @@ export function ArtistDetailView({ artist }: Props) {
               thumb: artist.thumb,
             })
           }
-          monitor={monitor.supported ? monitor : undefined}
+          monitor={
+            monitor.supported
+              ? {
+                  on: monitor.on,
+                  busy: monitor.busy,
+                  disabled: offline,
+                  title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
+                  onToggle: monitor.onToggle,
+                }
+              : undefined
+          }
           overflow={
             fetch.status === "ok" && fetch.albums.length > 0 ? (
               <button
@@ -242,6 +262,7 @@ export function ArtistDetailView({ artist }: Props) {
         <ArtistMoreMenu
           x={morePos.x}
           y={morePos.y}
+          offline={offline}
           onClose={() => setMoreOpen(false)}
           onPlayNext={() => void handlePlayNext()}
           onAddToQueue={() => void handleAddToQueue()}
@@ -249,6 +270,7 @@ export function ArtistDetailView({ artist }: Props) {
             startRadioFromArtist(artist.name);
             setMoreOpen(false);
           }}
+          onDownloadAll={handleDownloadAll}
         />
       )}
     </div>
@@ -260,15 +282,26 @@ export function ArtistDetailView({ artist }: Props) {
 interface MoreMenuProps {
   x: number;
   y: number;
+  offline: boolean;
   onClose: () => void;
   onPlayNext: () => void;
   onAddToQueue: () => void;
   onStartRadio: () => void;
+  onDownloadAll: () => void;
 }
 
 /** Fixed-position dropdown for "Play next" / "Add to queue" / "Start Artist
- *  Radio" on the artist. */
-function ArtistMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue, onStartRadio }: MoreMenuProps) {
+ *  Radio" / "Download all albums" on the artist. */
+function ArtistMoreMenu({
+  x,
+  y,
+  offline,
+  onClose,
+  onPlayNext,
+  onAddToQueue,
+  onStartRadio,
+  onDownloadAll,
+}: MoreMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   const MARGIN = 8;
@@ -322,6 +355,17 @@ function ArtistMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue, onStartRadio 
       <button type="button" className="ctx-item ctx-item--icon" onClick={onStartRadio}>
         <Radio size={14} />
         Start Artist Radio
+      </button>
+      <div className="ctx-sep" />
+      <button
+        type="button"
+        className="ctx-item ctx-item--icon"
+        disabled={offline}
+        title={offline ? OFFLINE_ACTION_TOOLTIP : undefined}
+        onClick={onDownloadAll}
+      >
+        <Download size={14} />
+        Download all albums
       </button>
     </div>
   );

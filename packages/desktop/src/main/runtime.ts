@@ -1,18 +1,22 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Library, Pin, Track } from "@musex/core";
-import { isHttpUrl, TasteProfile } from "@musex/core";
+import type { DownloadJob, Library, Pin, Track } from "@musex/core";
+import { dedupeJobs, isHttpUrl, reconcileRecords, TasteProfile } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { app, shell } from "electron";
 import { buildAf, replaygainMode } from "../logic/audio-filters.js";
+import { cacheKey } from "../logic/cache.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
+import { ConnectivityMonitor } from "./adapters/connectivity-monitor.js";
+import { DownloadIndex } from "./adapters/download-index.js";
+import { DownloadStore } from "./adapters/download-store.js";
 import { LibraryWatcher } from "./adapters/library-watcher.js";
 import { ListCacheStore } from "./adapters/list-cache-store.js";
 import { MediaCache } from "./adapters/media-cache.js";
 import { MpvController } from "./adapters/mpv-controller.js";
 import { resolveMpvPaths } from "./adapters/mpv-paths.js";
-import { persistence } from "./adapters/persistence.js";
+import { getClientId, persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import {
   isSecureStorageAvailable,
@@ -21,6 +25,7 @@ import {
 } from "./adapters/secure-store-host.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
+import { DownloadManager, type DownloadProgressEvent } from "./download/download-manager.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";
 import { LastfmService } from "./lastfm/service.js";
 import { CORE_PLUGINS } from "./plugins/core-plugins.js";
@@ -32,6 +37,12 @@ import { ProviderHub } from "./providers/provider-hub.js";
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
 /** Taste profile writes are debounced: one persist ~5s after the last mutation. */
 const TASTE_SAVE_DEBOUNCE_MS = 5_000;
+/** How often the connectivity recovery probe pings the current server. Kept
+ *  modest so a downed server is noticed quickly but the probe itself is cheap. */
+const CONNECTIVITY_PROBE_INTERVAL_MS = 20_000;
+/** Per-probe ceiling so an unreachable host can't hang the probe past the
+ *  interval (an aborted probe counts as a failure → drives offline promptly). */
+const CONNECTIVITY_PROBE_TIMEOUT_MS = 8_000;
 
 // electron-vite bundles all main files into packages/desktop/out/main/index.js,
 // so __dirname here is packages/desktop/out/main/ → repo root is 4 levels up.
@@ -46,9 +57,21 @@ export class Runtime {
   readonly listCache = new ListCacheStore(path.join(app.getPath("userData"), "list-cache"));
   readonly gateway = new CachingPlexGateway(this.realGateway, this.listCache);
   readonly tokenStore = new SafeStorageTokenStore();
+  /** Debounced reachability state machine. Gateway calls feed it success/
+   *  failure; a periodic probe (started in init()) recovers it automatically.
+   *  A PlexAuthError never counts as offline (the monitor excludes it). */
+  readonly connectivityMonitor = new ConnectivityMonitor();
   readonly proxy = new StreamProxy();
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
   readonly artCache = new MediaCache(path.join(app.getPath("userData"), "art-cache"));
+  /** Pinned on-disk store for offline downloads (never evicts). Served by the
+   *  proxy before the LRU media cache. */
+  readonly downloadStore = new DownloadStore(path.join(app.getPath("userData"), "downloads"));
+  /** In-memory index of download records, persisted via electron-store.
+   *  Constructed in init() once the on-disk store has been reconciled. */
+  downloadIndex!: DownloadIndex;
+  /** Sequential download worker. Constructed in init(). */
+  downloadManager!: DownloadManager;
   /** Constructed in init() — resolveMpvPaths needs `app` ready and throws if
    *  mpv can't be found. Null when mpv is unavailable (Linux with no system mpv,
    *  or unsupported platform); playback IPC handlers surface mpvUnavailableReason. */
@@ -69,6 +92,8 @@ export class Runtime {
   libraryWatcher!: LibraryWatcher;
   /** Set by main/index per window (same pattern as pluginNotifySink). */
   private libraryChangedSink: ((lib: Library) => void) | null = null;
+  /** Set by main/index per window; download progress transitions flow through it. */
+  private downloadProgressSink: ((e: DownloadProgressEvent) => void) | null = null;
   /** Constructed in init() — drives the plugin events pipeline (trackStarted/
    *  paused/resumed/trackEnded/scrobble) + the recently-played history. */
   playbackMonitor!: PlaybackMonitor;
@@ -83,9 +108,15 @@ export class Runtime {
   private readonly registeredServers = new Set<string>();
   /** Set by main/index per window (like mpv's sink); plugins notify through it. */
   private pluginNotifySink: ((p: PluginNotification) => void) | null = null;
+  /** Set by main/index per window; connectivity flips flow through it. */
+  private connectivitySink: ((online: boolean) => void) | null = null;
 
   setPluginNotifySink(sink: ((p: PluginNotification) => void) | null): void {
     this.pluginNotifySink = sink;
+  }
+
+  setConnectivitySink(sink: ((online: boolean) => void) | null): void {
+    this.connectivitySink = sink;
   }
 
   /** Push a system notification through the same toast channel as plugin notifications. */
@@ -95,6 +126,10 @@ export class Runtime {
 
   setLibraryChangedSink(sink: ((lib: Library) => void) | null): void {
     this.libraryChangedSink = sink;
+  }
+
+  setDownloadProgressSink(sink: ((e: DownloadProgressEvent) => void) | null): void {
+    this.downloadProgressSink = sink;
   }
 
   async init(): Promise<void> {
@@ -122,6 +157,41 @@ export class Runtime {
     await this.artCache.init();
     this.proxy.setArtCache(this.artCache, ART_CACHE_MAX_BYTES);
     await this.proxy.start();
+
+    // Offline downloads: the on-disk store is served by the proxy before the LRU
+    // cache and upstream. Reconcile persisted records against what's actually on
+    // disk (a 'downloaded' record whose file vanished → 'missing'), persist the
+    // reconciled list, then build the index + the sequential download worker.
+    await this.downloadStore.init();
+    this.proxy.configureDownloads(this.downloadStore);
+    // Drop 0-byte files before reconciling: they are broken "downloaded" entries
+    // (e.g. from a truncated/failed transcode) that would otherwise survive as
+    // false-green badges and crash mpv. Delete them so reconcileRecords sees them
+    // as absent (→ "missing"), clearing the bad state.
+    const { nonEmpty, empty } = await this.downloadStore.presentNonEmptyKeys();
+    for (const key of empty) {
+      try {
+        await this.downloadStore.remove(key);
+      } catch (err) {
+        console.error("[musex downloads] failed to remove 0-byte file:", key, err);
+      }
+    }
+    const reconciled = reconcileRecords(persistence.getDownloadRecords(), new Set(nonEmpty));
+    persistence.setDownloadRecords(reconciled);
+    this.downloadIndex = new DownloadIndex(reconciled, (all) =>
+      persistence.setDownloadRecords(all),
+    );
+    this.downloadManager = new DownloadManager({
+      store: this.downloadStore,
+      index: this.downloadIndex,
+      fetch: globalThis.fetch,
+      // The manager needs {baseUrl, token}; the gateway's endpoint() returns
+      // exactly that. Close over the live token (downloads require sign-in).
+      endpoint: (serverId) => this.gateway.endpoint(serverId, this.requireToken()),
+      clientId: getClientId(),
+      getQuality: () => persistence.getStorageQuality(),
+      onProgress: (e) => this.downloadProgressSink?.(e),
+    });
 
     const tasteState = persistence.getTasteState();
     if (tasteState) this.tasteProfile.load(tasteState);
@@ -266,6 +336,44 @@ export class Runtime {
         this.libraryChangedSink?.(fresh);
       },
     });
+
+    // Connectivity: gateway calls feed the monitor success/failure (see
+    // ensureProxyEndpoint); a periodic probe recovers it automatically. Flips
+    // are pushed to the renderer through the per-window sink.
+    this.connectivityMonitor.onChange((online) => this.connectivitySink?.(online));
+    this.connectivityMonitor.start(() => this.probeReachability(), CONNECTIVITY_PROBE_INTERVAL_MS);
+  }
+
+  /** Recovery probe for the connectivity monitor. Resolves when the current
+   *  server answers (or returns an auth error — that's the sign-in flow's
+   *  problem, not an outage), rejects when it's genuinely unreachable.
+   *
+   *  When signed out / no server is known yet, it resolves as a NO-OP: "not
+   *  signed in" must never flip the app to offline. A PlexAuthError thrown by
+   *  endpoint() is allowed to propagate — the monitor's noteFailure excludes
+   *  it from the offline counter. */
+  private async probeReachability(): Promise<void> {
+    const token = this.token;
+    const serverId = this.libraries[0]?.serverId;
+    if (!token || !serverId) return; // signed out → no-op, never flap offline
+    // endpoint() reuses the cached connection (cheap); the real reachability
+    // test is the fetch against the server root, mirroring the gateway's own
+    // cold-probe query and the download manager's token-injected URL.
+    const ep = await this.gateway.endpoint(serverId, token);
+    const url = `${ep.baseUrl}/?X-Plex-Token=${encodeURIComponent(ep.token)}`;
+    // Bound the probe: an unreachable host (dropped packets, not a refused
+    // connection) would otherwise hang for the OS TCP timeout (~75s) — far past
+    // the 20s probe interval — delaying offline detection and stacking probes.
+    // An AbortError on timeout rejects → noteFailure (it's not a PlexAuthError,
+    // so it counts toward going offline).
+    const res = await globalThis.fetch(url, {
+      signal: AbortSignal.timeout(CONNECTIVITY_PROBE_TIMEOUT_MS),
+    });
+    // 401/403 = reachable-but-unauthorized: the server answered, so it is NOT
+    // an outage. Any other non-ok status (5xx, etc.) means the server is in
+    // trouble → treat as unreachable.
+    if (res.ok || res.status === 401 || res.status === 403) return;
+    throw new Error(`Plex server probe returned HTTP ${res.status}`);
   }
 
   async restore(): Promise<void> {
@@ -311,7 +419,16 @@ export class Runtime {
    *  Uses the cached gateway connection — no extra network round-trip after first browse. */
   async ensureProxyEndpoint(serverId: string): Promise<void> {
     if (this.registeredServers.has(serverId)) return;
-    const ep = await this.gateway.endpoint(serverId, this.requireToken());
+    let ep: { baseUrl: string; token: string };
+    try {
+      ep = await this.gateway.endpoint(serverId, this.requireToken());
+    } catch (err) {
+      // Feed the connectivity monitor (a PlexAuthError is excluded inside
+      // noteFailure), then re-throw UNCHANGED so existing handling is intact.
+      this.connectivityMonitor.noteFailure(err);
+      throw err;
+    }
+    this.connectivityMonitor.noteSuccess();
     this.proxy.registerServer(serverId, ep);
     this.registeredServers.add(serverId);
   }
@@ -320,6 +437,37 @@ export class Runtime {
     const lib = this.libraries.find((l) => l.id === libraryId);
     if (!lib) throw new Error(`unknown library ${libraryId}`);
     return lib;
+  }
+
+  /** Queue a set of tracks for offline download. The download key is keyed
+   *  IDENTICALLY to what the stream proxy computes when the track streams
+   *  (`cacheKey(serverId, media.partKey)`) — that's what makes the proxy serve
+   *  the downloaded file first. Already-present/queued keys are dropped. */
+  async enqueueDownloads(tracks: Track[]): Promise<void> {
+    const jobs: DownloadJob[] = tracks.map((track) => ({
+      key: cacheKey(track.serverId, track.media.partKey),
+      serverId: track.serverId,
+      plexPath: track.media.partKey,
+      trackId: track.id,
+      meta: {
+        title: track.title,
+        artistName: track.artistName,
+        albumTitle: track.albumTitle,
+        durationMs: track.durationMs,
+        thumb: track.thumb,
+        trackNumber: track.trackNumber,
+        albumId: track.albumId,
+        artistId: track.artistId,
+        // Full media info so the record can be rebuilt into a playable Track
+        // offline (partKey == plexPath, so it isn't duplicated here).
+        container: track.media.container,
+        audioCodec: track.media.audioCodec,
+        partId: track.media.partId,
+        bitrate: track.media.bitrate,
+      },
+    }));
+    const fresh = dedupeJobs(jobs, new Set(this.downloadIndex.list().map((r) => r.key)));
+    await this.downloadManager.enqueue(fresh);
   }
 
   // ── Last.fm secret helpers (base64 safeStorage blobs in plugin-secrets dir) ─

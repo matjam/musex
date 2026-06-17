@@ -1,9 +1,14 @@
 import type { Artist } from "@musex/core";
 import { listValidator } from "@musex/core";
+import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
+import { useMonitoring } from "../../state/monitoring";
+import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
+import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
+import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
 
 type FetchState =
   | { status: "loading" }
@@ -11,9 +16,27 @@ type FetchState =
   | { status: "ok"; artists: Artist[] };
 
 export function ArtistsView() {
-  const { library, dispatch } = useApp();
+  const { library, connectivity, dispatch } = useApp();
   const { playArtist } = useCollectionPlay();
+  const { isWatched } = useMonitoring();
+  const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  // Artist cards reflect LOCAL download state only: a downloaded artist (≥1
+  // track on disk for the artistId) → "downloaded"; else an in-flight (queued/
+  // downloading) artist → "downloading"; else no badge. Cached content is
+  // track-level (keyed by plexPath) and can't be cheaply attributed to a
+  // container card, so it's deliberately not reflected here — track lists get
+  // exact availability. The Lidarr acquisition queue is NOT overlaid on cards.
+  const downloaded = useDownloadedSet("artistId");
+  const downloading = useDownloadingSet("artistId");
+  const offline = connectivity === "offline";
+
+  // Local download state → card badge. Downloaded wins over in-flight.
+  function cardState(artistId: string): AcquisitionBadgeState | undefined {
+    if (downloaded.has(artistId)) return "downloaded";
+    if (downloading.has(artistId)) return "downloading";
+    return undefined;
+  }
 
   useEffect(() => {
     if (!library) return;
@@ -52,24 +75,89 @@ export function ArtistsView() {
     return <div className="content-placeholder">No artists found in this library.</div>;
   }
 
+  // "all" shows everything (offline: un-downloaded cards dimmed, not hidden);
+  // "downloaded" shows only artists with a downloaded track; "watching" shows
+  // only artists watched for new releases, plus a link to the full acquisition
+  // activity feed.
+  const visible =
+    filter === "downloaded"
+      ? artists.filter((a) => downloaded.has(a.id))
+      : filter === "watching"
+        ? artists.filter((a) => isWatched(a.name))
+        : artists;
+
   return (
     <div className="browse-section">
-      <h3 className="browse-title">Artists</h3>
-      <div className="browse-sub">
-        {artists.length} artist{artists.length !== 1 ? "s" : ""}
-      </div>
-      <div className="browse-grid">
-        {artists.map((artist) => (
-          <GridCard
-            key={artist.id}
-            thumb={artist.thumb}
-            title={artist.name}
-            round
-            onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
-            onPlay={() => void playArtist(artist)}
+      <div className="browse-header">
+        <h3 className="browse-title">Artists</h3>
+        <div className="browse-controls">
+          <LibraryFilter
+            value={filter}
+            onChange={setFilter}
+            modes={["all", "downloaded", "watching"]}
           />
-        ))}
+        </div>
       </div>
+      {filter === "watching" ? (
+        <>
+          <button
+            type="button"
+            className="acquiring-activity-link"
+            onClick={() => dispatch({ type: "navigate", view: { name: "acquiring" } })}
+          >
+            <ListChecks size={14} />
+            View acquisition activity
+          </button>
+          {visible.length === 0 ? (
+            <div className="content-placeholder">
+              No artists are being watched for new releases.
+            </div>
+          ) : (
+            <>
+              <div className="browse-sub">
+                {visible.length} artist{visible.length !== 1 ? "s" : ""} watched
+              </div>
+              <div className="browse-grid">
+                {visible.map((artist) => (
+                  <GridCard
+                    key={artist.id}
+                    thumb={artist.thumb}
+                    title={artist.name}
+                    round
+                    state={cardState(artist.id)}
+                    monitored={isWatched(artist.name)}
+                    onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                    onPlay={() => void playArtist(artist)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      ) : filter === "downloaded" && visible.length === 0 ? (
+        <div className="content-placeholder">No downloaded artists yet.</div>
+      ) : (
+        <>
+          <div className="browse-sub">
+            {visible.length} artist{visible.length !== 1 ? "s" : ""}
+          </div>
+          <div className="browse-grid">
+            {visible.map((artist) => (
+              <GridCard
+                key={artist.id}
+                thumb={artist.thumb}
+                title={artist.name}
+                round
+                state={cardState(artist.id)}
+                monitored={isWatched(artist.name)}
+                dim={offline && !downloaded.has(artist.id)}
+                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                onPlay={() => void playArtist(artist)}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

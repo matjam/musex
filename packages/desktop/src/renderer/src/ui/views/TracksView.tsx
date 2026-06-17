@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
+import { downloadRecordFor } from "../../util/downloaded-records";
 import { ActionBar } from "../discovery/ActionBar";
+import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import { SortSelector } from "../SortSelector";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -19,6 +21,7 @@ type FetchState =
 
 export function TracksView() {
   const { library } = useApp();
+  const downloadRecords = useDownloadRecords();
   const { state, playTracks, playTracksShuffled, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
   const [sort, setSort] = useState<LibrarySort>("title");
@@ -121,6 +124,8 @@ export function TracksView() {
             setNewSeed([id]);
             setMenu(null);
           }}
+          downloadRecord={downloadRecordFor(downloadRecords, menu.track)}
+          libraryId={library?.id ?? null}
         />
       )}
 

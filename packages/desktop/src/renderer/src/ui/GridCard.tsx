@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Bell, Play } from "lucide-react";
+import { Eye, Play } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { AlbumArt } from "./AlbumArt";
 import { CardCollage } from "./CardCollage";
@@ -22,7 +22,7 @@ interface Props {
   state?: AcquisitionBadgeState;
   /** Download percent for `state="downloading"`. */
   statePercent?: number;
-  /** Show the monitored (watching new releases) corner marker. */
+  /** Show the watched-for-new-releases corner marker (eye). */
   monitored?: boolean;
   /** Dim the whole card (e.g. unavailable acquisition albums). */
   dim?: boolean;
@@ -97,8 +97,8 @@ export function GridCard({
           )
         )}
         {monitored && (
-          <span className="card-monitored">
-            <Bell size={12} />
+          <span className="card-monitored" title="Watched for new releases">
+            <Eye size={12} />
           </span>
         )}
         {onPlay && (
@@ -125,6 +125,22 @@ export function GridCard({
             }}
           >
             <ActionIcon size={18} />
+          </button>
+        )}
+        {onPlay && onAction && ActionIcon && (
+          // Secondary corner action alongside the Play overlay (e.g. Remove on a
+          // playable downloaded album) — small, top-left, so it doesn't collide
+          // with the bottom-right Play button or the top-right badge.
+          <button
+            type="button"
+            className="grid-card-action"
+            title={actionTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAction();
+            }}
+          >
+            <ActionIcon size={14} />
           </button>
         )}
       </div>

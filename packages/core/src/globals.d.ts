@@ -6,10 +6,17 @@
  *  support varies by engine). Add members here only when core genuinely
  *  needs them on every target platform. */
 
+declare class URLSearchParams {
+  constructor(init?: string | Record<string, string> | [string, string][]);
+  get(name: string): string | null;
+  toString(): string;
+}
+
 declare class URL {
   constructor(url: string, base?: string);
   readonly protocol: string;
   readonly pathname: string;
+  readonly searchParams: URLSearchParams;
   toString(): string;
 }
 

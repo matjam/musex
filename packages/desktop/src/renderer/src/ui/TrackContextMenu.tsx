@@ -2,6 +2,7 @@ import type { Playlist, Track } from "@musex/core";
 import {
   ChevronRight,
   Disc3,
+  Download,
   ExternalLink,
   Heart,
   ListEnd,
@@ -12,12 +13,14 @@ import {
   Radio,
   Sparkles,
   Star,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { TrackActionDto } from "../../../shared/ipc-contract";
+import type { DownloadDto, TrackActionDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { usePlaylists } from "../state/playlists";
+import { OFFLINE_ACTION_TOOLTIP } from "../util/offline";
 import { useEntityNav } from "./hooks/useEntityNav";
 
 const VIEWPORT_MARGIN = 8;
@@ -48,11 +51,26 @@ interface Props {
   onNewPlaylist: (trackId: string) => void; // opens the NewPlaylistDialog seeded with this track
   /** Called after a successful remove-from-playlist so the parent can re-fetch. */
   onChanged?: () => void;
+  /** The downloaded record for this track (looked up by serverId+partKey), or
+   *  undefined when not downloaded. Drives the Download vs Remove item. Omit to
+   *  hide the download/remove items entirely. */
+  downloadRecord?: DownloadDto;
+  /** Library id required to start a download. Omit/null to hide the Download
+   *  item (the "Remove download" item never needs it). */
+  libraryId?: string | null;
 }
 
-export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: Props) {
+export function TrackContextMenu({
+  target,
+  onClose,
+  onNewPlaylist,
+  onChanged,
+  downloadRecord,
+  libraryId,
+}: Props) {
   const { playlists, addTo, remove } = usePlaylists();
-  const { dispatch } = useApp();
+  const { dispatch, connectivity } = useApp();
+  const offline = connectivity === "offline";
   const { enqueueNext, enqueueEnd, startRadioFromTrack } = usePlayer();
   const { goArtist, goAlbum } = useEntityNav();
   const [submenu, setSubmenu] = useState(false);
@@ -127,6 +145,25 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
       target.playlistContext.playlistItemId,
     ]);
     onChanged?.();
+    onClose();
+  }
+
+  async function downloadTrack() {
+    if (!libraryId) return;
+    try {
+      await window.musex.downloadTracks([target.track], libraryId);
+    } catch (err) {
+      console.error("[downloads] downloadTracks failed:", err);
+    }
+    onClose();
+  }
+  async function removeTrackDownload() {
+    if (!downloadRecord) return;
+    try {
+      await window.musex.removeDownload(downloadRecord.key);
+    } catch (err) {
+      console.error("[downloads] removeDownload failed:", err);
+    }
     onClose();
   }
 
@@ -214,6 +251,32 @@ export function TrackContextMenu({ target, onClose, onNewPlaylist, onChanged }: 
         <Sparkles size={14} />
         Find similar
       </button>
+      {(downloadRecord || libraryId != null) && (
+        <>
+          <div className="ctx-sep" />
+          {downloadRecord ? (
+            <button
+              type="button"
+              className="ctx-item ctx-item--icon"
+              onClick={() => void removeTrackDownload()}
+            >
+              <Trash2 size={14} />
+              Remove download
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ctx-item ctx-item--icon"
+              disabled={offline || libraryId == null}
+              title={offline ? OFFLINE_ACTION_TOOLTIP : undefined}
+              onClick={() => void downloadTrack()}
+            >
+              <Download size={14} />
+              Download
+            </button>
+          )}
+        </>
+      )}
       {pluginActions.length > 0 && (
         <>
           <div className="ctx-sep" />

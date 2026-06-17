@@ -279,6 +279,26 @@ html:not([data-platform="darwin"]) .topbar {
   cursor: default;
 }
 
+/* Red pill shown when the Plex server is unreachable. Sits to the right of
+   the centered search box. Uses position:absolute so it doesn't disturb the
+   flex layout that centers the search box on the window. */
+.topbar-offline-pill {
+  position: absolute;
+  left: calc(50% + min(19%, 180px) + 18px);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 95, 87, 0.15);
+  border: 1px solid var(--red);
+  color: var(--red);
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
 /* ---- App layout ---- */
 
 .app-root {
@@ -659,6 +679,13 @@ html:not([data-platform="darwin"]) .topbar {
   font-size: 22px;
 }
 
+/* Inline cluster of browse controls (availability filter + sort). */
+.browse-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Artist/browse header row: title + optional action button inline */
 .artist-header {
   display: flex;
@@ -671,6 +698,43 @@ html:not([data-platform="darwin"]) .topbar {
   opacity: 0.5;
   font-size: 12px;
   margin-bottom: 18px;
+}
+
+/* "On this device" header: title + size on the left, Play/Shuffle on the right. */
+.on-device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.on-device-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.on-device-heading .on-device-size {
+  margin-bottom: 0;
+}
+
+/* "View acquisition activity" link shown in the Acquiring filter mode. */
+.acquiring-activity-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.acquiring-activity-link:hover {
+  text-decoration: underline;
 }
 
 .browse-grid {
@@ -847,7 +911,7 @@ img.album-header-art {
 
 .track-row {
   display: grid;
-  grid-template-columns: 34px 1fr auto auto auto;
+  grid-template-columns: 34px 1fr auto auto auto auto;
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
@@ -898,6 +962,33 @@ img.album-header-art {
   opacity: 0.45;
   font-variant-numeric: tabular-nums;
   font-size: 12.5px;
+}
+
+/* Per-track local-availability indicator (downloaded / downloading). */
+.track-dl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+}
+
+.track-dl-icon--done {
+  color: var(--green);
+}
+
+.track-dl-icon--active {
+  color: var(--text);
+  opacity: 0.55;
+}
+
+/* Offline + not downloaded/cached: de-emphasised, can't play right now. */
+.track-row--unavailable {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.track-row--unavailable:hover {
+  background: none;
 }
 
 /* ---- Now Playing bar ---- */
@@ -1960,6 +2051,36 @@ img.queue-row-art {
 
 .grid-card-play:hover {
   filter: brightness(1.08);
+}
+
+/* Secondary corner action (e.g. Remove) shown alongside the Play overlay on a
+   playable card. Top-left so it clears the bottom-right Play button. */
+.grid-card-action {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.grid-card:hover .grid-card-action,
+.grid-card-action:focus-visible {
+  opacity: 1;
+}
+
+.grid-card-action:hover {
+  background: rgba(0, 0, 0, 0.85);
+  color: var(--green);
 }
 
 /* Small chip over the artwork corner (Discover "external" items) */

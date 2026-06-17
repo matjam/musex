@@ -3,6 +3,8 @@
 // Logic
 export * from "./logic/collage";
 export * from "./logic/discography-merge";
+export * from "./logic/download-plan";
+export * from "./logic/download-state";
 export * from "./logic/external-url";
 export * from "./logic/for-you";
 export * from "./logic/genres";
@@ -12,11 +14,13 @@ export * from "./logic/library-watch";
 export * from "./logic/list-validator";
 export * from "./logic/mood-mixes";
 export * from "./logic/nav-history";
+export * from "./logic/offline-availability";
 export * from "./logic/play-monitor";
 export * from "./logic/plex-mapping";
 export * from "./logic/smart-playlists";
 export * from "./logic/taste-expansion";
 export * from "./logic/taste-profile";
+export * from "./logic/transcode-url";
 export type {
   Album,
   Artist,

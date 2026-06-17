@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../shared/ipc-contract";
+import { useApp } from "../state/app";
 import { GridCard } from "./GridCard";
 import { useAcquisitionAvailable } from "./hooks/useAcquisitionAvailable";
 
@@ -11,11 +12,18 @@ type FetchState = { status: "idle" } | { status: "ok"; albums: AcquirableAlbumDt
  *  with per-album monitor actions. Hidden entirely when no acquisition
  *  provider is enabled or nothing is missing. */
 export function MissingAlbumsSection({ artistName }: { artistName: string }) {
+  const { connectivity } = useApp();
+  const offline = connectivity === "offline";
   const acquisitionAvailable = useAcquisitionAvailable();
   const [fetch, setFetch] = useState<FetchState>({ status: "idle" });
 
   useEffect(() => {
-    if (!acquisitionAvailable) return;
+    // Online-only plugin lookup; skip offline (the section self-hides since it
+    // renders null with no albums).
+    if (!acquisitionAvailable || offline) {
+      setFetch({ status: "idle" });
+      return;
+    }
     let cancelled = false;
     setFetch({ status: "idle" });
     window.musex
@@ -30,7 +38,7 @@ export function MissingAlbumsSection({ artistName }: { artistName: string }) {
     return () => {
       cancelled = true;
     };
-  }, [artistName, acquisitionAvailable]);
+  }, [artistName, acquisitionAvailable, offline]);
 
   if (fetch.status !== "ok" || fetch.albums.length === 0) return null;
 

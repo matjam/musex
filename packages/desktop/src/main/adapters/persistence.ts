@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { ExpansionEntry, Library, RepeatMode, TasteState, Track } from "@musex/core";
+import type {
+  DownloadRecord,
+  ExpansionEntry,
+  Library,
+  RepeatMode,
+  StorageQuality,
+  TasteState,
+  Track,
+} from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import Store from "electron-store";
 import {
@@ -52,10 +60,16 @@ export interface PersistedState {
   pluginSources: Record<string, PluginSource>;
   // Last.fm non-secret config (secrets are stored encrypted in separate files).
   lastfm: LastfmConfig;
+  // Offline-download storage quality: keep the original file, or transcode to
+  // MP3 at a chosen bitrate. Records live in their own store (downloadsStore).
+  storageQuality: StorageQuality;
 }
 
 /** Default local-cache cap: 5 GiB. */
 export const DEFAULT_CACHE_MAX_BYTES = 5 * 1024 ** 3;
+
+/** Default download storage quality: keep the original file. */
+export const DEFAULT_STORAGE_QUALITY: StorageQuality = { mode: "original", bitrateKbps: 256 };
 
 const DEFAULT_LASTFM_CONFIG: LastfmConfig = {
   apiKey: "",
@@ -78,7 +92,15 @@ const store = new Store<PersistedState>({
     recentlyPlayed: [],
     pluginSources: {},
     lastfm: DEFAULT_LASTFM_CONFIG,
+    storageQuality: DEFAULT_STORAGE_QUALITY,
   },
+});
+
+// Download records live in their own file: the index is large and rewritten on
+// every progress transition, so it must not churn the main settings store.
+const downloadsStore = new Store<{ records: DownloadRecord[] }>({
+  name: "downloads-index",
+  defaults: { records: [] },
 });
 
 export interface PlaybackCursor {
@@ -243,5 +265,17 @@ export const persistence = {
   },
   setLastfmData(key: string, value: unknown): void {
     lastfmStore.set(key, value);
+  },
+  getDownloadRecords(): DownloadRecord[] {
+    return downloadsStore.get("records");
+  },
+  setDownloadRecords(records: DownloadRecord[]): void {
+    downloadsStore.set("records", records);
+  },
+  getStorageQuality(): StorageQuality {
+    return store.get("storageQuality") ?? DEFAULT_STORAGE_QUALITY;
+  },
+  setStorageQuality(q: StorageQuality): void {
+    store.set("storageQuality", q);
   },
 };

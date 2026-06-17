@@ -1,6 +1,7 @@
 import type { Library } from "@musex/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  DownloadProgressDto,
   LastfmConfigDto,
   LastfmConfigPatchDto,
   LogEntryDto,
@@ -8,6 +9,7 @@ import type {
   NavigateToPayload,
   PlaybackEngineEvent,
   PluginNotification,
+  StorageQualityDto,
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 
@@ -135,6 +137,28 @@ const api: MusexApi = {
   lastfmGetConfig: () => ipcRenderer.invoke(IPC.lastfmGetConfig) as Promise<LastfmConfigDto>,
   lastfmSetConfig: (patch: LastfmConfigPatchDto) => ipcRenderer.invoke(IPC.lastfmSetConfig, patch),
   lastfmConnect: () => ipcRenderer.invoke(IPC.lastfmConnect),
+  downloadTracks: (tracks, libraryId) => ipcRenderer.invoke(IPC.downloadTracks, tracks, libraryId),
+  downloadAlbum: (albumId, libraryId) => ipcRenderer.invoke(IPC.downloadAlbum, albumId, libraryId),
+  downloadArtist: (artistId, libraryId) =>
+    ipcRenderer.invoke(IPC.downloadArtist, artistId, libraryId),
+  removeDownload: (key) => ipcRenderer.invoke(IPC.removeDownload, key),
+  downloadsList: () => ipcRenderer.invoke(IPC.downloadsList),
+  downloadedTracks: () => ipcRenderer.invoke(IPC.downloadedTracks),
+  onDownloadsProgress: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, evt: DownloadProgressDto) => cb(evt);
+    ipcRenderer.on(IPC.downloadsProgress, listener);
+    return () => ipcRenderer.removeListener(IPC.downloadsProgress, listener);
+  },
+  localAvailability: (serverId, plexPaths) =>
+    ipcRenderer.invoke(IPC.localAvailability, serverId, plexPaths),
+  getConnectivity: () => ipcRenderer.invoke(IPC.getConnectivity),
+  onConnectivityChanged: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, evt: { online: boolean }) => cb(evt);
+    ipcRenderer.on(IPC.connectivityChanged, listener);
+    return () => ipcRenderer.removeListener(IPC.connectivityChanged, listener);
+  },
+  storageGetQuality: () => ipcRenderer.invoke(IPC.storageGetQuality),
+  storageSetQuality: (q: StorageQualityDto) => ipcRenderer.invoke(IPC.storageSetQuality, q),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

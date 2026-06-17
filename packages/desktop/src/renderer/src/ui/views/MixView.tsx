@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
+import { downloadRecordFor } from "../../util/downloaded-records";
 import { CardCollage } from "../CardCollage";
 import { ActionBar } from "../discovery/ActionBar";
+import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
@@ -20,6 +22,7 @@ type FetchState =
 /** One curated mood mix: keyword-matched library tracks, taste-ordered. */
 export function MixView({ mixId }: { mixId: string }) {
   const { library, dispatch } = useApp();
+  const downloadRecords = useDownloadRecords();
   const { state, playTracks, playTracksShuffled, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
@@ -167,6 +170,8 @@ export function MixView({ mixId }: { mixId: string }) {
             setNewSeed([id]);
             setMenu(null);
           }}
+          downloadRecord={downloadRecordFor(downloadRecords, menu.track)}
+          libraryId={library?.id ?? null}
         />
       )}
 

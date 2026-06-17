@@ -4,7 +4,7 @@ import {
   ChevronRight,
   Compass,
   Disc3,
-  Download,
+  HardDriveDownload,
   Home,
   Mic2,
   Music,
@@ -16,17 +16,18 @@ import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";
 import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
+import { AcquiringView } from "./views/AcquiringView";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
 import { DiscoverView } from "./views/DiscoverView";
-import { DownloadsView } from "./views/DownloadsView";
 import { ExternalArtistView } from "./views/ExternalArtistView";
 import { GenresView } from "./views/GenresView";
 import { GenreView } from "./views/GenreView";
 import { HomeView } from "./views/HomeView";
 import { MixView } from "./views/MixView";
+import { OnDeviceView } from "./views/OnDeviceView";
 import { PlaylistView } from "./views/PlaylistView";
 import { SearchView } from "./views/SearchView";
 import { SimilarView } from "./views/SimilarView";
@@ -85,7 +86,7 @@ export function Shell() {
   // artist/album drill-downs keep the Artists nav highlighted.
   const homeActive = view.name === "home";
   const discoverActive = view.name === "discover";
-  const downloadsActive = view.name === "downloads";
+  const onDeviceActive = view.name === "on-device";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   // The per-genre drill-down keeps the Genres nav highlighted.
@@ -124,8 +125,13 @@ export function Shell() {
         return <ExternalArtistView artistName={view.artistName} />;
       case "similar":
         return <SimilarView target={view.target} />;
-      case "downloads":
-        return <DownloadsView />;
+      case "on-device":
+        return <OnDeviceView />;
+      case "acquiring":
+        // The acquisition activity feed — reachable via the "Acquiring" filter
+        // in Albums/Artists (the "View acquisition activity" link), not a
+        // sidebar slot.
+        return <AcquiringView />;
     }
   }
 
@@ -152,11 +158,11 @@ export function Shell() {
 
         <button
           type="button"
-          className={`nav-item${downloadsActive ? " active" : ""}`}
-          onClick={() => dispatch({ type: "navigate", view: { name: "downloads" } })}
+          className={`nav-item${onDeviceActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "on-device" } })}
         >
-          <Download size={16} />
-          Downloads
+          <HardDriveDownload size={16} />
+          On this device
         </button>
 
         <SidebarSection title="Library" collapsed={libraryCollapsed} onToggle={toggleLibrary}>

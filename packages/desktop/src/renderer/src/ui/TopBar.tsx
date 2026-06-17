@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Menu as MenuIcon, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu as MenuIcon, Search, WifiOff } from "lucide-react";
 import { useApp } from "../state/app";
 
 // Non-mac windows are frameless, so the File/Edit/View/Help menu has no
@@ -12,7 +12,7 @@ const isMac = window.musex.platform === "darwin";
  * back/forward history buttons and the always-visible search box (Spotify-style).
  */
 export function TopBar() {
-  const { searchQuery, history, dispatch } = useApp();
+  const { searchQuery, history, connectivity, dispatch } = useApp();
 
   return (
     <header className="topbar">
@@ -67,6 +67,12 @@ export function TopBar() {
           aria-label="Search your library"
         />
       </div>
+      {connectivity === "offline" && (
+        <div className="topbar-offline-pill">
+          <WifiOff size={12} />
+          Offline
+        </div>
+      )}
     </header>
   );
 }

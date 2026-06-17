@@ -7,8 +7,15 @@ export interface ActionBarProps {
   onSimilar?: () => void; // labeled "Similar" pill
   /** Open the entity info/detail side panel for this entity. Omit to hide. */
   onInfo?: () => void;
-  /** Monitor pill: omit to hide. `on` lights it green and flips the label. */
-  monitor?: { on: boolean; busy?: boolean; onToggle: () => void };
+  /** Monitor pill: omit to hide. `on` lights it green and flips the label.
+   *  `disabled` (e.g. offline) blocks the toggle and shows `title` as a tooltip. */
+  monitor?: {
+    on: boolean;
+    busy?: boolean;
+    disabled?: boolean;
+    title?: string;
+    onToggle: () => void;
+  };
   /** Overflow ⋯ menu trigger; render the menu yourself via `overflow`. */
   overflow?: ReactNode; // a <button class="action-icon"> that opens a menu
   /** Extra trailing content (e.g. a Watch bell) rendered after the pills. */
@@ -68,7 +75,8 @@ export function ActionBar({
         <button
           type="button"
           className={`action-pill${monitor.on ? " action-pill--on" : ""}`}
-          disabled={monitor.busy}
+          disabled={monitor.busy || monitor.disabled}
+          title={monitor.title}
           onClick={monitor.onToggle}
         >
           {monitor.on ? "Monitoring" : "Monitor"}

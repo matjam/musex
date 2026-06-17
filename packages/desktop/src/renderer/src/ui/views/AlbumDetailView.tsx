@@ -1,15 +1,18 @@
-import type { Album, Track } from "@musex/core";
-import { listValidator } from "@musex/core";
-import { ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
+import type { Album, LocalPresence, Track } from "@musex/core";
+import { listValidator, trackAvailability } from "@musex/core";
+import { Download, ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { useSelection } from "../../state/selection";
+import { downloadRecordFor } from "../../util/downloaded-records";
+import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
 import { EntityLink } from "../discovery/EntityLink";
+import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import { StarRating } from "../StarRating";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -27,17 +30,21 @@ interface Props {
 }
 
 export function AlbumDetailView({ album }: Props) {
-  const { library, dispatch } = useApp();
+  const { library, connectivity, dispatch } = useApp();
   const { state, playTracks, playTracksShuffled, playTrackNext, enqueueNext, enqueueEnd } =
     usePlayer();
   const { selectedTrack, select } = useSelection();
   const { ratingFor, rate, seed } = useRatings();
   const { openEntity } = usePanel();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  // plexPath (media.partKey) → local presence (downloaded / cached on disk).
+  const [availability, setAvailability] = useState<Map<string, LocalPresence>>(() => new Map());
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
+  const downloadRecords = useDownloadRecords();
+  const offline = connectivity === "offline";
 
   // Albums navigated from cached lists may lack userRating — fetch the
   // authoritative value and seed the overlay. seed() is set-only-if-absent, so
@@ -70,6 +77,39 @@ export function AlbumDetailView({ album }: Props) {
       );
   }, [library, album.id, album.updatedAt]);
 
+  // One batched local-availability lookup for the whole loaded track list
+  // (downloaded ∪ cached, exact per track). Refreshes on every download
+  // progress push so a just-finished download flips the row indicator.
+  useEffect(() => {
+    if (fetch.status !== "ok" || fetch.tracks.length === 0) {
+      setAvailability(new Map());
+      return;
+    }
+    const serverId = album.serverId;
+    const partKeys = fetch.tracks.map((t) => t.media.partKey);
+    let cancelled = false;
+    function refresh() {
+      window.musex
+        .localAvailability(serverId, partKeys)
+        .then((rows) => {
+          if (cancelled) return;
+          setAvailability(
+            new Map(rows.map((r) => [r.plexPath, { downloaded: r.downloaded, cached: r.cached }])),
+          );
+        })
+        .catch((err: unknown) => {
+          // Non-fatal: leave the last map; rows just won't show fresh badges.
+          console.error("[downloads] availability lookup failed:", err);
+        });
+    }
+    refresh();
+    const unsubscribe = window.musex.onDownloadsProgress(() => refresh());
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [fetch, album.serverId]);
+
   // Determine the currently-playing track id (if any)
   const playingTrackId =
     state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
@@ -78,6 +118,19 @@ export function AlbumDetailView({ album }: Props) {
   const tracks = fetch.status === "ok" ? fetch.tracks : [];
   const totalMs = tracks.reduce((sum, t) => sum + t.durationMs, 0);
   const totalMin = Math.round(totalMs / 60000);
+
+  // Whether every loaded track is already downloaded — drives the header
+  // Download button's "Downloaded" done/disabled state. Reuses the per-track
+  // availability map already maintained for the row indicators.
+  const allDownloaded =
+    tracks.length > 0 && tracks.every((t) => availability.get(t.media.partKey)?.downloaded);
+
+  function downloadAlbum() {
+    if (!library) return;
+    window.musex
+      .downloadAlbum(album.id, library.id)
+      .catch((err: unknown) => console.error("[downloads] downloadAlbum failed:", err));
+  }
 
   // The hierarchy crumb is Artist › Album. The artist NAME comes from the first
   // loaded track (Album carries only artistId); until tracks load, fall back to
@@ -164,6 +217,24 @@ export function AlbumDetailView({ album }: Props) {
                 }
               />
             )}
+            {fetch.status === "ok" && tracks.length > 0 && (
+              <button
+                type="button"
+                className={`action-pill${allDownloaded ? " action-pill--on" : ""}`}
+                disabled={allDownloaded || offline}
+                title={
+                  allDownloaded
+                    ? "All tracks downloaded"
+                    : offline
+                      ? OFFLINE_ACTION_TOOLTIP
+                      : "Download album to this device"
+                }
+                onClick={downloadAlbum}
+              >
+                <Download size={15} />
+                {allDownloaded ? "Downloaded" : "Download"}
+              </button>
+            )}
             <StarRating
               value10={ratingFor(album.id, album.userRating)}
               onRate={(stars) =>
@@ -198,12 +269,20 @@ export function AlbumDetailView({ album }: Props) {
           renderRow={(index) => {
             const track = tracks[index];
             if (!track) return null;
+            const presence = availability.get(track.media.partKey) ?? {
+              downloaded: false,
+              cached: false,
+            };
+            const unavailable =
+              trackAvailability(presence, connectivity === "online") === "unavailable-offline";
             return (
               <TrackRow
                 track={track}
                 leading={track.trackNumber ?? index + 1}
                 isPlaying={track.id === playingTrackId}
                 selected={track.id === selectedTrack?.id}
+                downloadState={presence.downloaded ? "downloaded" : undefined}
+                unavailable={unavailable}
                 onSelect={() => select(track)}
                 onActivate={() => playTrackNext(track)}
                 onMenu={(pos) =>
@@ -228,6 +307,8 @@ export function AlbumDetailView({ album }: Props) {
             setNewSeed([id]);
             setMenu(null);
           }}
+          downloadRecord={downloadRecordFor(downloadRecords, menu.track)}
+          libraryId={library?.id ?? null}
         />
       )}
 
