@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { Album, Library, PlaylistTrack, Track } from "@musex/core";
+import type { Album, Artist, Library, PlaylistTrack, Track } from "@musex/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CachingPlexGateway } from "./caching-plex-gateway";
 import { ListCacheStore } from "./list-cache-store";
@@ -24,6 +24,11 @@ const album = (id: string): Album => ({
   artistId: "ar1",
   title: id,
 });
+const artist = (id: string): Artist => ({
+  id,
+  serverId: "s1",
+  name: id,
+});
 
 let dir: string;
 beforeEach(async () => {
@@ -40,6 +45,7 @@ function setup() {
     listAllTracks: vi.fn(async () => [track("t1")]),
     listAlbums: vi.fn(async () => [album("al1")]),
     listAllAlbums: vi.fn(async () => [album("al1")]),
+    listArtists: vi.fn(async () => [artist("ar1")]),
     addToPlaylist: vi.fn(async () => {}),
     rateItem: vi.fn(async () => {}),
     getUserRating: vi.fn(async () => 8),
@@ -159,5 +165,32 @@ describe("CachingPlexGateway", () => {
     await gw.rateItem("s1", "t1", null, "tok");
     await gw.listTracks(lib, "al1", "tok", "v1"); // still cached
     expect(inner.listTracks).toHaveBeenCalledTimes(1);
+  });
+
+  // --- listArtists caching ---
+
+  it("serves a matching validator from cache without re-calling inner (listArtists)", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listArtists(lib, "tok", "v1");
+    const result = await gw.listArtists(lib, "tok", "v1");
+    expect(inner.listArtists).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([artist("ar1")]);
+  });
+
+  it("refetches when the validator differs (listArtists)", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listArtists(lib, "tok", "v1");
+    await gw.listArtists(lib, "tok", "v2");
+    expect(inner.listArtists).toHaveBeenCalledTimes(2);
+  });
+
+  it("always fetches when no validator is given (listArtists)", async () => {
+    const { inner, gw, store } = setup();
+    await store.init();
+    await gw.listArtists(lib, "tok");
+    await gw.listArtists(lib, "tok");
+    expect(inner.listArtists).toHaveBeenCalledTimes(2);
   });
 });

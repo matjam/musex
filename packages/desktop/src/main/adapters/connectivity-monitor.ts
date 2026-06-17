@@ -1,8 +1,10 @@
 import { PlexAuthError } from "@musex/core";
 
+// Use `unknown` for the handle so both Node (NodeJS.Timeout) and test fakes
+// (plain number) satisfy the interface without a cast.
 export interface TimerFunctions {
-  setInterval(fn: () => void, ms: number): ReturnType<typeof setInterval>;
-  clearInterval(handle: ReturnType<typeof setInterval>): void;
+  setInterval(fn: () => void, ms: number): unknown;
+  clearInterval(handle: unknown): void;
 }
 
 /** Debounced reachability state machine.
@@ -20,7 +22,7 @@ export class ConnectivityMonitor {
   private _online = true;
   private consecutiveFailures = 0;
   private readonly listeners: Array<(online: boolean) => void> = [];
-  private handle: ReturnType<typeof setInterval> | undefined;
+  private handle: unknown;
   private readonly timers: TimerFunctions;
 
   constructor(timers?: TimerFunctions) {
