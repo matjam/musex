@@ -37,6 +37,8 @@ interface AppState {
   view: View;
   searchQuery: string;
   history: NavHistory<View>;
+  /** Reachability of the Plex server (main's ConnectivityMonitor). */
+  connectivity: "online" | "offline";
 }
 type Action =
   | { type: "signing-in"; code: string }
@@ -46,6 +48,7 @@ type Action =
   | { type: "set-search"; query: string }
   | { type: "library-updated"; library: Library }
   | { type: "library-switched"; library: Library }
+  | { type: "connectivity-changed"; online: boolean }
   | { type: "nav-back" }
   | { type: "nav-forward" };
 
@@ -93,6 +96,8 @@ function reducer(s: AppState, a: Action): AppState {
       return { ...s, library: a.library };
     case "library-switched":
       return { ...s, library: a.library, view: { name: "home" }, history: EMPTY_HISTORY };
+    case "connectivity-changed":
+      return { ...s, connectivity: a.online ? "online" : "offline" };
     case "nav-back": {
       const r = goBack(s.history, s.view);
       if (!r) return s;
@@ -133,6 +138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     view: { name: "home" },
     searchQuery: "",
     history: EMPTY_HISTORY,
+    connectivity: "online",
   });
 
   useEffect(() => {
@@ -153,6 +159,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return window.musex.onLibraryChanged((library) => {
       dispatch({ type: "library-updated", library });
+    });
+  }, []);
+
+  useEffect(() => {
+    // One-shot read for the initial state, then subscribe to flips. The push
+    // unsubscribe is returned as the cleanup; the one-shot fetch is fire-and-
+    // forget (swallowing its error just leaves connectivity at the "online"
+    // default — the next push corrects it).
+    window.musex
+      .getConnectivity()
+      .then(({ online }) => dispatch({ type: "connectivity-changed", online }))
+      .catch(() => {});
+    return window.musex.onConnectivityChanged(({ online }) => {
+      dispatch({ type: "connectivity-changed", online });
     });
   }, []);
 
