@@ -30,7 +30,7 @@ This is a refactor with **no behavior change** for the Similar panel / radio / D
 Move `plugins/lastfm/src/*` (client.ts + signing.ts + the activate logic) into a first-party **`main/lastfm/`** service:
 - `LastfmService.start(hub, deps)` registers the same providers/handlers it does today — `registerSimilarProvider` (similarArtists/Tracks/topAlbums/artistInfo), `registerTrackRecommender`, `contributeSections("discover")`, `contributeTrackDetail`, `contributeTrackAction("Love on Last.fm")` — directly into the ProviderHub, and subscribes to `trackStarted`/`scrobble`/`trackRated` via `hub.onEvent`.
 - **Config → app Settings** (not plugin storage): new electron-store fields `lastfm: { apiKey, scrobbling, loveOnRating, username, connection }` + secrets (`apiSecret`, `sessionKey`) via the existing `secureStore`. New IPC `musex:lastfm:getConfig/setConfig/connect` (the "Connect" PKCE-ish token flow moves here). Renderer gets a **"Last.fm" settings category** (replacing the old `plugin:lastfm` pane) — API key field, Connect button + status, scrobbling + love-on-rating toggles.
-- **Migration:** on first run, best-effort read of the old `userData/plugin-data/lastfm.json` + `userData/plugin-secrets/lastfm.json` → seed the new app settings (so existing users keep their connection); then ignore the old files.
+- **No migration** (single-user, pre-1.0 — break freely): last.fm config starts fresh in the new Settings pane (re-enter the API key + reconnect). The old `userData/plugin-{data,secrets}/lastfm.json` files are just orphaned — no compat code.
 - Remove last.fm from the plugin system: drop from `core-plugins.ts` (now empty → `CORE_PLUGINS = []`), `electron.vite.config.ts` exclude, desktop `package.json` dep; `git rm -r plugins/lastfm`. `node:crypto` signing is fine in core.
 
 ## Component 3 — QuickJS sandbox runtime (third-party plugins)
@@ -56,14 +56,14 @@ Replace PluginHost's `activatePlugin` dynamic `import()` with a **QuickJS sandbo
 In `~/src/musex-plugins`: bump lidarr to use `ctx.net.fetch` (drop the `httpFnFrom(ctx.net.client...)` shim → call `ctx.net.fetch` directly; TLS via the init flag), `apiVersion: 2`, build target `es2022`/`platform:neutral`, re-release `lidarr-v0.2.0`, update `plugins.json`. (Its own repo PR/commit + release.) musex's installer already gates on apiVersion, so a v2 host installs the v2 lidarr.
 
 ## Migration / compatibility
-- **Last.fm users:** best-effort config migration (above); otherwise re-connect in the new Settings → Last.fm pane.
+- **Last.fm:** no migration — reconnect in the new Settings → Last.fm pane (single-user, break freely).
 - **Third-party plugins:** must be apiVersion 2 + sandbox-compatible. lidarr re-released at v2; any v1 user-installed plugin shows "incompatible" until updated.
 - No bundled plugins remain in musex after this (CORE_PLUGINS = []).
 
 ## Testing
 - **ProviderHub:** unit tests for register/dispose + each fan-out (timeout/isolation/merge) — port the existing PluginHost provider tests to the hub.
 - **Sandbox:** unit/integration tests using `quickjs-emscripten` — load a tiny test plugin, exercise the bridge both directions (a bridged `net.fetch` against a fake; a registered provider called via `__invoke`), checksum/handle-teardown safety. The spike harness is the reference.
-- **Last.fm service:** unit-test the providers against a fake fetch (port the lastfm plugin's tests); config migration test.
+- **Last.fm service:** unit-test the providers against a fake fetch (port the lastfm plugin's tests).
 - **API v2 + lidarr:** plugin-api typecheck; lidarr tests in musex-plugins green at v2.
 - `pnpm check` green throughout; full check before push.
 - **Manual (user, desktop):** Last.fm connect + scrobble + similar/radio still work from the new Settings pane; install lidarr v0.2.0 from the repo → runs sandboxed → External Artist/Downloads work; a deliberately-incompatible/old plugin shows "incompatible".
