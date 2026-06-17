@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -63,5 +63,28 @@ describe("DownloadStore", () => {
     const s = await store.stats();
     expect(s.files).toBe(2);
     expect(s.bytes).toBe(8);
+  });
+
+  it("presentNonEmptyKeys: non-empty file is in nonEmpty, 0-byte file is in empty", async () => {
+    // Write a real file with content.
+    await write("good", "some audio data");
+    // Create a 0-byte file by opening it for writing but writing nothing.
+    const fh = await open(join(dir, "zero"), "w");
+    await fh.close();
+    const { nonEmpty, empty } = await store.presentNonEmptyKeys();
+    expect(nonEmpty).toContain("good");
+    expect(nonEmpty).not.toContain("zero");
+    expect(empty).toContain("zero");
+    expect(empty).not.toContain("good");
+  });
+
+  it("presentNonEmptyKeys: .part files are excluded", async () => {
+    // A .part file (in-progress write) must not appear in either list.
+    const fh = await open(join(dir, "abc.part"), "w");
+    await fh.write("data");
+    await fh.close();
+    const { nonEmpty, empty } = await store.presentNonEmptyKeys();
+    expect(nonEmpty).not.toContain("abc.part");
+    expect(empty).not.toContain("abc.part");
   });
 });

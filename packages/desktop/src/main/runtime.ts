@@ -164,10 +164,19 @@ export class Runtime {
     // reconciled list, then build the index + the sequential download worker.
     await this.downloadStore.init();
     this.proxy.configureDownloads(this.downloadStore);
-    const reconciled = reconcileRecords(
-      persistence.getDownloadRecords(),
-      new Set(await this.downloadStore.listKeys()),
-    );
+    // Drop 0-byte files before reconciling: they are broken "downloaded" entries
+    // (e.g. from a truncated/failed transcode) that would otherwise survive as
+    // false-green badges and crash mpv. Delete them so reconcileRecords sees them
+    // as absent (→ "missing"), clearing the bad state.
+    const { nonEmpty, empty } = await this.downloadStore.presentNonEmptyKeys();
+    for (const key of empty) {
+      try {
+        await this.downloadStore.remove(key);
+      } catch (err) {
+        console.error("[musex downloads] failed to remove 0-byte file:", key, err);
+      }
+    }
+    const reconciled = reconcileRecords(persistence.getDownloadRecords(), new Set(nonEmpty));
     persistence.setDownloadRecords(reconciled);
     this.downloadIndex = new DownloadIndex(reconciled, (all) =>
       persistence.setDownloadRecords(all),

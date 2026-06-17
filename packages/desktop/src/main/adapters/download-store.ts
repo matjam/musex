@@ -138,6 +138,32 @@ export class DownloadStore {
     return names.filter((n) => !n.endsWith(".part"));
   }
 
+  /**
+   * Like `listKeys()` but filters out 0-byte files, returning only keys that
+   * have actual content. Callers should delete the excluded keys so that stale
+   * 0-byte entries (e.g. from a broken transcode path) are cleaned up.
+   */
+  async presentNonEmptyKeys(): Promise<{ nonEmpty: string[]; empty: string[] }> {
+    const keys = await this.listKeys();
+    const nonEmpty: string[] = [];
+    const empty: string[] = [];
+    for (const key of keys) {
+      let size = 0;
+      try {
+        size = (await stat(this.full(key))).size;
+      } catch {
+        // raced deletion — treat as absent (not empty, just gone)
+        continue;
+      }
+      if (size > 0) {
+        nonEmpty.push(key);
+      } else {
+        empty.push(key);
+      }
+    }
+    return { nonEmpty, empty };
+  }
+
   async stats(): Promise<StoreStats> {
     const keys = await this.listKeys();
     let bytes = 0;
