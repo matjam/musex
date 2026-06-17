@@ -391,7 +391,7 @@ function DownloadsSizeSection() {
         <button
           type="button"
           className="settings-btn danger"
-          disabled={removing || downloadedBytes === 0}
+          disabled={removing || !downloadedBytes}
           onClick={() => void removeAll()}
         >
           {removing ? "Removing…" : "Remove all"}
