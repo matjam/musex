@@ -870,7 +870,7 @@ function PluginsOverview({
     if (!available) return;
     const repo = available.repo;
     const confirmed = window.confirm(
-      `Plugins run with full access to your computer. Only install plugins from sources you trust.\n\nInstall ${plugin.name} from ${repo}?`,
+      `Plugins run sandboxed — they can't touch your files, system, or Plex account. But they can make network requests and use any settings or credentials you give them, so only install plugins you trust.\n\nInstall ${plugin.name} from ${repo}?`,
     );
     if (!confirmed) return;
     setInstallingId(plugin.id);
@@ -957,8 +957,8 @@ function PluginsOverview({
             <div className="settings-row-label">Manage plugins</div>
             <div className="settings-row-desc">
               User plugins are folders containing a plugin.json and an ESM entry dropped into the
-              app's plugins directory. They run with full trust in the main process. Reload to pick
-              up changes.
+              app's plugins directory. They run sandboxed (no file or system access) and reach the
+              app only through the plugin API. Reload to pick up changes.
             </div>
           </div>
           <button type="button" className="settings-btn" disabled={reloading} onClick={onReload}>
