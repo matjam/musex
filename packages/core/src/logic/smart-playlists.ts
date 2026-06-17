@@ -20,8 +20,8 @@ export const SMART_DESCRIPTIONS: Record<SmartKind, string> = {
   rediscover: "Old favorites you haven't played in a while.",
 };
 
-/** Plex userRating (0–10) threshold for "loved": 4 stars and up. */
-const LOVED_RATING = 8;
+/** Plex 0–10 rating at/above which a track counts as "loved" (8 = 4 stars). */
+export const LOVED_RATING = 8;
 /** Heavy Rotation needs at least this many full plays. */
 const HEAVY_ROTATION_MIN_PLAYS = 2;
 /** Rediscover counts an unrated track as loved at this many plays. */
