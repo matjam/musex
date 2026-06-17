@@ -11,6 +11,7 @@ export * from "./logic/library-watch";
 export * from "./logic/list-validator";
 export * from "./logic/mood-mixes";
 export * from "./logic/nav-history";
+export * from "./logic/play-monitor";
 export * from "./logic/plex-mapping";
 export * from "./logic/smart-playlists";
 export * from "./logic/taste-expansion";
