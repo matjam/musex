@@ -1,5 +1,5 @@
-import type { Album, Track } from "@musex/core";
-import { listValidator } from "@musex/core";
+import type { Album, LocalPresence, Track } from "@musex/core";
+import { listValidator, trackAvailability } from "@musex/core";
 import { ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
@@ -27,13 +27,15 @@ interface Props {
 }
 
 export function AlbumDetailView({ album }: Props) {
-  const { library, dispatch } = useApp();
+  const { library, connectivity, dispatch } = useApp();
   const { state, playTracks, playTracksShuffled, playTrackNext, enqueueNext, enqueueEnd } =
     usePlayer();
   const { selectedTrack, select } = useSelection();
   const { ratingFor, rate, seed } = useRatings();
   const { openEntity } = usePanel();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  // plexPath (media.partKey) → local presence (downloaded / cached on disk).
+  const [availability, setAvailability] = useState<Map<string, LocalPresence>>(() => new Map());
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -69,6 +71,39 @@ export function AlbumDetailView({ album }: Props) {
         }),
       );
   }, [library, album.id, album.updatedAt]);
+
+  // One batched local-availability lookup for the whole loaded track list
+  // (downloaded ∪ cached, exact per track). Refreshes on every download
+  // progress push so a just-finished download flips the row indicator.
+  useEffect(() => {
+    if (fetch.status !== "ok" || fetch.tracks.length === 0) {
+      setAvailability(new Map());
+      return;
+    }
+    const serverId = album.serverId;
+    const partKeys = fetch.tracks.map((t) => t.media.partKey);
+    let cancelled = false;
+    function refresh() {
+      window.musex
+        .localAvailability(serverId, partKeys)
+        .then((rows) => {
+          if (cancelled) return;
+          setAvailability(
+            new Map(rows.map((r) => [r.plexPath, { downloaded: r.downloaded, cached: r.cached }])),
+          );
+        })
+        .catch((err: unknown) => {
+          // Non-fatal: leave the last map; rows just won't show fresh badges.
+          console.error("[downloads] availability lookup failed:", err);
+        });
+    }
+    refresh();
+    const unsubscribe = window.musex.onDownloadsProgress(() => refresh());
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [fetch, album.serverId]);
 
   // Determine the currently-playing track id (if any)
   const playingTrackId =
@@ -198,12 +233,20 @@ export function AlbumDetailView({ album }: Props) {
           renderRow={(index) => {
             const track = tracks[index];
             if (!track) return null;
+            const presence = availability.get(track.media.partKey) ?? {
+              downloaded: false,
+              cached: false,
+            };
+            const unavailable =
+              trackAvailability(presence, connectivity === "online") === "unavailable-offline";
             return (
               <TrackRow
                 track={track}
                 leading={track.trackNumber ?? index + 1}
                 isPlaying={track.id === playingTrackId}
                 selected={track.id === selectedTrack?.id}
+                downloadState={presence.downloaded ? "downloaded" : undefined}
+                unavailable={unavailable}
                 onSelect={() => select(track)}
                 onActivate={() => playTrackNext(track)}
                 onMenu={(pos) =>

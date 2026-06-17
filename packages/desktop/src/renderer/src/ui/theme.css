@@ -874,7 +874,7 @@ img.album-header-art {
 
 .track-row {
   display: grid;
-  grid-template-columns: 34px 1fr auto auto auto;
+  grid-template-columns: 34px 1fr auto auto auto auto;
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
@@ -925,6 +925,33 @@ img.album-header-art {
   opacity: 0.45;
   font-variant-numeric: tabular-nums;
   font-size: 12.5px;
+}
+
+/* Per-track local-availability indicator (downloaded / downloading). */
+.track-dl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+}
+
+.track-dl-icon--done {
+  color: var(--green);
+}
+
+.track-dl-icon--active {
+  color: var(--text);
+  opacity: 0.55;
+}
+
+/* Offline + not downloaded/cached: de-emphasised, can't play right now. */
+.track-row--unavailable {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.track-row--unavailable:hover {
+  background: none;
 }
 
 /* ---- Now Playing bar ---- */

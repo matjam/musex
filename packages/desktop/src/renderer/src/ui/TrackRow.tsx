@@ -1,5 +1,5 @@
 import type { Track } from "@musex/core";
-import { AudioLines, MoreHorizontal } from "lucide-react";
+import { ArrowDownToLine, AudioLines, Check, MoreHorizontal } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useApp } from "../state/app";
 import { toTrackInfo } from "../state/player";
@@ -24,6 +24,12 @@ interface Props {
   onActivate: () => void;
   /** When provided, the row shows a menu button and opens a menu (also on right-click). */
   onMenu?: (pos: { x: number; y: number }) => void;
+  /** Local-availability indicator: "downloaded" (on disk) or "downloading"
+   *  (in flight). Renders a small icon in the leading status slot. */
+  downloadState?: "downloaded" | "downloading";
+  /** Offline + neither downloaded nor cached — the track can't play right now.
+   *  Dims the row and suppresses the activation handlers. */
+  unavailable?: boolean;
 }
 
 export function TrackRow({
@@ -35,11 +41,14 @@ export function TrackRow({
   onSelect,
   onActivate,
   onMenu,
+  downloadState,
+  unavailable = false,
 }: Props) {
   const { ratingFor, rate } = useRatings();
   const { library } = useApp();
 
   function activate(e: KeyboardEvent<HTMLDivElement>) {
+    if (unavailable) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onActivate();
@@ -52,11 +61,11 @@ export function TrackRow({
   return (
     // biome-ignore lint/a11y/useSemanticElements: div needed here because it may contain a <button> (menu); button-in-button is invalid HTML
     <div
-      className={`track-row${isPlaying ? " playing" : ""}${selected ? " selected" : ""}${onMenu ? " has-menu" : ""}`}
+      className={`track-row${isPlaying ? " playing" : ""}${selected ? " selected" : ""}${onMenu ? " has-menu" : ""}${unavailable ? " track-row--unavailable" : ""}`}
       role="button"
       tabIndex={0}
       onClick={onSelect}
-      onDoubleClick={onActivate}
+      onDoubleClick={unavailable ? undefined : onActivate}
       onKeyDown={activate}
       onContextMenu={
         onMenu
@@ -77,6 +86,17 @@ export function TrackRow({
             <TrackSubLinks track={track} />
           </span>
         )}
+      </span>
+      <span className="track-dl">
+        {downloadState === "downloaded" ? (
+          <Check size={13} className="track-dl-icon track-dl-icon--done" aria-label="Downloaded" />
+        ) : downloadState === "downloading" ? (
+          <ArrowDownToLine
+            size={13}
+            className="track-dl-icon track-dl-icon--active"
+            aria-label="Downloading"
+          />
+        ) : null}
       </span>
       <StarRating
         value10={ratingFor(track.id, track.userRating)}

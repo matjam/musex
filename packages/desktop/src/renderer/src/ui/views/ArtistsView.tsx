@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
+import { useDownloadedSet } from "../hooks/useDownloadedSet";
 import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
 
 type FetchState =
@@ -12,10 +13,16 @@ type FetchState =
   | { status: "ok"; artists: Artist[] };
 
 export function ArtistsView() {
-  const { library, dispatch } = useApp();
+  const { library, connectivity, dispatch } = useApp();
   const { playArtist } = useCollectionPlay();
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  // Artist cards reflect DOWNLOADED-presence only (≥1 track on disk for the
+  // artistId). Cached content is track-level (keyed by plexPath) and can't be
+  // cheaply attributed to a container card without fetching its tracks, so it's
+  // deliberately not reflected here — track lists get exact availability.
+  const downloaded = useDownloadedSet("artistId");
+  const offline = connectivity === "offline";
 
   useEffect(() => {
     if (!library) return;
@@ -54,6 +61,11 @@ export function ArtistsView() {
     return <div className="content-placeholder">No artists found in this library.</div>;
   }
 
+  // "all" shows everything (offline: un-downloaded cards dimmed, not hidden);
+  // "downloaded" shows only artists with a downloaded track; "acquiring" is a
+  // Phase 5 feature — for now it's an explicit empty state.
+  const visible = filter === "downloaded" ? artists.filter((a) => downloaded.has(a.id)) : artists;
+
   return (
     <div className="browse-section">
       <div className="browse-header">
@@ -62,21 +74,31 @@ export function ArtistsView() {
           <LibraryFilter value={filter} onChange={setFilter} />
         </div>
       </div>
-      <div className="browse-sub">
-        {artists.length} artist{artists.length !== 1 ? "s" : ""}
-      </div>
-      <div className="browse-grid">
-        {artists.map((artist) => (
-          <GridCard
-            key={artist.id}
-            thumb={artist.thumb}
-            title={artist.name}
-            round
-            onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
-            onPlay={() => void playArtist(artist)}
-          />
-        ))}
-      </div>
+      {filter === "acquiring" ? (
+        <div className="content-placeholder">Items you're acquiring will appear here.</div>
+      ) : filter === "downloaded" && visible.length === 0 ? (
+        <div className="content-placeholder">No downloaded artists yet.</div>
+      ) : (
+        <>
+          <div className="browse-sub">
+            {visible.length} artist{visible.length !== 1 ? "s" : ""}
+          </div>
+          <div className="browse-grid">
+            {visible.map((artist) => (
+              <GridCard
+                key={artist.id}
+                thumb={artist.thumb}
+                title={artist.name}
+                round
+                state={downloaded.has(artist.id) ? "downloaded" : undefined}
+                dim={offline && !downloaded.has(artist.id)}
+                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                onPlay={() => void playArtist(artist)}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
