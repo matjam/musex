@@ -1,8 +1,11 @@
 import type { Album, LibrarySort } from "@musex/core";
 import { listValidator } from "@musex/core";
+import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
+import { acquisitionStateFor } from "../../util/acquisition-map";
 import { GridCard } from "../GridCard";
+import { useAcquisitionMap } from "../hooks/useAcquisitionMap";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet } from "../hooks/useDownloadedSet";
 import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
@@ -25,6 +28,9 @@ export function AlbumsView() {
   // it's deliberately not reflected here — track lists below get exact
   // downloaded∪cached availability.
   const downloaded = useDownloadedSet("albumId");
+  // Acquisition status is album-granular, so albums match by title. Degrades to
+  // an empty map offline / on error (see useAcquisitionMap).
+  const acquiring = useAcquisitionMap("title");
   const offline = connectivity === "offline";
 
   useEffect(() => {
@@ -65,9 +71,15 @@ export function AlbumsView() {
   }
 
   // "all" shows everything (offline: un-downloaded cards are dimmed, not hidden);
-  // "downloaded" shows only cards with a downloaded track; "acquiring" is a
-  // Phase 5 feature — for now it's an explicit empty state.
-  const visible = filter === "downloaded" ? albums.filter((a) => downloaded.has(a.id)) : albums;
+  // "downloaded" shows only cards with a downloaded track; "acquiring" shows
+  // only albums currently being acquired (by title), plus a link to the full
+  // acquisition activity feed.
+  const visible =
+    filter === "downloaded"
+      ? albums.filter((a) => downloaded.has(a.id))
+      : filter === "acquiring"
+        ? albums.filter((a) => acquiring.has(a.title.trim().toLowerCase()))
+        : albums;
 
   return (
     <div className="browse-section">
@@ -79,7 +91,42 @@ export function AlbumsView() {
         </div>
       </div>
       {filter === "acquiring" ? (
-        <div className="content-placeholder">Items you're acquiring will appear here.</div>
+        <>
+          <button
+            type="button"
+            className="acquiring-activity-link"
+            onClick={() => dispatch({ type: "navigate", view: { name: "acquiring" } })}
+          >
+            <ListChecks size={14} />
+            View acquisition activity
+          </button>
+          {visible.length === 0 ? (
+            <div className="content-placeholder">No albums are being acquired right now.</div>
+          ) : (
+            <>
+              <div className="browse-sub">
+                {visible.length} album{visible.length !== 1 ? "s" : ""} acquiring
+              </div>
+              <div className="browse-grid">
+                {visible.map((album) => (
+                  <GridCard
+                    key={album.id}
+                    thumb={album.thumb}
+                    title={album.title}
+                    subtitle={album.year != null ? String(album.year) : undefined}
+                    state={
+                      downloaded.has(album.id)
+                        ? "downloaded"
+                        : acquisitionStateFor(acquiring, album.title)
+                    }
+                    onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
+                    onPlay={() => void playAlbum(album)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       ) : filter === "downloaded" && visible.length === 0 ? (
         <div className="content-placeholder">No downloaded albums yet.</div>
       ) : (
@@ -94,7 +141,13 @@ export function AlbumsView() {
                 thumb={album.thumb}
                 title={album.title}
                 subtitle={album.year != null ? String(album.year) : undefined}
-                state={downloaded.has(album.id) ? "downloaded" : undefined}
+                // Downloaded wins over an in-flight acquisition badge — an album
+                // already on disk shouldn't read as "Requested".
+                state={
+                  downloaded.has(album.id)
+                    ? "downloaded"
+                    : acquisitionStateFor(acquiring, album.title)
+                }
                 dim={offline && !downloaded.has(album.id)}
                 onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
                 onPlay={() => void playAlbum(album)}
