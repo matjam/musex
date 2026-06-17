@@ -40,6 +40,9 @@ const TASTE_SAVE_DEBOUNCE_MS = 5_000;
 /** How often the connectivity recovery probe pings the current server. Kept
  *  modest so a downed server is noticed quickly but the probe itself is cheap. */
 const CONNECTIVITY_PROBE_INTERVAL_MS = 20_000;
+/** Per-probe ceiling so an unreachable host can't hang the probe past the
+ *  interval (an aborted probe counts as a failure → drives offline promptly). */
+const CONNECTIVITY_PROBE_TIMEOUT_MS = 8_000;
 
 // electron-vite bundles all main files into packages/desktop/out/main/index.js,
 // so __dirname here is packages/desktop/out/main/ → repo root is 4 levels up.
@@ -349,7 +352,14 @@ export class Runtime {
     // cold-probe query and the download manager's token-injected URL.
     const ep = await this.gateway.endpoint(serverId, token);
     const url = `${ep.baseUrl}/?X-Plex-Token=${encodeURIComponent(ep.token)}`;
-    const res = await globalThis.fetch(url);
+    // Bound the probe: an unreachable host (dropped packets, not a refused
+    // connection) would otherwise hang for the OS TCP timeout (~75s) — far past
+    // the 20s probe interval — delaying offline detection and stacking probes.
+    // An AbortError on timeout rejects → noteFailure (it's not a PlexAuthError,
+    // so it counts toward going offline).
+    const res = await globalThis.fetch(url, {
+      signal: AbortSignal.timeout(CONNECTIVITY_PROBE_TIMEOUT_MS),
+    });
     // 401/403 = reachable-but-unauthorized: the server answered, so it is NOT
     // an outage. Any other non-ok status (5xx, etc.) means the server is in
     // trouble → treat as unreachable.
