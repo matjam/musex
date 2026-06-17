@@ -3,7 +3,7 @@ import { listValidator } from "@musex/core";
 import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
-import { acquisitionStateFor } from "../../util/acquisition-map";
+import { acquisitionKey, acquisitionStateFor } from "../../util/acquisition-map";
 import { GridCard } from "../GridCard";
 import { useAcquisitionMap } from "../hooks/useAcquisitionMap";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
@@ -78,7 +78,7 @@ export function AlbumsView() {
     filter === "downloaded"
       ? albums.filter((a) => downloaded.has(a.id))
       : filter === "acquiring"
-        ? albums.filter((a) => acquiring.has(a.title.trim().toLowerCase()))
+        ? albums.filter((a) => acquiring.has(acquisitionKey(a.title)))
         : albums;
 
   return (
