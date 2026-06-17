@@ -28,7 +28,8 @@ export type View =
   | { name: "smart"; kind: SmartKind }
   | { name: "external-artist"; artistName: string }
   | { name: "similar"; target: SimilarGetArgs }
-  | { name: "downloads" };
+  | { name: "on-device" }
+  | { name: "acquiring" };
 
 interface AppState {
   auth: AuthState;
