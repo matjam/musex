@@ -1031,9 +1031,13 @@ export function registerIpc(rt: Runtime): void {
     }
     return tracks.map((t) => {
       if (!t.thumb) return t;
-      const parsed = parseProxyPath(t.thumb);
-      const thumb = parsed ? rt.proxy.artUrl(t.serverId, parsed.plexPath) : undefined;
-      return { ...t, thumb };
+      // The stored thumb may be a raw plex path (album/artist downloads come
+      // straight from the gateway) OR a stale baked proxy URL (single-track
+      // downloads were baked by the renderer). Recover the raw path either way
+      // (parseProxyPath returns null for an already-raw path), then re-bake
+      // with the current launch's secret.
+      const raw = parseProxyPath(t.thumb)?.plexPath ?? t.thumb;
+      return { ...t, thumb: rt.proxy.artUrl(t.serverId, raw) };
     });
   });
 
