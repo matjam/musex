@@ -45,6 +45,7 @@ type Action =
   | { type: "navigate"; view: View }
   | { type: "set-search"; query: string }
   | { type: "library-updated"; library: Library }
+  | { type: "library-switched"; library: Library }
   | { type: "nav-back" }
   | { type: "nav-forward" };
 
@@ -90,6 +91,8 @@ function reducer(s: AppState, a: Action): AppState {
       // or a library switch. View/search state stays untouched.
       if (s.auth !== "signed-in" || !s.library || s.library.id !== a.library.id) return s;
       return { ...s, library: a.library };
+    case "library-switched":
+      return { ...s, library: a.library, view: { name: "home" }, history: EMPTY_HISTORY };
     case "nav-back": {
       const r = goBack(s.history, s.view);
       if (!r) return s;
