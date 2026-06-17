@@ -10,7 +10,16 @@ const rec = (key: string, state: DownloadRecord["state"]): DownloadRecord => ({
   state,
   bytes: 10,
   addedAt: 1,
-  meta: { title: key, artistName: "A", durationMs: 1, albumId: "al", artistId: "ar" },
+  meta: {
+    title: key,
+    artistName: "A",
+    durationMs: 1,
+    albumId: "al",
+    artistId: "ar",
+    container: "flac",
+    audioCodec: "flac",
+    partId: "p1",
+  },
 });
 
 /** Build a downloaded record with per-album overrides for grouping tests. */
@@ -21,7 +30,17 @@ const downloaded = (
 ): DownloadRecord => ({
   ...rec(key, "downloaded"),
   bytes,
-  meta: { title: key, artistName: "A", durationMs: 1, albumId: "al", artistId: "ar", ...meta },
+  meta: {
+    title: key,
+    artistName: "A",
+    durationMs: 1,
+    albumId: "al",
+    artistId: "ar",
+    container: "flac",
+    audioCodec: "flac",
+    partId: "p1",
+    ...meta,
+  },
 });
 
 describe("reconcileRecords", () => {

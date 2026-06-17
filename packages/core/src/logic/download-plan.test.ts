@@ -15,6 +15,9 @@ const job = (key: string): DownloadJob => ({
     trackNumber: 1,
     albumId: "al",
     artistId: "ar",
+    container: "flac",
+    audioCodec: "flac",
+    partId: "p1",
   },
 });
 

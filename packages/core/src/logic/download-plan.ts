@@ -1,4 +1,8 @@
-/** Metadata snapshot kept with a download so it's browsable offline. */
+/** Metadata snapshot kept with a download so it's browsable AND playable
+ *  offline. The media fields (container/audioCodec/partId/bitrate) carry the
+ *  rest of a Track's MediaInfo so a record can be reconstructed into a fully
+ *  playable Track without a Plex round-trip (the record's plexPath is the
+ *  MediaInfo.partKey). */
 export interface DownloadMeta {
   title: string;
   artistName: string;
@@ -8,6 +12,12 @@ export interface DownloadMeta {
   trackNumber?: number;
   albumId: string;
   artistId: string;
+  // Media info needed to rebuild Track.media for offline playback. The partKey
+  // is the record's plexPath, so it isn't duplicated here.
+  container: string;
+  audioCodec: string;
+  partId: string;
+  bitrate?: number;
 }
 
 export interface DownloadJob {

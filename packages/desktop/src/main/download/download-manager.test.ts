@@ -35,7 +35,16 @@ const job = (key: string): DownloadJob => ({
   serverId: "s1",
   plexPath: `/library/parts/${key}/f.flac`,
   trackId: key,
-  meta: { title: key, artistName: "A", durationMs: 1, albumId: "al", artistId: "ar" },
+  meta: {
+    title: key,
+    artistName: "A",
+    durationMs: 1,
+    albumId: "al",
+    artistId: "ar",
+    container: "flac",
+    audioCodec: "flac",
+    partId: "p1",
+  },
 });
 
 describe("DownloadManager", () => {

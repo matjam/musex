@@ -17,6 +17,9 @@ function rec(over: Partial<DownloadDto> & { state: DownloadDto["state"] }): Down
       durationMs: 1000,
       albumId: "alb1",
       artistId: "art1",
+      container: "flac",
+      audioCodec: "flac",
+      partId: "p1",
     },
     ...over,
   };
@@ -64,5 +67,8 @@ function makeMeta(albumId: string, artistId: string): DownloadDto["meta"] {
     durationMs: 1000,
     albumId,
     artistId,
+    container: "flac",
+    audioCodec: "flac",
+    partId: "p1",
   };
 }

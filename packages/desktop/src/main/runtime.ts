@@ -449,6 +449,12 @@ export class Runtime {
         trackNumber: track.trackNumber,
         albumId: track.albumId,
         artistId: track.artistId,
+        // Full media info so the record can be rebuilt into a playable Track
+        // offline (partKey == plexPath, so it isn't duplicated here).
+        container: track.media.container,
+        audioCodec: track.media.audioCodec,
+        partId: track.media.partId,
+        bitrate: track.media.bitrate,
       },
     }));
     const fresh = dedupeJobs(jobs, new Set(this.downloadIndex.list().map((r) => r.key)));

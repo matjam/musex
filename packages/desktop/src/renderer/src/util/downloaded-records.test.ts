@@ -18,6 +18,9 @@ function rec(over: Partial<DownloadDto> & { state: DownloadDto["state"] }): Down
       durationMs: 1000,
       albumId: "alb1",
       artistId: "art1",
+      container: "flac",
+      audioCodec: "flac",
+      partId: "p1",
     },
     ...over,
   };

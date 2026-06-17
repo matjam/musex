@@ -11,7 +11,16 @@ const rec = (key: string): DownloadRecord => ({
   state: "queued",
   bytes: 0,
   addedAt: 1,
-  meta: { title: key, artistName: "A", durationMs: 1, albumId: "al", artistId: "ar" },
+  meta: {
+    title: key,
+    artistName: "A",
+    durationMs: 1,
+    albumId: "al",
+    artistId: "ar",
+    container: "flac",
+    audioCodec: "flac",
+    partId: "p1",
+  },
 });
 
 describe("DownloadIndex", () => {
