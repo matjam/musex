@@ -2,10 +2,10 @@ import type { Track } from "../models/index.js";
 import type { DownloadMeta } from "./download-plan.js";
 
 export type DownloadStatus = "queued" | "downloading" | "downloaded" | "failed" | "missing";
-export type DownloadFormat = "original" | "mp3";
+export type DownloadFormat = "original" | "aac";
 
 export interface StorageQuality {
-  mode: "original" | "mp3";
+  mode: "original" | "aac";
   bitrateKbps: number;
 }
 
