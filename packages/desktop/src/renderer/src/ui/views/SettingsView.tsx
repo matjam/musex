@@ -282,11 +282,11 @@ function StorageQualitySection() {
           }
         >
           <option value="original">Original</option>
-          <option value="mp3">MP3</option>
+          <option value="aac">MP3</option>
         </select>
       </div>
 
-      {quality.mode === "mp3" ? (
+      {quality.mode === "aac" ? (
         <div className="settings-row">
           <div className="settings-row-text">
             <div className="settings-row-label">Bitrate</div>
@@ -299,7 +299,7 @@ function StorageQualitySection() {
             aria-label="MP3 bitrate"
             value={quality.bitrateKbps}
             onChange={(e) =>
-              void applyQuality({ mode: "mp3", bitrateKbps: Number(e.target.value) })
+              void applyQuality({ mode: "aac", bitrateKbps: Number(e.target.value) })
             }
           >
             {TRANSCODE_BITRATES.map((kbps) => (

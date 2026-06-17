@@ -75,13 +75,30 @@ describe("DownloadManager", () => {
     expect(progress).toContain("a:downloaded");
   });
 
-  it("transcode mode fetches the MP3 start URL then the stop URL, both via the injected fetch", async () => {
+  it("transcode mode stitches HLS segments into one file, then stops the session", async () => {
     const store = fakeStore();
     const index = new DownloadIndex([], () => {});
     const urls: string[] = [];
+    // Master playlist points at a media playlist; the media playlist lists two
+    // segments and ends with ENDLIST; each segment returns some bytes.
+    const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=320000\nsession/s/base/index.m3u8\n";
+    const media =
+      "#EXTM3U\n#EXT-X-TARGETDURATION:1\n" +
+      "#EXTINF:1.0,\nseg0.ts\n#EXTINF:1.0,\nseg1.ts\n#EXT-X-ENDLIST\n";
     const fetchFn = vi.fn(async (url: string) => {
       urls.push(url);
-      return new Response("MP3", { status: 200, headers: { "content-type": "audio/mpeg" } });
+      if (url.includes("start.m3u8")) {
+        return new Response(master, { status: 200 });
+      }
+      if (url.includes("index.m3u8")) {
+        return new Response(media, { status: 200 });
+      }
+      if (url.includes(".ts")) {
+        // seg0 → "AAA", seg1 → "BBB"
+        return new Response(url.includes("seg0") ? "AAA" : "BBB", { status: 200 });
+      }
+      // stop session
+      return new Response("", { status: 200 });
     });
     const mgr = new DownloadManager({
       store: store as never,
@@ -89,18 +106,50 @@ describe("DownloadManager", () => {
       fetch: fetchFn as never,
       endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
       clientId: "cid",
-      getQuality: () => ({ mode: "mp3", bitrateKbps: 192 }),
+      getQuality: () => ({ mode: "aac", bitrateKbps: 192 }),
       onProgress: () => {},
     });
     await mgr.enqueue([job("b")]);
     await mgr.drain();
-    const start = urls.find((u) => u.includes("/audio/:/transcode/universal/start.mp3"));
-    expect(start).toBeDefined();
-    expect(start).toContain("musicBitrate=192");
+
+    // The transcode session was started via the HLS start URL.
+    expect(urls.some((u) => u.includes("/music/:/transcode/universal/start.m3u8"))).toBe(true);
+    // The concatenated segment bytes are stored.
+    expect(store.files.has("b")).toBe(true);
+    expect(store.files.get("b")).toBe("AAABBB");
+    expect(index.get("b")?.state).toBe("downloaded");
+    expect(index.get("b")?.format).toBe("aac");
     // The best-effort stop call must use the same injected fetch (so a custom
     // TLS client applies to it too), not globalThis.fetch.
     expect(urls.some((u) => u.includes("/audio/:/transcode/universal/stop"))).toBe(true);
-    expect(index.get("b")?.format).toBe("mp3");
+  });
+
+  it("HLS: a media playlist without ENDLIST is treated as incomplete and stores nothing", async () => {
+    const store = fakeStore();
+    const index = new DownloadIndex([], () => {});
+    const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=320000\nsession/s/base/index.m3u8\n";
+    // No #EXT-X-ENDLIST → the transcode is still producing; we must not publish.
+    const media = "#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1.0,\nseg0.ts\n";
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.includes("start.m3u8")) return new Response(master, { status: 200 });
+      if (url.includes("index.m3u8")) return new Response(media, { status: 200 });
+      if (url.includes(".ts")) return new Response("AAA", { status: 200 });
+      return new Response("", { status: 200 });
+    });
+    const mgr = new DownloadManager({
+      store: store as never,
+      index,
+      fetch: fetchFn as never,
+      endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
+      clientId: "cid",
+      getQuality: () => ({ mode: "aac", bitrateKbps: 192 }),
+      onProgress: () => {},
+    });
+    await mgr.enqueue([job("h")]);
+    await mgr.drain();
+    expect(store.files.has("h")).toBe(false);
+    expect(index.get("h")?.state).toBe("failed");
+    expect(index.get("h")?.error).toBe("incomplete playlist (no ENDLIST)");
   });
 
   it("marks failed on non-200 and stores nothing", async () => {

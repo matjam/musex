@@ -1118,7 +1118,7 @@ export function registerIpc(rt: Runtime): void {
       typeof q !== "object" ||
       q === null ||
       ((q as Record<string, unknown>).mode !== "original" &&
-        (q as Record<string, unknown>).mode !== "mp3") ||
+        (q as Record<string, unknown>).mode !== "aac") ||
       !(TRANSCODE_BITRATES as readonly number[]).includes(
         (q as Record<string, unknown>).bitrateKbps as number,
       )
