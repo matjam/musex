@@ -1,6 +1,6 @@
 import type { Track } from "@musex/core";
 import { describe, expect, it } from "vitest";
-import { groupTracksByAlbum } from "./group-tracks-by-album";
+import { groupTracksByAlbum } from "./group-tracks-by-album.js";
 
 function track(over: Partial<Track> & { albumId: string }): Track {
   return {

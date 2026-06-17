@@ -9,6 +9,7 @@ export * from "./logic/external-url";
 export * from "./logic/for-you";
 export * from "./logic/format";
 export * from "./logic/genres";
+export * from "./logic/group-tracks-by-album";
 export * from "./logic/library-select";
 export * from "./logic/library-sort";
 export * from "./logic/library-watch";
