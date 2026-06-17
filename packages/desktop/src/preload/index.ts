@@ -9,6 +9,7 @@ import type {
   NavigateToPayload,
   PlaybackEngineEvent,
   PluginNotification,
+  StorageQualityDto,
 } from "../shared/ipc-contract.js";
 import { IPC } from "../shared/ipc-contract.js";
 
@@ -155,6 +156,8 @@ const api: MusexApi = {
     ipcRenderer.on(IPC.connectivityChanged, listener);
     return () => ipcRenderer.removeListener(IPC.connectivityChanged, listener);
   },
+  storageGetQuality: () => ipcRenderer.invoke(IPC.storageGetQuality),
+  storageSetQuality: (q: StorageQualityDto) => ipcRenderer.invoke(IPC.storageSetQuality, q),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

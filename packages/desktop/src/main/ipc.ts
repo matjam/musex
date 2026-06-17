@@ -1,5 +1,11 @@
-import type { Album, Artist, LibrarySort, Queue, Track } from "@musex/core";
-import { createPlaylist, discoverMusicLibraries, isHttpUrl, pickDefaultLibrary } from "@musex/core";
+import type { Album, Artist, LibrarySort, Queue, StorageQuality, Track } from "@musex/core";
+import {
+  createPlaylist,
+  discoverMusicLibraries,
+  isHttpUrl,
+  pickDefaultLibrary,
+  TRANSCODE_BITRATES,
+} from "@musex/core";
 import type { SectionContext } from "@musex/plugin-api";
 import { ipcMain, shell } from "electron";
 import { buildAf, replaygainMode, sanitizeAudioPrefs } from "../logic/audio-filters.js";
@@ -1070,4 +1076,22 @@ export function registerIpc(rt: Runtime): void {
   // Connectivity: the current online/offline state for the renderer's initial
   // read (flips after this arrive via the connectivityChanged push).
   ipcMain.handle(IPC.getConnectivity, () => ({ online: rt.connectivityMonitor.online }));
+
+  // ── Storage quality (download transcoding) ────────────────────────────────
+  ipcMain.handle(IPC.storageGetQuality, () => persistence.getStorageQuality());
+
+  ipcMain.handle(IPC.storageSetQuality, (_e, q: unknown) => {
+    if (
+      typeof q !== "object" ||
+      q === null ||
+      ((q as Record<string, unknown>).mode !== "original" &&
+        (q as Record<string, unknown>).mode !== "mp3") ||
+      !(TRANSCODE_BITRATES as readonly number[]).includes(
+        (q as Record<string, unknown>).bitrateKbps as number,
+      )
+    ) {
+      throw new Error("invalid storage quality");
+    }
+    persistence.setStorageQuality(q as StorageQuality);
+  });
 }
