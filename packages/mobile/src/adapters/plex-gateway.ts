@@ -78,7 +78,7 @@ export class PlexGatewayImpl implements PlexGateway {
   async listMusicLibraries(server: Server, token: string): Promise<Library[]> {
     const base = await this.resolveBaseUrl(server, token);
     const json = await this.getJson(`${base}/library/sections`, token);
-    return parseLibraries(json, server.id, server.name);
+    return parseLibraries(json, server.id, server.name, server.owned, server.sourceTitle);
   }
 
   async listArtists(library: Library, token: string): Promise<Artist[]> {

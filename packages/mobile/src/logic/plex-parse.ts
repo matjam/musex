@@ -99,7 +99,13 @@ export function parsePlaylistTracks(json: unknown, serverId: string): PlaylistTr
   return out;
 }
 
-export function parseLibraries(json: unknown, serverId: string, serverName: string): Library[] {
+export function parseLibraries(
+  json: unknown,
+  serverId: string,
+  serverName: string,
+  owned?: boolean,
+  sourceTitle?: string,
+): Library[] {
   return arr(container(json).Directory)
     .filter((d) => d.type === "artist")
     .map((d) => {
@@ -111,6 +117,8 @@ export function parseLibraries(json: unknown, serverId: string, serverName: stri
         title: str(d.title) ?? "",
         type: "music" as const,
         updatedAt: updated ? updated * 1000 : undefined,
+        owned,
+        sourceTitle,
       };
     });
 }
@@ -122,6 +130,8 @@ export function parseServers(json: unknown): Server[] {
     .map((r) => ({
       id: String(r.clientIdentifier),
       name: str(r.name) ?? "",
+      owned: Boolean(r.owned),
+      sourceTitle: str(r.sourceTitle),
       connections: arr(r.connections).map((c) => ({
         uri: str(c.uri) ?? "",
         local: Boolean(c.local),

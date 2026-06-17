@@ -4,6 +4,7 @@ import {
   parseLibraries,
   parsePlaylists,
   parsePlaylistTracks,
+  parseServers,
   parseTracks,
 } from "./plex-parse";
 
@@ -156,5 +157,24 @@ describe("parsePlaylistTracks", () => {
       MediaContainer: { Metadata: [{ ratingKey: "9", playlistItemID: "1", title: "x" }] },
     };
     expect(parsePlaylistTracks(json, "srv")).toHaveLength(0);
+  });
+});
+
+describe("parseServers ownership", () => {
+  it("maps owned + sourceTitle", () => {
+    const servers = parseServers([
+      { clientIdentifier: "a", name: "Mine", provides: "server", owned: true, connections: [] },
+      { clientIdentifier: "b", name: "Friend", provides: "server", owned: false, sourceTitle: "Pat", connections: [] },
+    ]);
+    expect(servers[0]).toMatchObject({ id: "a", owned: true });
+    expect(servers[1]).toMatchObject({ id: "b", owned: false, sourceTitle: "Pat" });
+  });
+});
+
+describe("parseLibraries ownership", () => {
+  const json = { MediaContainer: { Directory: [{ key: "3", title: "Music", type: "artist" }] } };
+  it("stamps owned + sourceTitle from the server", () => {
+    expect(parseLibraries(json, "srv", "Mine", true, undefined)[0]).toMatchObject({ id: "3", owned: true });
+    expect(parseLibraries(json, "srv", "Friend", false, "Pat")[0]).toMatchObject({ owned: false, sourceTitle: "Pat" });
   });
 });
