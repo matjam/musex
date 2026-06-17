@@ -3,10 +3,12 @@ import { createPlaylist, discoverMusicLibraries, isHttpUrl, pickDefaultLibrary }
 import type { SectionContext } from "@musex/plugin-api";
 import { ipcMain, shell } from "electron";
 import { buildAf, replaygainMode, sanitizeAudioPrefs } from "../logic/audio-filters.js";
+import { cacheKey } from "../logic/cache.js";
 import { parseProxyPath } from "../logic/proxy-url.js";
 import type {
   AcquirableAlbumDto,
   ArtistInfoDto,
+  AvailabilityDto,
   ExpansionEntryDto,
   ExpansionStateDto,
   ExternalArtistResultDto,
@@ -66,6 +68,25 @@ function isTrackInfo(t: unknown): t is TrackInfo {
     typeof m.artistName === "string" &&
     typeof m.durationMs === "number" &&
     Number.isFinite(m.durationMs)
+  );
+}
+
+/** Shape check for a renderer-supplied Track headed for offline download —
+ *  enqueueDownloads dereferences serverId, id, and media.partKey, so all three
+ *  must be present (IPC input is untrusted). Malformed entries are dropped. */
+function isDownloadableTrack(t: unknown): t is Track {
+  if (typeof t !== "object" || t === null) return false;
+  const m = t as Record<string, unknown>;
+  const media = m.media as Record<string, unknown> | null | undefined;
+  return (
+    typeof m.serverId === "string" &&
+    m.serverId.length > 0 &&
+    typeof m.id === "string" &&
+    m.id.length > 0 &&
+    typeof media === "object" &&
+    media !== null &&
+    typeof media.partKey === "string" &&
+    media.partKey.length > 0
   );
 }
 
@@ -977,4 +998,67 @@ export function registerIpc(rt: Runtime): void {
     if (!rt.lastfmService?.connect) throw new Error("Last.fm service not started");
     return rt.lastfmService.connect();
   });
+
+  // ── Offline downloads ─────────────────────────────────────────────────────
+  ipcMain.handle(IPC.downloadsList, () => rt.downloadIndex.list());
+
+  ipcMain.handle(IPC.removeDownload, (_e, key: unknown) => {
+    if (typeof key !== "string" || !key) throw new Error("invalid download key");
+    return rt.downloadManager.removeDownload(key);
+  });
+
+  // The renderer holds the Track objects already, so it passes them straight
+  // through (no trackId round-trip). Shape-check: IPC input is untrusted, and
+  // enqueueDownloads dereferences serverId/id/media.partKey.
+  ipcMain.handle(IPC.downloadTracks, async (_e, tracks: unknown, _libraryId: unknown) => {
+    if (!Array.isArray(tracks)) throw new Error("invalid tracks");
+    const valid = tracks.filter(isDownloadableTrack);
+    if (valid.length === 0) return;
+    await rt.enqueueDownloads(valid);
+  });
+
+  ipcMain.handle(IPC.downloadAlbum, async (_e, albumId: unknown, libraryId: unknown) => {
+    if (typeof albumId !== "string" || !albumId) throw new Error("invalid album id");
+    if (typeof libraryId !== "string" || !libraryId) throw new Error("invalid library id");
+    const lib = rt.findLibrary(libraryId);
+    await rt.ensureProxyEndpoint(lib.serverId);
+    const tracks = await rt.gateway.listTracks(lib, albumId, rt.requireToken());
+    await rt.enqueueDownloads(tracks);
+  });
+
+  // No single artist→tracks gateway call exists, so expand albums → tracks.
+  ipcMain.handle(IPC.downloadArtist, async (_e, artistId: unknown, libraryId: unknown) => {
+    if (typeof artistId !== "string" || !artistId) throw new Error("invalid artist id");
+    if (typeof libraryId !== "string" || !libraryId) throw new Error("invalid library id");
+    const lib = rt.findLibrary(libraryId);
+    await rt.ensureProxyEndpoint(lib.serverId);
+    const token = rt.requireToken();
+    const albums = await rt.gateway.listAlbums(lib, artistId, token);
+    const tracks: Track[] = [];
+    for (const album of albums) {
+      tracks.push(...(await rt.gateway.listTracks(lib, album.id, token)));
+    }
+    await rt.enqueueDownloads(tracks);
+  });
+
+  // Per-path local availability: downloaded (pinned store) and/or cached (LRU).
+  // Keyed identically to what the proxy computes when streaming.
+  ipcMain.handle(
+    IPC.localAvailability,
+    async (_e, serverId: unknown, plexPaths: unknown): Promise<AvailabilityDto[]> => {
+      if (typeof serverId !== "string" || !serverId) throw new Error("invalid serverId");
+      if (!Array.isArray(plexPaths)) throw new Error("invalid plexPaths");
+      const paths = plexPaths.filter((p): p is string => typeof p === "string" && p.length > 0);
+      return Promise.all(
+        paths.map(async (p) => {
+          const k = cacheKey(serverId, p);
+          const [downloaded, cachedPath] = await Promise.all([
+            rt.downloadStore.has(k),
+            rt.cache.pathIfPresent(k),
+          ]);
+          return { plexPath: p, downloaded, cached: cachedPath !== null };
+        }),
+      );
+    },
+  );
 }

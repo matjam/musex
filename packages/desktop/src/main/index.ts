@@ -88,6 +88,9 @@ app.whenReady().then(async () => {
     runtime.setLibraryChangedSink((lib) => {
       if (!win.isDestroyed()) win.webContents.send(IPC.libraryChanged, lib);
     });
+    runtime.setDownloadProgressSink((e) => {
+      if (!win.isDestroyed()) win.webContents.send(IPC.downloadsProgress, e);
+    });
     // Rebuilt per window so Help → Keyboard Shortcuts targets the current one
     // (setApplicationMenu is idempotent; stale closures would hit a destroyed
     // window after macOS re-activate).

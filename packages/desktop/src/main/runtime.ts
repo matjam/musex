@@ -1,18 +1,21 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Library, Pin, Track } from "@musex/core";
-import { isHttpUrl, TasteProfile } from "@musex/core";
+import type { DownloadJob, Library, Pin, Track } from "@musex/core";
+import { dedupeJobs, isHttpUrl, reconcileRecords, TasteProfile } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { app, shell } from "electron";
 import { buildAf, replaygainMode } from "../logic/audio-filters.js";
+import { cacheKey } from "../logic/cache.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
+import { DownloadIndex } from "./adapters/download-index.js";
+import { DownloadStore } from "./adapters/download-store.js";
 import { LibraryWatcher } from "./adapters/library-watcher.js";
 import { ListCacheStore } from "./adapters/list-cache-store.js";
 import { MediaCache } from "./adapters/media-cache.js";
 import { MpvController } from "./adapters/mpv-controller.js";
 import { resolveMpvPaths } from "./adapters/mpv-paths.js";
-import { persistence } from "./adapters/persistence.js";
+import { getClientId, persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
 import {
   isSecureStorageAvailable,
@@ -21,6 +24,7 @@ import {
 } from "./adapters/secure-store-host.js";
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
+import { DownloadManager, type DownloadProgressEvent } from "./download/download-manager.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";
 import { LastfmService } from "./lastfm/service.js";
 import { CORE_PLUGINS } from "./plugins/core-plugins.js";
@@ -49,6 +53,14 @@ export class Runtime {
   readonly proxy = new StreamProxy();
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
   readonly artCache = new MediaCache(path.join(app.getPath("userData"), "art-cache"));
+  /** Pinned on-disk store for offline downloads (never evicts). Served by the
+   *  proxy before the LRU media cache. */
+  readonly downloadStore = new DownloadStore(path.join(app.getPath("userData"), "downloads"));
+  /** In-memory index of download records, persisted via electron-store.
+   *  Constructed in init() once the on-disk store has been reconciled. */
+  downloadIndex!: DownloadIndex;
+  /** Sequential download worker. Constructed in init(). */
+  downloadManager!: DownloadManager;
   /** Constructed in init() — resolveMpvPaths needs `app` ready and throws if
    *  mpv can't be found. Null when mpv is unavailable (Linux with no system mpv,
    *  or unsupported platform); playback IPC handlers surface mpvUnavailableReason. */
@@ -69,6 +81,8 @@ export class Runtime {
   libraryWatcher!: LibraryWatcher;
   /** Set by main/index per window (same pattern as pluginNotifySink). */
   private libraryChangedSink: ((lib: Library) => void) | null = null;
+  /** Set by main/index per window; download progress transitions flow through it. */
+  private downloadProgressSink: ((e: DownloadProgressEvent) => void) | null = null;
   /** Constructed in init() — drives the plugin events pipeline (trackStarted/
    *  paused/resumed/trackEnded/scrobble) + the recently-played history. */
   playbackMonitor!: PlaybackMonitor;
@@ -97,6 +111,10 @@ export class Runtime {
     this.libraryChangedSink = sink;
   }
 
+  setDownloadProgressSink(sink: ((e: DownloadProgressEvent) => void) | null): void {
+    this.downloadProgressSink = sink;
+  }
+
   async init(): Promise<void> {
     try {
       this.mpv = new MpvController(resolveMpvPaths());
@@ -122,6 +140,32 @@ export class Runtime {
     await this.artCache.init();
     this.proxy.setArtCache(this.artCache, ART_CACHE_MAX_BYTES);
     await this.proxy.start();
+
+    // Offline downloads: the on-disk store is served by the proxy before the LRU
+    // cache and upstream. Reconcile persisted records against what's actually on
+    // disk (a 'downloaded' record whose file vanished → 'missing'), persist the
+    // reconciled list, then build the index + the sequential download worker.
+    await this.downloadStore.init();
+    this.proxy.configureDownloads(this.downloadStore);
+    const reconciled = reconcileRecords(
+      persistence.getDownloadRecords(),
+      new Set(await this.downloadStore.listKeys()),
+    );
+    persistence.setDownloadRecords(reconciled);
+    this.downloadIndex = new DownloadIndex(reconciled, (all) =>
+      persistence.setDownloadRecords(all),
+    );
+    this.downloadManager = new DownloadManager({
+      store: this.downloadStore,
+      index: this.downloadIndex,
+      fetch: globalThis.fetch,
+      // The manager needs {baseUrl, token}; the gateway's endpoint() returns
+      // exactly that. Close over the live token (downloads require sign-in).
+      endpoint: (serverId) => this.gateway.endpoint(serverId, this.requireToken()),
+      clientId: getClientId(),
+      getQuality: () => persistence.getStorageQuality(),
+      onProgress: (e) => this.downloadProgressSink?.(e),
+    });
 
     const tasteState = persistence.getTasteState();
     if (tasteState) this.tasteProfile.load(tasteState);
@@ -320,6 +364,31 @@ export class Runtime {
     const lib = this.libraries.find((l) => l.id === libraryId);
     if (!lib) throw new Error(`unknown library ${libraryId}`);
     return lib;
+  }
+
+  /** Queue a set of tracks for offline download. The download key is keyed
+   *  IDENTICALLY to what the stream proxy computes when the track streams
+   *  (`cacheKey(serverId, media.partKey)`) — that's what makes the proxy serve
+   *  the downloaded file first. Already-present/queued keys are dropped. */
+  async enqueueDownloads(tracks: Track[]): Promise<void> {
+    const jobs: DownloadJob[] = tracks.map((track) => ({
+      key: cacheKey(track.serverId, track.media.partKey),
+      serverId: track.serverId,
+      plexPath: track.media.partKey,
+      trackId: track.id,
+      meta: {
+        title: track.title,
+        artistName: track.artistName,
+        albumTitle: track.albumTitle,
+        durationMs: track.durationMs,
+        thumb: track.thumb,
+        trackNumber: track.trackNumber,
+        albumId: track.albumId,
+        artistId: track.artistId,
+      },
+    }));
+    const fresh = dedupeJobs(jobs, new Set(this.downloadIndex.list().map((r) => r.key)));
+    await this.downloadManager.enqueue(fresh);
   }
 
   // ── Last.fm secret helpers (base64 safeStorage blobs in plugin-secrets dir) ─

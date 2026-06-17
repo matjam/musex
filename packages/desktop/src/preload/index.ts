@@ -1,6 +1,7 @@
 import type { Library } from "@musex/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  DownloadProgressDto,
   LastfmConfigDto,
   LastfmConfigPatchDto,
   LogEntryDto,
@@ -135,6 +136,19 @@ const api: MusexApi = {
   lastfmGetConfig: () => ipcRenderer.invoke(IPC.lastfmGetConfig) as Promise<LastfmConfigDto>,
   lastfmSetConfig: (patch: LastfmConfigPatchDto) => ipcRenderer.invoke(IPC.lastfmSetConfig, patch),
   lastfmConnect: () => ipcRenderer.invoke(IPC.lastfmConnect),
+  downloadTracks: (tracks, libraryId) => ipcRenderer.invoke(IPC.downloadTracks, tracks, libraryId),
+  downloadAlbum: (albumId, libraryId) => ipcRenderer.invoke(IPC.downloadAlbum, albumId, libraryId),
+  downloadArtist: (artistId, libraryId) =>
+    ipcRenderer.invoke(IPC.downloadArtist, artistId, libraryId),
+  removeDownload: (key) => ipcRenderer.invoke(IPC.removeDownload, key),
+  downloadsList: () => ipcRenderer.invoke(IPC.downloadsList),
+  onDownloadsProgress: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, evt: DownloadProgressDto) => cb(evt);
+    ipcRenderer.on(IPC.downloadsProgress, listener);
+    return () => ipcRenderer.removeListener(IPC.downloadsProgress, listener);
+  },
+  localAvailability: (serverId, plexPaths) =>
+    ipcRenderer.invoke(IPC.localAvailability, serverId, plexPaths),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

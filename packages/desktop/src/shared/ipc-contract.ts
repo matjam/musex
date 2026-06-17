@@ -1,6 +1,8 @@
 import type {
   Album,
   Artist,
+  DownloadRecord,
+  DownloadStatus,
   Library,
   LibrarySort,
   Playlist,
@@ -119,6 +121,14 @@ export const IPC = {
   lastfmGetConfig: "musex:lastfm:getConfig", // -> LastfmConfigDto
   lastfmSetConfig: "musex:lastfm:setConfig", // (LastfmConfigPatchDto) -> void
   lastfmConnect: "musex:lastfm:connect", // -> { ok: boolean; message: string }
+  // Offline downloads
+  downloadTracks: "musex:downloads:tracks", // (tracks: Track[], libraryId) -> void
+  downloadAlbum: "musex:downloads:album", // (albumId, libraryId) -> void
+  downloadArtist: "musex:downloads:artist", // (artistId, libraryId) -> void
+  removeDownload: "musex:downloads:remove", // (key) -> void
+  downloadsList: "musex:downloads:list", // -> DownloadDto[]
+  downloadsProgress: "musex:downloads:progress", // push: main -> renderer DownloadProgressDto
+  localAvailability: "musex:downloads:availability", // (serverId, plexPaths[]) -> AvailabilityDto[]
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -376,6 +386,26 @@ export type LastfmConfigPatchDto = {
   loveOnRating?: boolean;
 };
 
+// ── Offline downloads ─────────────────────────────────────────────────────
+
+/** One offline-download record on the wire (the core DownloadRecord verbatim). */
+export type DownloadDto = DownloadRecord;
+
+/** Download progress pushed main → renderer. Structurally identical to the
+ *  main-process DownloadManager's DownloadProgressEvent — re-declared here (like
+ *  PlaybackEngineEvent / AudioPrefsDto) so preload never imports main-process
+ *  logic. Keep the two in lockstep. */
+export type DownloadProgressDto = {
+  key: string;
+  state: DownloadStatus;
+  bytes: number;
+  error?: string;
+};
+
+/** Local availability for one Plex part path: present in the pinned download
+ *  store and/or the LRU media cache. */
+export type AvailabilityDto = { plexPath: string; downloaded: boolean; cached: boolean };
+
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
   /** The platform the main process is running on (e.g. "darwin", "linux",
@@ -547,4 +577,18 @@ export interface MusexApi {
   lastfmSetConfig(patch: LastfmConfigPatchDto): Promise<void>;
   /** Start the Last.fm account auth flow (opens browser, polls until approved or timeout). */
   lastfmConnect(): Promise<{ ok: boolean; message: string }>;
+  /** Queue specific tracks for offline download (renderer already holds the Track objects). */
+  downloadTracks(tracks: Track[], libraryId: string): Promise<void>;
+  /** Queue every track of an album for offline download. */
+  downloadAlbum(albumId: string, libraryId: string): Promise<void>;
+  /** Queue every track by an artist for offline download. */
+  downloadArtist(artistId: string, libraryId: string): Promise<void>;
+  /** Remove a download (deletes the file + the index record) by its store key. */
+  removeDownload(key: string): Promise<void>;
+  /** All offline-download records (queued / downloading / downloaded / failed / missing). */
+  downloadsList(): Promise<DownloadDto[]>;
+  /** Subscribe to download progress pushes; returns an unsubscribe function. */
+  onDownloadsProgress(cb: (e: DownloadProgressDto) => void): () => void;
+  /** Per-path local availability (pinned download store + LRU media cache). */
+  localAvailability(serverId: string, plexPaths: string[]): Promise<AvailabilityDto[]>;
 }
