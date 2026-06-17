@@ -57,6 +57,14 @@ export class StreamProxy {
   private cache: MediaCache | null = null;
   private readCacheConfig: (() => CacheConfig) | null = null;
 
+  /** Pinned downloads store. Structural type (not the DownloadStore class) keeps
+   *  the proxy decoupled and lets tests inject a fake. Downloads are independent
+   *  of the LRU cache config — served whether or not caching is enabled. */
+  private downloads: {
+    pathIfPresent(key: string): Promise<string | null>;
+    has(key: string): Promise<boolean>;
+  } | null = null;
+
   private artCache: MediaCache | null = null;
   private artMaxBytes = 0;
 
@@ -76,6 +84,14 @@ export class StreamProxy {
   configureCache(cache: MediaCache, readConfig: () => CacheConfig): void {
     this.cache = cache;
     this.readCacheConfig = readConfig;
+  }
+
+  /** Attach the pinned downloads store (served before the LRU cache and upstream). */
+  configureDownloads(store: {
+    pathIfPresent(key: string): Promise<string | null>;
+    has(key: string): Promise<boolean>;
+  }): void {
+    this.downloads = store;
   }
 
   async start(): Promise<void> {
@@ -184,6 +200,17 @@ export class StreamProxy {
       }
     }
 
+    // Pinned downloads win over everything: served before the LRU cache and
+    // upstream, independent of cacheEnabled (the download key is the SAME
+    // cacheKey(serverId, plexPath) the cache uses). Works full + range, offline.
+    if (this.downloads && isCacheablePath(plexPath)) {
+      const dlHit = await this.downloads.pathIfPresent(cacheKey(serverId, plexPath));
+      if (dlHit) {
+        await this.serveFromFile(req, res, dlHit, contentTypeForPath(plexPath));
+        return;
+      }
+    }
+
     // Serve from disk if we have a complete copy (works for full + range, even offline).
     if (cachingOn && this.cache && key) {
       const hit = await this.cache.pathIfPresent(key);
@@ -209,12 +236,17 @@ export class StreamProxy {
     const headers: http.OutgoingHttpHeaders = {};
     if (req.headers.range) headers.Range = req.headers.range;
 
+    // Never write a pinned download into the LRU cache (it already lives in the
+    // downloads store under the same key). downloads.has is async, so hoist it
+    // out of the synchronous writer guard below.
+    const isDownloaded = key && this.downloads ? await this.downloads.has(key) : false;
+
     // Only the full-file GET (no Range) populates the audio cache; partials are not cached.
     // Art paths always use the art cache (full GET; no Range on art).
     const writer =
       art && this.artCache
         ? this.artCache.beginWrite(cacheKey(serverId, plexPath), this.artMaxBytes)
-        : cachingOn && this.cache && key && !req.headers.range
+        : cachingOn && this.cache && key && !req.headers.range && !isDownloaded
           ? this.cache.beginWrite(key, cfg?.maxBytes ?? 0)
           : null;
 
@@ -447,6 +479,7 @@ export class StreamProxy {
       if (this.prefetchInflight.size >= PREFETCH_CONCURRENCY) return;
       if (this.prefetchInflight.has(w.key)) continue;
       if (!this.cache) return;
+      if (await this.downloads?.has(w.key)) continue; // pinned download — no double-store
       if (await this.cache.pathIfPresent(w.key)) continue; // already cached
       // Re-check capacity after the await (it may have filled).
       if (this.prefetchInflight.size >= PREFETCH_CONCURRENCY || this.prefetchInflight.has(w.key)) {
