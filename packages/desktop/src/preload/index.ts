@@ -143,6 +143,7 @@ const api: MusexApi = {
     ipcRenderer.invoke(IPC.downloadArtist, artistId, libraryId),
   removeDownload: (key) => ipcRenderer.invoke(IPC.removeDownload, key),
   downloadsList: () => ipcRenderer.invoke(IPC.downloadsList),
+  downloadedTracks: () => ipcRenderer.invoke(IPC.downloadedTracks),
   onDownloadsProgress: (cb) => {
     const listener = (_e: Electron.IpcRendererEvent, evt: DownloadProgressDto) => cb(evt);
     ipcRenderer.on(IPC.downloadsProgress, listener);

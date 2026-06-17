@@ -129,6 +129,7 @@ export const IPC = {
   removeDownload: "musex:downloads:remove", // (key) -> void
   downloadsList: "musex:downloads:list", // -> DownloadDto[]
   downloadsProgress: "musex:downloads:progress", // push: main -> renderer DownloadProgressDto
+  downloadedTracks: "musex:downloads:tracksForPlay", // -> Track[] (play-ready, thumbs re-baked)
   localAvailability: "musex:downloads:availability", // (serverId, plexPaths[]) -> AvailabilityDto[]
   // Connectivity (offline detection)
   getConnectivity: "musex:connectivity:get", // -> { online: boolean }
@@ -598,6 +599,10 @@ export interface MusexApi {
   removeDownload(key: string): Promise<void>;
   /** All offline-download records (queued / downloading / downloaded / failed / missing). */
   downloadsList(): Promise<DownloadDto[]>;
+  /** Play-ready Tracks reconstructed from the `downloaded` records (album-then-
+   *  track-number order), with art thumbs re-baked against the current proxy
+   *  secret. Plays fully offline (the proxy serves the pinned file first). */
+  downloadedTracks(): Promise<Track[]>;
   /** Subscribe to download progress pushes; returns an unsubscribe function. */
   onDownloadsProgress(cb: (e: DownloadProgressDto) => void): () => void;
   /** Per-path local availability (pinned download store + LRU media cache). */

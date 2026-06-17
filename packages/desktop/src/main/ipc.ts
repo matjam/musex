@@ -4,6 +4,7 @@ import {
   discoverMusicLibraries,
   isHttpUrl,
   pickDefaultLibrary,
+  recordsToTracks,
   TRANSCODE_BITRATES,
 } from "@musex/core";
 import type { SectionContext } from "@musex/plugin-api";
@@ -1007,6 +1008,34 @@ export function registerIpc(rt: Runtime): void {
 
   // ── Offline downloads ─────────────────────────────────────────────────────
   ipcMain.handle(IPC.downloadsList, () => rt.downloadIndex.list());
+
+  // Play-ready Tracks reconstructed from the downloaded records. Mirrors
+  // loadPlayback (ipc.ts ~258-268): ensure the proxy endpoint for every distinct
+  // server (so art + the eventual play work + the secret is current), then
+  // re-bake each thumb. Records store a STALE baked proxy URL (a past launch's
+  // secret), so parse it back to the raw plex path first, then re-bake with the
+  // current secret via rt.proxy.artUrl — exactly how loadPlayback re-bakes
+  // persisted thumbs, but with the parse step the persistence layer would
+  // otherwise have done on save. Unparseable thumbs drop to undefined rather
+  // than ship a broken URL.
+  ipcMain.handle(IPC.downloadedTracks, async (): Promise<Track[]> => {
+    const tracks = recordsToTracks(rt.downloadIndex.list());
+    const servers = new Set(tracks.map((t) => t.serverId));
+    for (const serverId of servers) {
+      try {
+        await rt.ensureProxyEndpoint(serverId);
+      } catch {
+        // best-effort (mirrors loadPlayback): offline/unreachable server still
+        // plays from the pinned download store; only its art may degrade.
+      }
+    }
+    return tracks.map((t) => {
+      if (!t.thumb) return t;
+      const parsed = parseProxyPath(t.thumb);
+      const thumb = parsed ? rt.proxy.artUrl(t.serverId, parsed.plexPath) : undefined;
+      return { ...t, thumb };
+    });
+  });
 
   ipcMain.handle(IPC.removeDownload, (_e, key: unknown) => {
     // The key becomes a path under userData/downloads via rm(join(dir, key)).
