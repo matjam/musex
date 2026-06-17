@@ -9,8 +9,10 @@ import {
 } from "../../../../logic/audio-filters";
 import type {
   AudioPrefsDto,
+  AvailablePluginDto,
   CacheStats,
   ExpansionStateDto,
+  FetchManifestResultDto,
   PluginInfo,
   PluginSettings,
   SettingField,
@@ -588,9 +590,70 @@ function statusChip(p: PluginInfo) {
   return <span className={`plugin-chip plugin-chip--${p.status}`}>{p.status}</span>;
 }
 
-/** Overview pane: reload row + per-user-plugin enable toggles + status chips.
- *  Core plugins appear as their own nav entries above Plugins; this pane covers
- *  user plugins only — folders dropped into the app's plugins directory.
+/** A single available-plugin row from a fetched manifest. */
+function AvailablePluginRow({
+  plugin,
+  busy,
+  onInstall,
+}: {
+  plugin: AvailablePluginDto;
+  busy: boolean;
+  onInstall: (plugin: AvailablePluginDto) => void;
+}) {
+  const isInstalled =
+    plugin.installedVersion !== undefined && plugin.installedVersion === plugin.version;
+  const hasUpdate =
+    plugin.installedVersion !== undefined && plugin.installedVersion !== plugin.version;
+
+  let actionLabel: string;
+  let actionDisabled: boolean;
+  if (!plugin.compatible) {
+    actionLabel = "Needs newer app";
+    actionDisabled = true;
+  } else if (isInstalled) {
+    actionLabel = "Installed";
+    actionDisabled = true;
+  } else if (hasUpdate) {
+    actionLabel = busy ? "Updating…" : "Update";
+    actionDisabled = busy;
+  } else {
+    actionLabel = busy ? "Installing…" : "Install";
+    actionDisabled = busy;
+  }
+
+  return (
+    <div className="settings-row">
+      <div className="settings-row-text">
+        <div className="settings-row-label">
+          {plugin.name} <span className="plugin-version">v{plugin.version}</span>
+          {plugin.installedVersion !== undefined ? (
+            <span className="plugin-chip plugin-chip--active">
+              {hasUpdate ? `installed v${plugin.installedVersion}` : "installed"}
+            </span>
+          ) : null}
+        </div>
+        {plugin.description ? <div className="settings-row-desc">{plugin.description}</div> : null}
+        {!plugin.compatible ? (
+          <div className="settings-row-desc error-text">
+            Requires plugin API v{plugin.apiVersion} — update the app to install.
+          </div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        className="settings-btn"
+        disabled={actionDisabled}
+        onClick={() => onInstall(plugin)}
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+/** Overview pane: reload row + "Add from GitHub" install section + per-user-plugin
+ *  enable toggles + status chips.  Core plugins appear as their own nav entries
+ *  above Plugins; this pane covers user plugins only.
  *  Settings fields are NOT shown here — use the plugin:<id> sub-entry for that. */
 function PluginsOverview({
   plugins,
@@ -603,49 +666,170 @@ function PluginsOverview({
   onReload: () => void;
   onChanged: () => void;
 }) {
+  const [repoUrl, setRepoUrl] = useState("");
+  const [available, setAvailable] = useState<FetchManifestResultDto | null>(null);
+  const [browsing, setBrowsing] = useState(false);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+  const [installingId, setInstallingId] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+
+  async function browse() {
+    if (!repoUrl.trim()) return;
+    setBrowsing(true);
+    setBrowseError(null);
+    setAvailable(null);
+    setInstallError(null);
+    try {
+      const result = await window.musex.pluginsFetchManifest(repoUrl.trim());
+      setAvailable(result);
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBrowsing(false);
+    }
+  }
+
+  async function install(plugin: AvailablePluginDto) {
+    if (!available) return;
+    const repo = available.repo;
+    const confirmed = window.confirm(
+      `Plugins run with full access to your computer. Only install plugins from sources you trust.\n\nInstall ${plugin.name} from ${repo}?`,
+    );
+    if (!confirmed) return;
+    setInstallingId(plugin.id);
+    setInstallError(null);
+    try {
+      await window.musex.pluginsInstall(repoUrl.trim(), plugin.id);
+      onChanged();
+      // Re-browse to refresh installed versions in the list.
+      const result = await window.musex.pluginsFetchManifest(repoUrl.trim());
+      setAvailable(result);
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInstallingId(null);
+    }
+  }
+
   const userPlugins = plugins === null ? null : plugins.filter((p) => p.origin === "user");
   return (
-    <div className="settings-section">
-      <div className="settings-section-title">Plugins</div>
-      <div className="settings-row">
-        <div className="settings-row-text">
-          <div className="settings-row-label">Installed plugins</div>
-          <div className="settings-row-desc">
-            User plugins are folders containing a plugin.json and an ESM entry dropped into the
-            app's plugins directory. They run with full trust in the main process. Reload to pick up
-            changes.
+    <>
+      <div className="settings-section">
+        <div className="settings-section-title">Add from GitHub</div>
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">Plugin repository</div>
+            <div className="settings-row-desc">
+              Paste a GitHub repo URL or owner/repo shorthand, then browse to see what's available.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              className="settings-input settings-input--text"
+              type="text"
+              placeholder="owner/repo or GitHub URL"
+              value={repoUrl}
+              onChange={(e) => setRepoUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void browse();
+              }}
+            />
+            <button
+              type="button"
+              className="settings-btn"
+              disabled={browsing || !repoUrl.trim()}
+              onClick={() => void browse()}
+            >
+              {browsing ? "Browsing…" : "Browse"}
+            </button>
           </div>
         </div>
-        <button type="button" className="settings-btn" disabled={reloading} onClick={onReload}>
-          {reloading ? "Reloading…" : "Reload plugins"}
-        </button>
+        {browseError ? (
+          <div className="settings-row">
+            <div className="settings-row-desc error-text">{browseError}</div>
+          </div>
+        ) : null}
+        {installError ? (
+          <div className="settings-row">
+            <div className="settings-row-desc error-text">{installError}</div>
+          </div>
+        ) : null}
+        {available !== null ? (
+          available.plugins.length === 0 ? (
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <div className="settings-row-desc">No plugins found in this repository.</div>
+              </div>
+            </div>
+          ) : (
+            available.plugins.map((p) => (
+              <AvailablePluginRow
+                key={p.id}
+                plugin={p}
+                busy={installingId === p.id}
+                onInstall={(plugin) => void install(plugin)}
+              />
+            ))
+          )
+        ) : null}
       </div>
-      {userPlugins === null ? (
+      <div className="settings-section">
+        <div className="settings-section-title">Installed plugins</div>
         <div className="settings-row">
           <div className="settings-row-text">
-            <div className="settings-row-desc">Loading plugins…</div>
+            <div className="settings-row-label">Manage plugins</div>
+            <div className="settings-row-desc">
+              User plugins are folders containing a plugin.json and an ESM entry dropped into the
+              app's plugins directory. They run with full trust in the main process. Reload to pick
+              up changes.
+            </div>
           </div>
+          <button type="button" className="settings-btn" disabled={reloading} onClick={onReload}>
+            {reloading ? "Reloading…" : "Reload plugins"}
+          </button>
         </div>
-      ) : userPlugins.length === 0 ? (
-        <div className="settings-row">
-          <div className="settings-row-text">
-            <div className="settings-row-desc">No plugins installed.</div>
+        {userPlugins === null ? (
+          <div className="settings-row">
+            <div className="settings-row-text">
+              <div className="settings-row-desc">Loading plugins…</div>
+            </div>
           </div>
-        </div>
-      ) : (
-        userPlugins.map((p) => <PluginsOverviewRow key={p.id} plugin={p} onChanged={onChanged} />)
-      )}
-    </div>
+        ) : userPlugins.length === 0 ? (
+          <div className="settings-row">
+            <div className="settings-row-text">
+              <div className="settings-row-desc">No plugins installed.</div>
+            </div>
+          </div>
+        ) : (
+          userPlugins.map((p) => <PluginsOverviewRow key={p.id} plugin={p} onChanged={onChanged} />)
+        )}
+      </div>
+    </>
   );
 }
 
-/** A single plugin row in the overview: name/version/status chip + enable toggle. */
+/** A single plugin row in the overview: name/version/status chip + enable toggle + uninstall. */
 function PluginsOverviewRow({ plugin, onChanged }: { plugin: PluginInfo; onChanged: () => void }) {
   const enabled = plugin.status !== "disabled";
+  const [uninstalling, setUninstalling] = useState(false);
 
   async function toggleEnabled() {
     await window.musex.pluginsSetEnabled(plugin.id, !enabled);
     onChanged();
+  }
+
+  async function uninstall() {
+    const confirmed = window.confirm(`Remove ${plugin.name}? This cannot be undone.`);
+    if (!confirmed) return;
+    setUninstalling(true);
+    try {
+      await window.musex.pluginsUninstall(plugin.id);
+      onChanged();
+    } catch (err) {
+      console.error("[plugins] uninstall failed:", err);
+    } finally {
+      setUninstalling(false);
+    }
   }
 
   return (
@@ -657,17 +841,29 @@ function PluginsOverviewRow({ plugin, onChanged }: { plugin: PluginInfo; onChang
         </div>
         {plugin.error ? <div className="settings-row-desc plugin-error">{plugin.error}</div> : null}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        aria-label={`Enable ${plugin.name}`}
-        className={`toggle${enabled ? " toggle--on" : ""}`}
-        disabled={plugin.status === "incompatible"}
-        onClick={() => void toggleEnabled()}
-      >
-        <span className="toggle-knob" />
-      </button>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {plugin.origin === "user" ? (
+          <button
+            type="button"
+            className="settings-btn danger"
+            disabled={uninstalling}
+            onClick={() => void uninstall()}
+          >
+            {uninstalling ? "Removing…" : "Uninstall"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={`Enable ${plugin.name}`}
+          className={`toggle${enabled ? " toggle--on" : ""}`}
+          disabled={plugin.status === "incompatible"}
+          onClick={() => void toggleEnabled()}
+        >
+          <span className="toggle-knob" />
+        </button>
+      </div>
     </div>
   );
 }
