@@ -1,22 +1,4 @@
 import type { ForYouInput, ForYouTrackStat, Track } from "@musex/core";
-import { smartTrackKey } from "@musex/core";
-
-/** Most-recently-played library tracks, joined from taste stats by track key. */
-export function recentlyPlayedTracks(
-  stats: { key: string; lastPlayedMs: number }[],
-  allTracks: Track[],
-  limit: number,
-): Track[] {
-  const byKey = new Map<string, Track>();
-  for (const t of allTracks) byKey.set(smartTrackKey(t), t);
-  return stats
-    .filter((s) => s.lastPlayedMs > 0)
-    .slice()
-    .sort((a, b) => b.lastPlayedMs - a.lastPlayedMs)
-    .map((s) => byKey.get(s.key))
-    .filter((t): t is Track => !!t)
-    .slice(0, limit);
-}
 
 /** Assemble ForYouInput for the mobile (seeds-only) For You mix: resolve top
  *  artist names to ids, group the library by artist, and leave similarOwned

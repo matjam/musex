@@ -1,10 +1,10 @@
 import type { Track } from "@musex/core";
+import { formatDuration } from "@musex/core";
 import { ArrowDownToLine, AudioLines, Check, MoreHorizontal } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useApp } from "../state/app";
 import { toTrackInfo } from "../state/player";
 import { useRatings } from "../state/ratings";
-import { formatDuration } from "../util/format";
 import { StarRating } from "./StarRating";
 import { TrackSubLinks } from "./TrackSubLinks";
 

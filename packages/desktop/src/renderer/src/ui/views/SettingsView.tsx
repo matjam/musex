@@ -1,5 +1,5 @@
 import type { Library } from "@musex/core";
-import { TRANSCODE_BITRATES } from "@musex/core";
+import { formatBytes, TRANSCODE_BITRATES } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
 import { Blocks, HardDrive, Music2, Puzzle, Settings2, Sparkles, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -22,7 +22,6 @@ import type {
   StorageQualityDto,
 } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
-import { formatBytes } from "../../util/format";
 
 declare const __APP_VERSION__: string;
 

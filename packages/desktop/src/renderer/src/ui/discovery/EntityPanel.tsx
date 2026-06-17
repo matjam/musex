@@ -1,5 +1,5 @@
 import type { Album, Track } from "@musex/core";
-import { listValidator, smartTrackKey } from "@musex/core";
+import { formatDuration, listValidator, relativeTime, smartTrackKey } from "@musex/core";
 import { AudioLines, ExternalLink, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ArtistInfoDto, TrackDetailDto, TrackStatDto } from "../../../../shared/ipc-contract";
@@ -7,7 +7,6 @@ import { useApp } from "../../state/app";
 import { type EntityPanelPayload, usePanel } from "../../state/panel";
 import { toTrackInfo, usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
-import { formatDuration, relativeTime } from "../../util/format";
 import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { StarRating } from "../StarRating";

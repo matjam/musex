@@ -1,4 +1,4 @@
-import type { Track } from "@musex/core";
+import type { Track } from "../models/index.js";
 
 /** One album's worth of playable downloaded tracks, for the "On this device" grid. */
 export interface TrackAlbumGroup {

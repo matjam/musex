@@ -1,10 +1,9 @@
 import type { Playlist, SmartKind, Track } from "@musex/core";
-import { SMART_TITLES, smartMixEmpty, smartMixThumbs } from "@musex/core";
+import { recentlyPlayedTracks, SMART_TITLES, smartMixEmpty, smartMixThumbs } from "@musex/core";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
-import { recentlyPlayedTracks } from "../../../src/logic/home-data";
 import { useStore } from "../../../src/state/store";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { Collage } from "../../../src/ui/Collage";

@@ -1,3 +1,4 @@
+import { formatDuration } from "@musex/core";
 import {
   ListMusic,
   PanelRight,
@@ -16,7 +17,6 @@ import { useApp } from "../state/app";
 import { usePanel } from "../state/panel";
 import { toTrackInfo, usePlayer } from "../state/player";
 import { useRatings } from "../state/ratings";
-import { formatDuration } from "../util/format";
 import { AlbumArt } from "./AlbumArt";
 import { StarRating } from "./StarRating";
 import { TrackSubLinks } from "./TrackSubLinks";

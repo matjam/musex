@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LOVED_RATING } from "../index.js";
 import type { Track } from "../models/index";
 import {
   computeSmartPlaylist,
@@ -230,5 +231,11 @@ describe("SMART_DESCRIPTIONS", () => {
   it("every smart kind has a tile description", () => {
     const kinds: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
     for (const k of kinds) expect(SMART_DESCRIPTIONS[k].length).toBeGreaterThan(0);
+  });
+});
+
+describe("LOVED_RATING", () => {
+  it("is the public 0–10 loved threshold (8 = 4 stars)", () => {
+    expect(LOVED_RATING).toBe(8);
   });
 });

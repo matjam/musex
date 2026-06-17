@@ -1,13 +1,16 @@
 // Models
 
 // Logic
+export * from "./logic/az-index";
 export * from "./logic/collage";
 export * from "./logic/discography-merge";
 export * from "./logic/download-plan";
 export * from "./logic/download-state";
 export * from "./logic/external-url";
 export * from "./logic/for-you";
+export * from "./logic/format";
 export * from "./logic/genres";
+export * from "./logic/group-tracks-by-album";
 export * from "./logic/library-select";
 export * from "./logic/library-sort";
 export * from "./logic/library-watch";
@@ -17,6 +20,7 @@ export * from "./logic/nav-history";
 export * from "./logic/offline-availability";
 export * from "./logic/play-monitor";
 export * from "./logic/plex-mapping";
+export * from "./logic/recently-played";
 export * from "./logic/smart-playlists";
 export * from "./logic/taste-expansion";
 export * from "./logic/taste-profile";
