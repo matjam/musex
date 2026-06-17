@@ -1,0 +1,17 @@
+import { Stack } from "expo-router";
+import { theme } from "../../../src/ui/theme";
+
+export default function SettingsLayout() {
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: theme.surface },
+        headerTintColor: theme.text,
+        contentStyle: { backgroundColor: theme.bg },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: "Settings" }} />
+      <Stack.Screen name="library" options={{ title: "Library" }} />
+    </Stack>
+  );
+}
