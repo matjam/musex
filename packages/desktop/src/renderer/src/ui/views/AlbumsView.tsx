@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
+import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
 import { SortSelector } from "../SortSelector";
 
 type FetchState =
@@ -15,6 +16,7 @@ export function AlbumsView() {
   const { library, dispatch } = useApp();
   const { playAlbum } = useCollectionPlay();
   const [sort, setSort] = useState<LibrarySort>("title");
+  const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {
@@ -58,7 +60,10 @@ export function AlbumsView() {
     <div className="browse-section">
       <div className="browse-header">
         <h3 className="browse-title">Albums</h3>
-        <SortSelector value={sort} onChange={setSort} />
+        <div className="browse-controls">
+          <LibraryFilter value={filter} onChange={setFilter} />
+          <SortSelector value={sort} onChange={setSort} />
+        </div>
       </div>
       <div className="browse-sub">
         {albums.length} album{albums.length !== 1 ? "s" : ""}

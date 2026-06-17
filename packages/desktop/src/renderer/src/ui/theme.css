@@ -679,6 +679,13 @@ html:not([data-platform="darwin"]) .topbar {
   font-size: 22px;
 }
 
+/* Inline cluster of browse controls (availability filter + sort). */
+.browse-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Artist/browse header row: title + optional action button inline */
 .artist-header {
   display: flex;

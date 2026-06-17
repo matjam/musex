@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
+import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
 
 type FetchState =
   | { status: "loading" }
@@ -13,6 +14,7 @@ type FetchState =
 export function ArtistsView() {
   const { library, dispatch } = useApp();
   const { playArtist } = useCollectionPlay();
+  const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {
@@ -54,7 +56,12 @@ export function ArtistsView() {
 
   return (
     <div className="browse-section">
-      <h3 className="browse-title">Artists</h3>
+      <div className="browse-header">
+        <h3 className="browse-title">Artists</h3>
+        <div className="browse-controls">
+          <LibraryFilter value={filter} onChange={setFilter} />
+        </div>
+      </div>
       <div className="browse-sub">
         {artists.length} artist{artists.length !== 1 ? "s" : ""}
       </div>
