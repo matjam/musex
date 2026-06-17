@@ -119,4 +119,30 @@ describe("PluginInstaller", () => {
     });
     await expect(inst.install("o/r", "demo")).rejects.toThrow(/safe entry|unsafe/i);
   });
+
+  it("rejects a path-traversal plugin id on uninstall (no rm of arbitrary dirs)", async () => {
+    const dir = await makeDir();
+    const inst = new PluginInstaller({
+      fetch: fakeFetch(new Uint8Array(), "0".repeat(64)),
+      pluginsDir: dir,
+      reload: vi.fn(async () => {}),
+      getSource: () => undefined,
+      setSource: () => {},
+    });
+    for (const bad of ["../evil", "..", "a/b", "foo/../bar", "."]) {
+      await expect(inst.uninstall(bad)).rejects.toThrow(/invalid plugin id|unsafe/i);
+    }
+  });
+
+  it("rejects a path-traversal plugin id on install (before any network/fs)", async () => {
+    const dir = await makeDir();
+    const inst = new PluginInstaller({
+      fetch: fakeFetch(new Uint8Array(), "0".repeat(64)),
+      pluginsDir: dir,
+      reload: vi.fn(async () => {}),
+      getSource: () => undefined,
+      setSource: () => {},
+    });
+    await expect(inst.install("o/r", "../../evil")).rejects.toThrow(/invalid plugin id|unsafe/i);
+  });
 });

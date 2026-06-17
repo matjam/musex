@@ -101,3 +101,10 @@ export function isSafeEntryName(name: string): boolean {
     name.length > 0 && !name.includes("/") && !name.includes("\\") && name !== "." && name !== ".."
   );
 }
+
+/** A plugin id safe to use as a filesystem path segment (musex's id format,
+ *  `^[a-z0-9-]+$`). Rejects path separators and `.`/`..` traversal — id reaches
+ *  the installer from IPC, so it must be validated before any fs path use. */
+export function isSafePluginId(id: string): boolean {
+  return ID_RE.test(id);
+}

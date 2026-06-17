@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { unzipSync } from "fflate";
 import {
   isSafeEntryName,
+  isSafePluginId,
   manifestRawUrls,
   parsePluginsManifest,
   parseRepoUrl,
@@ -59,7 +60,18 @@ export class PluginInstaller {
     };
   }
 
+  /** Resolve userData/plugins/<id>, validating `id` (which arrives from IPC)
+   *  before any fs use to prevent path traversal (e.g. id = "../../x"). */
+  private pluginDir(id: string): string {
+    if (!isSafePluginId(id)) throw new Error(`invalid plugin id: ${id}`);
+    const dir = join(this.deps.pluginsDir, id);
+    if (relative(this.deps.pluginsDir, dir).startsWith(".."))
+      throw new Error(`refusing unsafe plugin path for id: ${id}`);
+    return dir;
+  }
+
   async install(repoUrl: string, id: string): Promise<void> {
+    if (!isSafePluginId(id)) throw new Error(`invalid plugin id: ${id}`);
     const ref = parseRepoUrl(repoUrl);
     if (!ref) throw new Error("Not a valid GitHub repository URL");
     const manifest = parsePluginsManifest(await this.getJson(manifestRawUrls(ref)));
@@ -86,7 +98,7 @@ export class PluginInstaller {
     if (!isSafeEntryName(entryName)) throw new Error(`unsafe entry name: ${entryName}`);
     if (!files[entryName]) throw new Error(`bundle is missing its entry file "${entryName}"`);
 
-    const dir = join(this.deps.pluginsDir, id);
+    const dir = this.pluginDir(id);
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     // Whitelist: write ONLY plugin.json + the entry — never arbitrary zip members.
@@ -101,7 +113,8 @@ export class PluginInstaller {
   }
 
   async uninstall(id: string): Promise<void> {
-    await rm(join(this.deps.pluginsDir, id), { recursive: true, force: true });
+    const dir = this.pluginDir(id); // validates id before the recursive rm
+    await rm(dir, { recursive: true, force: true });
     this.deps.setSource(id, null);
     await this.deps.reload();
   }

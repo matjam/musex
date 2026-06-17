@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   isSafeEntryName,
+  isSafePluginId,
   manifestRawUrls,
   parsePluginsManifest,
   parseRepoUrl,
   parseSha256File,
   releaseAssetUrl,
 } from "./plugin-source";
+
+describe("isSafePluginId", () => {
+  it("allows musex ids, rejects traversal/separators", () => {
+    for (const ok of ["lidarr", "last-fm", "a", "x9-y"]) expect(isSafePluginId(ok)).toBe(true);
+    for (const bad of ["", "..", ".", "a/b", "a\\b", "../evil", "Foo", "a.b", "a b"])
+      expect(isSafePluginId(bad)).toBe(false);
+  });
+});
 
 describe("parseRepoUrl", () => {
   it("accepts the common forms", () => {
