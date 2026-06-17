@@ -129,6 +129,9 @@ export const IPC = {
   downloadsList: "musex:downloads:list", // -> DownloadDto[]
   downloadsProgress: "musex:downloads:progress", // push: main -> renderer DownloadProgressDto
   localAvailability: "musex:downloads:availability", // (serverId, plexPaths[]) -> AvailabilityDto[]
+  // Connectivity (offline detection)
+  getConnectivity: "musex:connectivity:get", // -> { online: boolean }
+  connectivityChanged: "musex:connectivity:changed", // push: main -> renderer { online: boolean }
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -591,4 +594,8 @@ export interface MusexApi {
   onDownloadsProgress(cb: (e: DownloadProgressDto) => void): () => void;
   /** Per-path local availability (pinned download store + LRU media cache). */
   localAvailability(serverId: string, plexPaths: string[]): Promise<AvailabilityDto[]>;
+  /** Current connectivity to the Plex server (online until repeated failures). */
+  getConnectivity(): Promise<{ online: boolean }>;
+  /** Subscribe to connectivity flips; returns an unsubscribe function. */
+  onConnectivityChanged(cb: (e: { online: boolean }) => void): () => void;
 }

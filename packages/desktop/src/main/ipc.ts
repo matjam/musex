@@ -1066,4 +1066,8 @@ export function registerIpc(rt: Runtime): void {
       );
     },
   );
+
+  // Connectivity: the current online/offline state for the renderer's initial
+  // read (flips after this arrive via the connectivityChanged push).
+  ipcMain.handle(IPC.getConnectivity, () => ({ online: rt.connectivityMonitor.online }));
 }

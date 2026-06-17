@@ -149,6 +149,12 @@ const api: MusexApi = {
   },
   localAvailability: (serverId, plexPaths) =>
     ipcRenderer.invoke(IPC.localAvailability, serverId, plexPaths),
+  getConnectivity: () => ipcRenderer.invoke(IPC.getConnectivity),
+  onConnectivityChanged: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, evt: { online: boolean }) => cb(evt);
+    ipcRenderer.on(IPC.connectivityChanged, listener);
+    return () => ipcRenderer.removeListener(IPC.connectivityChanged, listener);
+  },
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

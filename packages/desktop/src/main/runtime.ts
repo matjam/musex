@@ -8,6 +8,7 @@ import { buildAf, replaygainMode } from "../logic/audio-filters.js";
 import { cacheKey } from "../logic/cache.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
 import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
+import { ConnectivityMonitor } from "./adapters/connectivity-monitor.js";
 import { DownloadIndex } from "./adapters/download-index.js";
 import { DownloadStore } from "./adapters/download-store.js";
 import { LibraryWatcher } from "./adapters/library-watcher.js";
@@ -36,6 +37,9 @@ import { ProviderHub } from "./providers/provider-hub.js";
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
 /** Taste profile writes are debounced: one persist ~5s after the last mutation. */
 const TASTE_SAVE_DEBOUNCE_MS = 5_000;
+/** How often the connectivity recovery probe pings the current server. Kept
+ *  modest so a downed server is noticed quickly but the probe itself is cheap. */
+const CONNECTIVITY_PROBE_INTERVAL_MS = 20_000;
 
 // electron-vite bundles all main files into packages/desktop/out/main/index.js,
 // so __dirname here is packages/desktop/out/main/ → repo root is 4 levels up.
@@ -50,6 +54,10 @@ export class Runtime {
   readonly listCache = new ListCacheStore(path.join(app.getPath("userData"), "list-cache"));
   readonly gateway = new CachingPlexGateway(this.realGateway, this.listCache);
   readonly tokenStore = new SafeStorageTokenStore();
+  /** Debounced reachability state machine. Gateway calls feed it success/
+   *  failure; a periodic probe (started in init()) recovers it automatically.
+   *  A PlexAuthError never counts as offline (the monitor excludes it). */
+  readonly connectivityMonitor = new ConnectivityMonitor();
   readonly proxy = new StreamProxy();
   readonly cache = new MediaCache(path.join(app.getPath("userData"), "media-cache"));
   readonly artCache = new MediaCache(path.join(app.getPath("userData"), "art-cache"));
@@ -97,9 +105,15 @@ export class Runtime {
   private readonly registeredServers = new Set<string>();
   /** Set by main/index per window (like mpv's sink); plugins notify through it. */
   private pluginNotifySink: ((p: PluginNotification) => void) | null = null;
+  /** Set by main/index per window; connectivity flips flow through it. */
+  private connectivitySink: ((online: boolean) => void) | null = null;
 
   setPluginNotifySink(sink: ((p: PluginNotification) => void) | null): void {
     this.pluginNotifySink = sink;
+  }
+
+  setConnectivitySink(sink: ((online: boolean) => void) | null): void {
+    this.connectivitySink = sink;
   }
 
   /** Push a system notification through the same toast channel as plugin notifications. */
@@ -310,6 +324,37 @@ export class Runtime {
         this.libraryChangedSink?.(fresh);
       },
     });
+
+    // Connectivity: gateway calls feed the monitor success/failure (see
+    // ensureProxyEndpoint); a periodic probe recovers it automatically. Flips
+    // are pushed to the renderer through the per-window sink.
+    this.connectivityMonitor.onChange((online) => this.connectivitySink?.(online));
+    this.connectivityMonitor.start(() => this.probeReachability(), CONNECTIVITY_PROBE_INTERVAL_MS);
+  }
+
+  /** Recovery probe for the connectivity monitor. Resolves when the current
+   *  server answers (or returns an auth error — that's the sign-in flow's
+   *  problem, not an outage), rejects when it's genuinely unreachable.
+   *
+   *  When signed out / no server is known yet, it resolves as a NO-OP: "not
+   *  signed in" must never flip the app to offline. A PlexAuthError thrown by
+   *  endpoint() is allowed to propagate — the monitor's noteFailure excludes
+   *  it from the offline counter. */
+  private async probeReachability(): Promise<void> {
+    const token = this.token;
+    const serverId = this.libraries[0]?.serverId;
+    if (!token || !serverId) return; // signed out → no-op, never flap offline
+    // endpoint() reuses the cached connection (cheap); the real reachability
+    // test is the fetch against the server root, mirroring the gateway's own
+    // cold-probe query and the download manager's token-injected URL.
+    const ep = await this.gateway.endpoint(serverId, token);
+    const url = `${ep.baseUrl}/?X-Plex-Token=${encodeURIComponent(ep.token)}`;
+    const res = await globalThis.fetch(url);
+    // 401/403 = reachable-but-unauthorized: the server answered, so it is NOT
+    // an outage. Any other non-ok status (5xx, etc.) means the server is in
+    // trouble → treat as unreachable.
+    if (res.ok || res.status === 401 || res.status === 403) return;
+    throw new Error(`Plex server probe returned HTTP ${res.status}`);
   }
 
   async restore(): Promise<void> {
@@ -355,7 +400,16 @@ export class Runtime {
    *  Uses the cached gateway connection — no extra network round-trip after first browse. */
   async ensureProxyEndpoint(serverId: string): Promise<void> {
     if (this.registeredServers.has(serverId)) return;
-    const ep = await this.gateway.endpoint(serverId, this.requireToken());
+    let ep: { baseUrl: string; token: string };
+    try {
+      ep = await this.gateway.endpoint(serverId, this.requireToken());
+    } catch (err) {
+      // Feed the connectivity monitor (a PlexAuthError is excluded inside
+      // noteFailure), then re-throw UNCHANGED so existing handling is intact.
+      this.connectivityMonitor.noteFailure(err);
+      throw err;
+    }
+    this.connectivityMonitor.noteSuccess();
     this.proxy.registerServer(serverId, ep);
     this.registeredServers.add(serverId);
   }
