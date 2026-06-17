@@ -1,7 +1,8 @@
-import { formatBytes, groupDownloadsByAlbum } from "@musex/core";
+import { groupDownloadsByAlbum } from "@musex/core";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { DownloadDto } from "../../../../shared/ipc-contract";
+import { formatBytes } from "../../util/format";
 import { GridCard } from "../GridCard";
 
 type FetchState =
@@ -19,16 +20,16 @@ const ACTIVE_LABEL: Partial<Record<DownloadDto["state"], string>> = {
  *  (active strip) and finished (album-grouped tiles), with per-album removal
  *  and a total-storage figure. Live-updates from the download progress feed. */
 export function OnDeviceView() {
-  const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
+  const [fetchState, setFetchState] = useState<FetchState>({ status: "loading" });
 
   const refresh = useCallback(() => {
     window.musex
       .downloadsList()
-      .then((records) => setFetch({ status: "ok", records }))
+      .then((records) => setFetchState({ status: "ok", records }))
       .catch((err: unknown) => {
         console.error("[downloads] list failed:", err);
         // Keep the last good list; only surface the error before the first load.
-        setFetch((prev) =>
+        setFetchState((prev) =>
           prev.status === "ok"
             ? prev
             : {
@@ -47,24 +48,23 @@ export function OnDeviceView() {
   }, [refresh]);
 
   async function removeAlbum(keys: string[]) {
-    try {
-      for (const key of keys) await window.musex.removeDownload(key);
-    } catch (err: unknown) {
-      console.error("[downloads] remove failed:", err);
-    } finally {
-      refresh();
+    // allSettled (not a throwing loop): one failed key must not skip the rest.
+    const results = await Promise.allSettled(keys.map((key) => window.musex.removeDownload(key)));
+    for (const r of results) {
+      if (r.status === "rejected") console.error("[downloads] remove failed:", r.reason);
     }
+    refresh();
   }
 
-  if (fetch.status === "loading") {
+  if (fetchState.status === "loading") {
     return <div className="content-placeholder">Loading downloads…</div>;
   }
 
-  if (fetch.status === "error") {
-    return <div className="content-placeholder error-text">Error: {fetch.message}</div>;
+  if (fetchState.status === "error") {
+    return <div className="content-placeholder error-text">Error: {fetchState.message}</div>;
   }
 
-  const { records } = fetch;
+  const { records } = fetchState;
   const active = records.filter((r) => r.state === "downloading" || r.state === "queued");
   const albums = groupDownloadsByAlbum(records);
   const totalBytes = records.reduce(

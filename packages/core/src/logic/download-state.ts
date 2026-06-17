@@ -80,17 +80,3 @@ export function groupDownloadsByAlbum(records: DownloadRecord[]): DownloadAlbumG
       a.artistName.localeCompare(b.artistName, undefined, { sensitivity: "base" }),
   );
 }
-
-/** Human-readable byte size (e.g. "1.4 GB"). Decimal (1000-based) units to
- *  match how disk space is commonly reported to users. */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1000) return `${bytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = bytes / 1000;
-  let unit = 0;
-  while (value >= 1000 && unit < units.length - 1) {
-    value /= 1000;
-    unit += 1;
-  }
-  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
-}

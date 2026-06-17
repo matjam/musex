@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  type DownloadRecord,
-  formatBytes,
-  groupDownloadsByAlbum,
-  reconcileRecords,
-} from "./download-state.js";
+import { type DownloadRecord, groupDownloadsByAlbum, reconcileRecords } from "./download-state.js";
 
 const rec = (key: string, state: DownloadRecord["state"]): DownloadRecord => ({
   key,
@@ -89,18 +84,5 @@ describe("groupDownloadsByAlbum", () => {
       downloaded("t1", { albumId: "a1", albumTitle: undefined }),
     ]);
     expect(groups[0]?.albumTitle).toBe("Unknown Album");
-  });
-});
-
-describe("formatBytes", () => {
-  it("renders bytes under 1000 as B", () => {
-    expect(formatBytes(0)).toBe("0 B");
-    expect(formatBytes(999)).toBe("999 B");
-  });
-  it("scales through KB/MB/GB with one decimal under 10, none above", () => {
-    expect(formatBytes(1500)).toBe("1.5 KB");
-    expect(formatBytes(2_500_000)).toBe("2.5 MB");
-    expect(formatBytes(45_000_000)).toBe("45 MB");
-    expect(formatBytes(1_400_000_000)).toBe("1.4 GB");
   });
 });
