@@ -26,16 +26,20 @@ Let the user **download** tracks / albums / artists to the device as pinned, gua
 - **Transcode (spike done — see below):** **MP3 only**, single-file via `start.mp3?protocol=http`; bitrate via `musicBitrate` (VBR ceiling); selectable 128/192/256/320. Non-MP3 codecs come from Plex only as HLS segments, so they're out of scope (would need segment-stitching).
 - **Settings:** one consolidated **Library → "Downloads & Storage"** pane (storage quality + downloads size/remove + existing media-cache controls).
 
-## Transcode — confirmed by spike (2026-06-17)
+## Transcode — confirmed by spike (CORRECTED 2026-06-17)
 
-A throwaway env-gated spike against a real PMS (since removed) established:
+> **CORRECTION.** The first spike concluded "single-file `start.mp3?protocol=http`, MP3-only, VBR." **That was wrong.** Live testing of the implemented downloads showed truncated (a few seconds) and 0-byte files — the single-file `start.mp3` endpoint only streams Plex's small *transcode-ahead* buffer, not the whole file; the "125 KB = VBR" reading was actually a ~4-second truncation. A second spike against the real PMS established the reliable path below: **HLS segment-stitching, AAC.**
 
-- **Single-file delivery:** `GET {base}/audio/:/transcode/universal/start.mp3?…&protocol=http&directPlay=0&directStream=0&audioCodec=mp3` returns one continuous MP3 (`Content-Type: audio/mpeg`, chunked, no Content-Length, no Range support). Read to EOF and save. **No HLS, no segment stitching.**
-- **Bitrate control:** the `musicBitrate=<kbps>` query param. Output is **VBR** with that value as a quality ceiling, so the file lands at or below nominal depending on content (decision endpoint reported 128→121, 256→243, 320→304 kbps; a sparse track's actual file can average well under the ceiling — expected). Offer **128 / 192 / 256 / 320**.
-- **Codec: MP3 only.** The `audioCodec` query param is ignored; the target codec is driven by the client profile, and the single-file HTTP path only ever yields MP3 — aac/opus/vorbis/flac/alac/pcm all fell back to MP3. Non-MP3 codecs are delivered by Plex only via HLS/DASH segments, so supporting them would require the segment-stitching path we ruled out. Out of scope.
-- **Session lifecycle:** Plex serializes transcode sessions — rapid back-to-back `start`s 400. Use a fresh session id per download, download sequentially (concurrency 1, which the queue already does), and call `/audio/:/transcode/universal/stop?session=<id>` when each file completes.
-- **Decision endpoint:** `/audio/:/transcode/universal/decision` (same params) returns the would-be codec/bitrate **without** starting a session — useful for a pre-flight check if ever needed.
-- **Playback:** the saved MP3 plays through the existing proxy→mpv path unchanged (mpv decodes it); the first *live* listen still direct-plays the original.
+A throwaway env-gated spike (`spike/hls-transcode-spike.mjs` + a PIN-flow credential helper, both since removed) established:
+
+- **Segmented delivery (reliable):** `GET {base}/music/:/transcode/universal/start.m3u8?protocol=hls&audioCodec=aac&musicBitrate=<kbps>&directPlay=0&directStream=0&path=/library/metadata/<id>&session=<uuid>&X-Plex-Session-Identifier=<uuid>&X-Plex-Client-Identifier=…&X-Plex-Platform=Chrome` → an HLS **master** playlist → resolve its variant (`session/<id>/base/index.m3u8`) → a **media** playlist with `#EXTINF` segments + `#EXT-X-ENDLIST`. Fetch **every** segment and concatenate → a complete file. Each segment is a finite GET, so there's no transcode-ahead truncation. Verified: 131 segments, summed 131.0s for a 130.5s track (100% coverage), ffprobe → `mpegts`, **AAC** 44.1kHz stereo, full duration.
+- **REQUIRED header:** `X-Plex-Client-Profile-Extra: add-transcode-target(type=musicProfile&context=streaming&protocol=hls&container=mpegts&audioCodec=aac)`. Without it the `decision` endpoint returns **4005 "no conversion profile found"** and `start.m3u8` 400s. The `container=mpegts` is essential (omitting it → still 4005). The token goes as the `X-Plex-Token` HEADER on the media-playlist + segment requests (their resolved relative URLs carry no token).
+- **Codec: AAC-in-MPEG-TS** (not MP3). We're codec-flexible; the stored download is `.ts`/AAC and plays through the existing proxy→mpv path unchanged (mpv decodes TS/AAC).
+- **Bitrate:** `musicBitrate=<kbps>`, selectable **128 / 192 / 256 / 320** (a ceiling).
+- **Completeness gate:** require `#EXT-X-ENDLIST` before committing; an incomplete playlist (or a segment that never becomes ready after a bounded retry) → mark the job `failed`, don't pin a partial file.
+- **Session lifecycle:** fresh session id per download; download sequentially (concurrency 1); call `/…/transcode/universal/stop?session=<id>` after each file. Stale/leftover sessions can make new `start`s 400 — stopping reliably matters.
+- **Decision endpoint:** `/music/:/transcode/universal/decision` (same params + the profile header) returns the would-be decision (`transcodeDecisionCode` 1001 = "Conversion OK", 4005 = no profile) **without** starting a session — used to find the working profile augmentation.
+- **Playback:** the saved AAC/TS file plays via the existing proxy→mpv path; the first *live* listen still direct-plays the original.
 
 ## Architecture
 

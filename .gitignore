@@ -20,11 +20,6 @@ vendor/
 # Local env / secrets
 .env
 .env.local
-# Throwaway transcode spike (token helper + scratch output; deleted when done)
-.plex-spike-credentials.json
-spike/
-scripts/link-plex-spike.mjs
-
 # OS / editor
 .DS_Store
 .vscode/
