@@ -23,7 +23,7 @@ import {
   type PluginStorage,
 } from "./plugin-store.js";
 
-export const HOST_API_VERSION = 1;
+export const HOST_API_VERSION = 2;
 
 export interface PluginHostDeps {
   /** Runtime-owned hub that owns the registry + fan-out methods.

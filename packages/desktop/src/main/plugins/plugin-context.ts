@@ -55,8 +55,22 @@ export function buildPluginContext(
     log: (msg, ...args) => console.log(prefix, msg, ...args),
     storage: deps.storage,
     secrets: deps.secrets,
-    fetch: globalThis.fetch,
-    net: { client: (opts) => createNetClient(opts) },
+    net: {
+      async fetch(url, init) {
+        const client = createNetClient({ allowSelfSigned: init?.allowSelfSigned });
+        const res = await client(url, {
+          method: init?.method,
+          headers: init?.headers,
+          body: init?.body,
+        });
+        return {
+          ok: res.ok,
+          status: res.status,
+          headers: Object.fromEntries(res.headers),
+          body: await res.text(),
+        };
+      },
+    },
     events: {
       on<K extends keyof PluginEvents>(event: K, handler: (payload: PluginEvents[K]) => void) {
         return hub.registerTracked(

@@ -44,7 +44,7 @@ async function writePlugin(
   await writeFile(
     join(dir, "plugin.json"),
     JSON.stringify(
-      manifest ?? { id, name: id, version: "1.0.0", apiVersion: 1, entry: "index.mjs" },
+      manifest ?? { id, name: id, version: "1.0.0", apiVersion: 2, entry: "index.mjs" },
     ),
   );
   await writeFile(join(dir, "index.mjs"), entry);
@@ -135,7 +135,7 @@ describe("PluginHost", () => {
         id: "unbuilt",
         name: "u",
         version: "1.0.0",
-        apiVersion: 1,
+        apiVersion: 2,
         entry: "index.mjs",
       }),
     );
@@ -168,7 +168,7 @@ describe("PluginHost", () => {
       id: "future",
       name: "Future",
       version: "9.0.0",
-      apiVersion: 2,
+      apiVersion: 3,
       entry: "index.mjs",
     });
     const { host } = makeHost();
@@ -176,7 +176,7 @@ describe("PluginHost", () => {
     expect(host.list()[0]).toMatchObject({
       id: "future",
       status: "incompatible",
-      error: "incompatible: requires API v2, host is v1",
+      error: "incompatible: requires API v3, host is v2",
     });
     expect((globalThis as Record<string, unknown>).__futureImported).toBeUndefined();
   });
@@ -965,14 +965,14 @@ describe("PluginHost", () => {
       id: "dupe",
       name: "first",
       version: "1.0.0",
-      apiVersion: 1,
+      apiVersion: 2,
       entry: "index.mjs",
     });
     await writePlugin("b-dupe", GOOD_ENTRY, {
       id: "dupe",
       name: "second",
       version: "1.0.0",
-      apiVersion: 1,
+      apiVersion: 2,
       entry: "index.mjs",
     });
     const { host } = makeHost();
@@ -986,7 +986,7 @@ describe("PluginHost", () => {
   it("loadCore activates a core plugin and lists it with origin 'core'", async () => {
     let activated = false;
     const corePlugin = {
-      manifest: { id: "core-test", name: "Core Test", version: "1.0.0", apiVersion: 1 },
+      manifest: { id: "core-test", name: "Core Test", version: "1.0.0", apiVersion: 2 },
       activate: (_ctx: import("@musex/plugin-api").PluginContext) => {
         activated = true;
       },
@@ -1002,7 +1002,7 @@ describe("PluginHost", () => {
   it("disabled core plugin stays inactive after loadAll; setEnabled re-activates via static path (C1 regression)", async () => {
     let activationCount = 0;
     const corePlugin = {
-      manifest: { id: "core-toggle", name: "Core Toggle", version: "1.0.0", apiVersion: 1 },
+      manifest: { id: "core-toggle", name: "Core Toggle", version: "1.0.0", apiVersion: 2 },
       activate: (_ctx: import("@musex/plugin-api").PluginContext) => {
         activationCount += 1;
       },
@@ -1024,7 +1024,7 @@ describe("PluginHost", () => {
   it("a scanned user plugin whose id collides with a core plugin is skipped", async () => {
     let coreActivated = false;
     const corePlugin = {
-      manifest: { id: "conflict-id", name: "Core", version: "1.0.0", apiVersion: 1 },
+      manifest: { id: "conflict-id", name: "Core", version: "1.0.0", apiVersion: 2 },
       activate: (_ctx: import("@musex/plugin-api").PluginContext) => {
         coreActivated = true;
       },
@@ -1047,7 +1047,7 @@ describe("PluginHost", () => {
   it("deactivating a core plugin calls its deactivate fn (I1 regression)", async () => {
     let deactivateCalled = false;
     const corePlugin = {
-      manifest: { id: "core-deactivate", name: "Core Deactivate", version: "1.0.0", apiVersion: 1 },
+      manifest: { id: "core-deactivate", name: "Core Deactivate", version: "1.0.0", apiVersion: 2 },
       activate: (_ctx: import("@musex/plugin-api").PluginContext) => {},
       deactivate: () => {
         deactivateCalled = true;
@@ -1064,7 +1064,7 @@ describe("PluginHost", () => {
 
   it("apiVersion-incompatible core plugin lists as incompatible with origin 'core' (M3)", async () => {
     const corePlugin = {
-      manifest: { id: "core-future", name: "Core Future", version: "9.0.0", apiVersion: 2 },
+      manifest: { id: "core-future", name: "Core Future", version: "9.0.0", apiVersion: 3 },
       activate: (_ctx: import("@musex/plugin-api").PluginContext) => {},
     };
     const { host } = makeHost({ corePlugins: [corePlugin] });
@@ -1075,7 +1075,7 @@ describe("PluginHost", () => {
       id: "core-future",
       status: "incompatible",
       origin: "core",
-      error: "incompatible: requires API v2, host is v1",
+      error: "incompatible: requires API v3, host is v2",
     });
   });
 });

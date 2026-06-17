@@ -21,7 +21,7 @@ function manifest(version = "0.1.0") {
       {
         id: "demo",
         name: "Demo",
-        apiVersion: 1,
+        apiVersion: 2,
         version,
         tag: `demo-v${version}`,
         asset: `demo-${version}.zip`,
@@ -55,7 +55,7 @@ describe("PluginInstaller", () => {
   it("installs a verified plugin into pluginsDir and reloads", async () => {
     const dir = await makeDir();
     const zip = buildZip(
-      { id: "demo", name: "Demo", version: "0.1.0", apiVersion: 1, entry: "index.mjs" },
+      { id: "demo", name: "Demo", version: "0.1.0", apiVersion: 2, entry: "index.mjs" },
       "index.mjs",
     );
     const sha = createHash("sha256").update(Buffer.from(zip)).digest("hex");
@@ -82,7 +82,7 @@ describe("PluginInstaller", () => {
   it("rejects on checksum mismatch", async () => {
     const dir = await makeDir();
     const zip = buildZip(
-      { id: "demo", name: "Demo", version: "0.1.0", apiVersion: 1, entry: "index.mjs" },
+      { id: "demo", name: "Demo", version: "0.1.0", apiVersion: 2, entry: "index.mjs" },
       "index.mjs",
     );
     const inst = new PluginInstaller({
@@ -103,7 +103,7 @@ describe("PluginInstaller", () => {
           id: "demo",
           name: "Demo",
           version: "0.1.0",
-          apiVersion: 1,
+          apiVersion: 2,
           entry: "../evil.mjs",
         }),
       ),
