@@ -273,6 +273,11 @@ export class DownloadManager {
       if (res.ok) {
         const bytes = new Uint8Array(await res.arrayBuffer());
         if (bytes.byteLength > 0) return bytes;
+      } else if (res.status !== 404 && res.status < 500) {
+        // 404 = the transcoder hasn't produced this segment yet (transient,
+        // retry). Any other 4xx (401/403/410/…) is permanent — fail fast
+        // rather than burning the whole retry budget (~42s) on a dead request.
+        return null;
       }
       await delay(SEGMENT_RETRY_DELAY_MS);
     }

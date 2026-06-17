@@ -85,9 +85,11 @@ describe("DownloadManager", () => {
     const media =
       "#EXTM3U\n#EXT-X-TARGETDURATION:1\n" +
       "#EXTINF:1.0,\nseg0.ts\n#EXTINF:1.0,\nseg1.ts\n#EXT-X-ENDLIST\n";
-    const fetchFn = vi.fn(async (url: string) => {
+    let startHeaders: Record<string, string> | undefined;
+    const fetchFn = vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
       urls.push(url);
       if (url.includes("start.m3u8")) {
+        startHeaders = init?.headers;
         return new Response(master, { status: 200 });
       }
       if (url.includes("index.m3u8")) {
@@ -114,6 +116,9 @@ describe("DownloadManager", () => {
 
     // The transcode session was started via the HLS start URL.
     expect(urls.some((u) => u.includes("/music/:/transcode/universal/start.m3u8"))).toBe(true);
+    // The client-profile augmentation header is REQUIRED (without it Plex
+    // returns decision 4005 / 400) — guard against a silent regression.
+    expect(startHeaders?.["X-Plex-Client-Profile-Extra"]).toContain("container=mpegts");
     // The concatenated segment bytes are stored.
     expect(store.files.has("b")).toBe(true);
     expect(store.files.get("b")).toBe("AAABBB");

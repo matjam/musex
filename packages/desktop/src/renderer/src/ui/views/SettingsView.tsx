@@ -220,7 +220,7 @@ function AppSection() {
   );
 }
 
-/** Download storage quality: original file or MP3 at a chosen bitrate.
+/** Download storage quality: original file or AAC at a chosen bitrate.
  *  Optimistic update — reverts on rejection, shows error-text. */
 function StorageQualitySection() {
   const [quality, setQuality] = useState<StorageQualityDto | null>(null);
@@ -266,8 +266,9 @@ function StorageQualitySection() {
         <div className="settings-row-text">
           <div className="settings-row-label">Format</div>
           <div className="settings-row-desc">
-            Downloads are saved in the chosen format. Live playback always streams the original file
-            from Plex regardless of this setting.
+            Original keeps the full-quality source file. AAC transcodes downloads to a smaller AAC
+            file at a chosen bitrate. Live playback always streams the original from Plex regardless
+            of this setting.
           </div>
         </div>
         <select
@@ -282,7 +283,7 @@ function StorageQualitySection() {
           }
         >
           <option value="original">Original</option>
-          <option value="aac">MP3</option>
+          <option value="aac">AAC</option>
         </select>
       </div>
 
@@ -291,12 +292,12 @@ function StorageQualitySection() {
           <div className="settings-row-text">
             <div className="settings-row-label">Bitrate</div>
             <div className="settings-row-desc">
-              MP3 is transcoded at this bitrate ceiling — files land at or below it.
+              AAC is transcoded at this bitrate ceiling — files land at or below it.
             </div>
           </div>
           <select
             className="settings-input settings-input--select"
-            aria-label="MP3 bitrate"
+            aria-label="AAC bitrate"
             value={quality.bitrateKbps}
             onChange={(e) =>
               void applyQuality({ mode: "aac", bitrateKbps: Number(e.target.value) })
