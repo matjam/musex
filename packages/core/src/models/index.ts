@@ -8,6 +8,8 @@ export interface Server {
   id: string; // machineIdentifier
   name: string;
   connections: Connection[];
+  owned?: boolean; // true if the authenticated account owns this server
+  sourceTitle?: string; // for shared servers, the owner's display name
 }
 
 export interface Library {
@@ -17,6 +19,8 @@ export interface Library {
   title: string;
   type: "music";
   updatedAt?: number; // epoch ms — section scannedAt/updatedAt, for library-wide cache validation
+  owned?: boolean; // inherited from the server it lives on
+  sourceTitle?: string; // owner's name when the server is shared
 }
 
 export type LibrarySort = "title" | "artist" | "added";
