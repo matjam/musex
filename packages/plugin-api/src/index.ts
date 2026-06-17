@@ -231,6 +231,13 @@ export type SettingField =
 
 export type SettingsActionResult = { ok: boolean; message?: string };
 
+/** Options for the kernel HTTP client (`ctx.net.client`). */
+export interface NetClientOptions {
+  /** Skip TLS certificate verification — for self-hosted servers behind a
+   *  self-signed cert. Default false. Honored by the host's HTTP transport. */
+  allowSelfSigned?: boolean;
+}
+
 export interface PluginContext {
   manifest: PluginManifest;
   /** Prefixed console logging. */
@@ -246,6 +253,14 @@ export interface PluginContext {
   };
   /** Convenience; full trust anyway. */
   fetch: typeof fetch;
+  /** HTTP with platform-honored transport options (e.g. relaxed TLS for a
+   *  self-hosted server with a self-signed cert) WITHOUT importing `node:*`.
+   *  `client(opts)` returns a `fetch`-shaped function; `ctx.fetch` covers the
+   *  common case. Optional — a host may not provide it; plugins should fall
+   *  back to `ctx.fetch` (`ctx.net?.client(opts) ?? ctx.fetch`). */
+  net?: {
+    client(opts?: NetClientOptions): typeof fetch;
+  };
 
   /** Events (generalizes "Scrobbler"): playback lifecycle + curated domain events. */
   events: {

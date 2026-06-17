@@ -27,173 +27,568 @@ my-plugin/
 └── index.mjs       # bundled ESM entry
 ```
 
-`plugin.json`:
+### `plugin.json` — the manifest
 
 ```json
 {
-  "id": "my-plugin",          // ^[a-z0-9-]+$ — unique; first scan wins on duplicates
+  "id": "my-plugin",
   "name": "My Plugin",
   "version": "0.1.0",
-  "apiVersion": 1,             // must equal the host's API version or the plugin is listed as incompatible
-  "entry": "index.mjs",        // plain filename, no paths
+  "apiVersion": 1,
+  "entry": "index.mjs",
   "description": "Optional one-liner shown in Settings"
 }
 ```
 
-`index.mjs` (what the bundle must export):
+Field rules:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `string` | Must match `^[a-z0-9-]+$`. Unique — first scan wins on duplicates. Use the same value as your directory name. |
+| `name` | `string` | Human-readable display name. |
+| `version` | `string` | Semver string; shown in Settings. |
+| `apiVersion` | `number` | Must equal the host's API version (`1`). A mismatch causes the plugin to be listed as **incompatible** and never activated. |
+| `entry` | `string` | Plain filename — no paths, no `./` prefix. The host loads `<pluginDir>/<entry>`. |
+| `description` | `string?` | Optional one-liner shown in Settings. |
+
+### Entry contract — `index.mjs`
 
 ```ts
 import type { PluginContext } from "@musex/plugin-api";
 
-export function activate(ctx: PluginContext): void | Promise<void> { /* register things */ }
-export function deactivate(): void | Promise<void> { /* optional cleanup */ }
+// Required: the host calls this on load/reload.
+export function activate(ctx: PluginContext): void | Promise<void> {
+  // register things using ctx.*
+}
+
+// Optional: the host calls this on disable/reload before re-import.
+export function deactivate(): void | Promise<void> {
+  // clean up timers, close connections, etc.
+}
 ```
 
-## Where user plugins live
+Every `register*` / `contribute*` call on `ctx` returns a `Disposable`
+(`{ dispose(): void }`). The host disposes all registered disposables
+automatically on disable/reload — you only need to keep them if you want to
+unregister early.
 
-- **Installed:** `~/Library/Application Support/@musex/desktop/plugins/<id>/` —
-  drop the directory in and use **Settings → Plugins → Reload plugins** (or
-  restart the app).
+### Where user plugins live
+
+**Installed:** `~/Library/Application Support/@musex/desktop/plugins/<id>/` — drop
+the directory in and use **Settings → Plugins → Reload plugins** (or restart the
+app).
 
 Enable/disable per plugin persists across launches. A plugin that throws during
-load or activate is shown as **errored** in Settings and never affects the app
-or other plugins. **Reload plugins** disposes every registration, calls
-`deactivate()`, and re-imports fresh module code (with a cache-busting query;
-old module instances leak until restart — fine for iteration, not a hot path).
+load or activate is shown as **errored** in Settings and never affects the app or
+other plugins. **Reload plugins** disposes every registration, calls
+`deactivate()`, and re-imports fresh module code (with a cache-busting query; old
+module instances leak until restart — fine for iteration, not a hot path).
 
 Core plugins are also re-activated on Reload (their module is static — no
 cache-busting needed; the registry is rebuilt from scratch).
 
+---
+
 ## The PluginContext
 
-`activate(ctx)` receives everything a plugin may touch. Every `register*` /
-`contribute*` call returns a `Disposable`; the host disposes them automatically
-on disable/reload, so you only keep them if you want to unregister early.
+`activate(ctx)` receives everything a plugin may touch. The sections below
+document every field.
 
 ### Kernel
 
-| API | What it is |
-| --- | --- |
-| `ctx.log(msg, ...)` | console logging prefixed `[plugin:<id>]` |
-| `ctx.storage.get/set` | per-plugin JSON storage (`plugin-data/<id>.json`) |
-| `ctx.secrets.get/set` | per-plugin secrets, **safeStorage-encrypted at rest** (`set(key, null)` deletes) |
-| `ctx.fetch` | global fetch |
-| `ctx.ui.notify(message, level?)` | toast in the app |
-| `ctx.ui.openExternal(url)` | open an http(s) URL in the system browser (plugins cannot import electron) |
+| API | Signature | What it does |
+| --- | --- | --- |
+| `ctx.manifest` | `PluginManifest` | The plugin's own parsed manifest (read-only). |
+| `ctx.log` | `(msg: string, ...args: unknown[]) => void` | Console logging prefixed `[plugin:<id>]`. |
+| `ctx.storage.get` | `<T>(key: string) => Promise<T \| null>` | Per-plugin JSON storage. Returns `null` when the key is absent. |
+| `ctx.storage.set` | `<T>(key: string, v: T) => Promise<void>` | Persist any JSON-serialisable value. |
+| `ctx.secrets.get` | `(key: string) => Promise<string \| null>` | Read a safeStorage-encrypted secret. Returns `null` when absent. |
+| `ctx.secrets.set` | `(key: string, v: string \| null) => Promise<void>` | Write a safeStorage-encrypted secret. **Passing `null` deletes the key.** |
+| `ctx.fetch` | `typeof fetch` | Global `fetch`. Use for ordinary HTTP requests; credentials/CORS are not an issue (main process). |
+| `ctx.net` | `{ client(opts?: NetClientOptions): typeof fetch } \| undefined` | HTTP with platform-controlled transport (see below). Optional — fall back to `ctx.fetch`. |
+| `ctx.ui.notify` | `(message: string, level?: "info" \| "error") => void` | Toast in the renderer. |
+| `ctx.ui.openExternal` | `(url: string) => void` | Open an http(s) URL in the system browser (plugins cannot import `electron`). |
+
+#### `ctx.net` — HTTP with transport options
+
+`ctx.net` is the kernel HTTP capability for plugins that need TLS control (e.g.
+a Lidarr server behind a self-signed certificate). If the host provides it,
+`ctx.net.client(opts)` returns a **`fetch`-shaped function** configured with the
+given options. `ctx.fetch` covers the common case.
+
+```ts
+export interface NetClientOptions {
+  /** Skip TLS certificate verification for servers behind a self-signed cert.
+   *  Default: false. */
+  allowSelfSigned?: boolean;
+}
+```
+
+`ctx.net` is **optional** — a host that doesn't implement it leaves the field
+`undefined`. Always write the fallback pattern:
+
+```ts
+const httpFetch = ctx.net?.client({ allowSelfSigned }) ?? ctx.fetch;
+```
+
+**Security caveat:** `allowSelfSigned: true` disables TLS certificate
+verification for that client, making the connection vulnerable to
+man-in-the-middle attacks. It is off by default and should only be used when you
+control the server and cannot issue a CA-signed cert. The recommended alternative
+is adding your server's CA certificate to the OS trust store — that keeps
+verification on without requiring `allowSelfSigned`.
+
+---
 
 ### Events — `ctx.events.on(name, handler)`
 
-Playback lifecycle, host-computed. Handlers are isolated per subscriber (a
-throwing handler is logged, never breaks playback or other plugins).
+Playback lifecycle and curated domain events. Returns a `Disposable`.
 
-| Event | Payload | Fires |
+```ts
+const disposable = ctx.events.on("trackStarted", ({ track, startedAtEpochSec }) => {
+  // ...
+});
+```
+
+Handler errors are **isolated per subscriber** — a throwing handler is logged
+and never breaks playback or other plugins.
+
+| Event | Payload type | When it fires |
 | --- | --- | --- |
-| `trackStarted` | `{ track, startedAtEpochSec }` | a track first becomes audible (a paused restore does NOT fire until played) |
-| `paused` / `resumed` | `{ track }` | after a `trackStarted` |
-| `trackEnded` | `{ track, playedSec }` | play-through closes (track change/stop) |
-| `scrobble` | `{ track, startedAtEpochSec }` | **curated**: once per play-through when the scrobble gate passes (length > 30s AND played ≥ half or ≥ 4 min, real audible time — pauses and seeks don't count) |
+| `trackStarted` | `{ track: TrackInfo; startedAtEpochSec: number }` | A track first becomes audible. A paused restore does **not** fire until the user actually plays. |
+| `paused` | `{ track: TrackInfo }` | After a `trackStarted`, the track is paused. |
+| `resumed` | `{ track: TrackInfo }` | After a `paused`, playback resumes. |
+| `trackEnded` | `{ track: TrackInfo; playedSec: number }` | A play-through closes (track change or stop). |
+| `scrobble` | `{ track: TrackInfo; startedAtEpochSec: number }` | **Curated:** once per play-through when the scrobble gate passes (length > 30s AND played ≥ half or ≥ 4 min — real audible time; pauses and seeks don't count). Use this event to submit scrobbles; do not implement your own gate. |
+| `trackRated` | `{ track: TrackInfo; rating10: number \| null }` | The user rates (or clears the rating of) a track. `rating10` is the Plex 0–10 scale (stars × 2); `null` = rating cleared. **Artist ratings do NOT fire this event.** |
 
-All track data is `TrackInfo` — title/artist/album/duration/track# only. **No
-ids, stream URLs, or tokens ever cross the plugin boundary.**
+All track data is `TrackInfo`:
+
+```ts
+type TrackInfo = {
+  title: string;
+  artistName: string;
+  albumTitle?: string;
+  durationMs: number;
+  trackNumber?: number;
+};
+```
+
+**No ids, stream URLs, or tokens ever cross the plugin boundary.**
+
+---
 
 ### Library (read-only) — `ctx.library`
 
-- `search(query)` → `{ artists, albums, tracks }` (names/titles + opaque ids)
-- `recentlyPlayed(limit?)` → host-tracked listening history (`TrackInfo[]`, most recent first)
+```ts
+ctx.library.search(query: string): Promise<LibrarySearchResult>
+ctx.library.recentlyPlayed(limit?: number): Promise<TrackInfo[]>
+ctx.library.topArtists(limit?: number): Promise<{ name: string; score: number }[]>
+```
 
-### UI contribution points — data only, the host renders everything
+| Method | What it returns |
+| --- | --- |
+| `search(query)` | `{ artists: {id,name}[], albums: {id,title,artistName}[], tracks: TrackInfo[] }` — opaque `id` strings for artists/albums. |
+| `recentlyPlayed(limit?)` | Host-tracked listening history, most recent first. `limit` defaults to a host-defined cap. |
+| `topArtists(limit?)` | Artists ordered by decayed affinity score, best first. May be empty until the user has listened or rated enough. `score` is a dimensionless float (higher = stronger affinity). |
 
-- `ctx.ui.contributeSections("discover" | "home", provider)` — provider returns
-  `Section[]` (`{title, items: [{name, artistName?, imageUrl?, externalUrl?}]}`)
-  given a `SectionContext` (`recentArtists`, `recentTracks`). The host matches
-  item names against the library: owned items navigate into the app; unowned
-  items get an "external" badge and open `externalUrl`. Providers get an 8s
-  timeout; failures are skipped, never shown as errors.
-- `ctx.ui.contributeTrackAction({id, label, icon?, onInvoke})` — appears in the
-  track context menu. `icon` is a lucide name from the host's allowlist
-  (`heart`, `star`, `external-link`); anything else renders the generic plugin icon.
-- `ctx.ui.contributeTrackDetail(provider)` — `getDetail(track)` returns
-  `{title, rows: [{label, value}]} | null`; rendered as an extra section in the
-  track slide-out panel.
-- `ctx.ui.registerSimilarProvider({id, similarArtists?, similarTracks?, topAlbums?, artistInfo?})` —
-  powers the Similar side panel ("Similar Artists" on artist pages, "Similar
-  Songs" in the track panel) and host-side taste expansion. Return
-  `SimilarItem[]` (`{name, artistName?, imageUrl?, externalUrl?, match?}`;
-  `match` is the 0..1 similarity score — taste expansion uses it, the panel
-  ignores it); the host matches items against the library (owned artists
-  navigate; owned tracks become playable tiles) and proxies/caches external
-  images. Same 8s timeout + isolation as sections. The optional
-  `topAlbums(artistName)` returns an artist's most popular albums best-first
-  (taste expansion acquires the top one as a new artist's entry point; the
-  External Artist view also merges these titles into the discography — titles
-  no acquisition provider knows render as `unavailable`). The optional
-  `artistInfo(artistName)` returns `ArtistInfo | null` (`{name, bio?, url?,
-  listeners?, playCount?, imageUrl?}`; bio is plain text) — it powers the
-  artist-info side panel opened from Discover tiles; first provider with a
+---
+
+### UI contribution points
+
+Data-only: the host owns all rendering. Every `contribute*` / `register*` call
+returns a `Disposable`.
+
+#### `ctx.ui.contributeSections(target, provider)`
+
+```ts
+ctx.ui.contributeSections(
+  target: "discover" | "home",
+  provider: SectionProvider
+): Disposable
+
+interface SectionProvider {
+  id: string;
+  getSections(ctx: SectionContext): Promise<Section[]>;
+}
+
+interface SectionContext {
+  recentArtists: string[];
+  recentTracks: { title: string; artist: string }[];
+  /** Host taste profile: artists by decayed affinity, best first. */
+  topArtists: { name: string; score: number }[];
+}
+
+interface Section {
+  title: string;
+  items: {
+    name: string;
+    artistName?: string;
+    imageUrl?: string;
+    externalUrl?: string;
+  }[];
+}
+```
+
+Provider receives the host taste context (use `topArtists` for best results;
+fall back to `recentArtists` when the profile is sparse). The host matches item
+`name` values against the library **case-insensitively**: owned items navigate
+into the app; unowned items get an "external" badge and open `externalUrl`.
+
+Providers run with an **~8s timeout and full isolation** — a throw or timeout
+causes that provider's sections to be skipped silently. Other providers and
+playback are unaffected.
+
+Image URLs must be `http(s)` (no `file:` or `data:`). The host proxies and
+caches them; relative URLs are not supported.
+
+#### `ctx.ui.contributeTrackAction(action)`
+
+```ts
+ctx.ui.contributeTrackAction(action: TrackAction): Disposable
+
+interface TrackAction {
+  id: string;
+  label: string;        // e.g. "Love on Last.fm"
+  icon?: string;        // lucide icon name (see allowlist below)
+  onInvoke(track: TrackInfo): Promise<void>;
+}
+```
+
+Appears in the track context menu. `icon` must be one of `heart`, `star`, or
+`external-link`; anything else renders the generic plugin icon.
+
+#### `ctx.ui.contributeTrackDetail(provider)`
+
+```ts
+ctx.ui.contributeTrackDetail(provider: TrackDetailProvider): Disposable
+
+interface TrackDetailProvider {
+  id: string;
+  getDetail(
+    track: TrackInfo,
+  ): Promise<{ title: string; rows: { label: string; value: string }[] } | null>;
+}
+```
+
+Returns key-value rows for the selected track's slide-out panel. **Returning
+`null` renders nothing** — the section is completely omitted. Same ~8s timeout
+and isolation as section providers.
+
+#### `ctx.ui.registerSimilarProvider(provider)`
+
+```ts
+ctx.ui.registerSimilarProvider(provider: SimilarProvider): Disposable
+
+interface SimilarProvider {
+  id: string;
+  similarArtists?(artistName: string): Promise<SimilarItem[]>;
+  similarTracks?(seed: { title: string; artist: string }): Promise<SimilarItem[]>;
+  /** Artist's most popular albums, best first. */
+  topAlbums?(artistName: string): Promise<{ title: string }[]>;
+  /** Artist bio/stats. Return null for unknown artists. */
+  artistInfo?(artistName: string): Promise<ArtistInfo | null>;
+}
+
+type SimilarItem = {
+  name: string;
+  artistName?: string;   // set for similar TRACKS (the song's artist)
+  imageUrl?: string;
+  externalUrl?: string;
+  /** Similarity 0..1. Taste expansion uses this; the Similar panel ignores it. */
+  match?: number;
+};
+
+interface ArtistInfo {
+  name: string;
+  bio?: string;          // plain text, no HTML
+  url?: string;          // provider page (e.g. last.fm URL)
+  listeners?: number;
+  playCount?: number;
+  imageUrl?: string;
+}
+```
+
+Powers the Similar side panel (artist pages → similar artists; track detail →
+similar songs) and host-side taste expansion. Implement only the methods your
+source supports — all are optional.
+
+- `similarArtists` / `similarTracks` — feeds the Similar panel and taste
+  expansion. The host matches results against the library: owned artists
+  navigate; owned tracks become playable tiles.
+- `topAlbums` — taste expansion acquires the top entry as the "start here" album
+  for a new artist. The External Artist view also merges these titles into the
+  discography (titles no acquisition provider knows render as `unavailable`).
+- `artistInfo` — powers the artist-info side panel. First provider with a
   non-null answer wins.
-- `ctx.registerTrackRecommender({id, recommend})` — feeds radio: given seeds +
-  excludes, return `RecommendedTrack[]` (`{artistName, title?}`; no title =
-  artist-level). The host resolves suggestions against the library and appends
-  real tracks to the queue.
-- `ctx.registerAcquisitionProvider({id, lookupArtistAlbums, acquireAlbum, status, searchArtists?, acquireArtist?, cancelAlbum?, watchNewReleases?, isWatchingNewReleases?, listWatchedArtists?, listMonitoredArtists?})`
-  — powers the External Artist view (an unowned artist's discography with
-  per-album `state`: downloaded/downloading/requested/available/unavailable;
-  the host adds `owned` by cross-checking the library) and the Downloads view
-  (merged `status()` items, polled while open). The optional `searchArtists`
-  feeds the federated search's "Not in your library" section, and
-  `acquireArtist` implements "monitor everything by this artist". `providerRef`
-  is opaque to the host — encode whatever your acquire needs. Taste expansion
-  additionally uses `cancelAlbum` (unmonitor an abandoned/rejected album —
-  never delete files) and the new-release watch trio: `watchNewReleases(name,
-  enabled)` must not monitor existing albums when enabling nor unmonitor
-  separately-monitored albums when disabling; `isWatchingNewReleases` and
-  `listWatchedArtists` read the state back (the provider is the source of
-  truth). The optional `listMonitoredArtists()` returns the names of artists
-  the provider currently monitors — it feeds the "monitored" tile badges and
-  artist chips (the host caches the answer for 60s and drops the cache after
-  any acquire). See `plugins/lidarr` for the reference implementation.
+
+Same ~8s timeout and isolation as section providers apply to all methods.
+
+---
+
+### Radio — `ctx.registerTrackRecommender(recommender)`
+
+```ts
+ctx.registerTrackRecommender(recommender: TrackRecommender): Disposable
+
+interface TrackRecommender {
+  id: string;
+  recommend(ctx: RecommendContext): Promise<RecommendedTrack[]>;
+}
+
+interface RecommendContext {
+  seedTracks: { title: string; artist: string }[];
+  seedArtists: string[];
+  /** Already queued / recently played — do not re-suggest. */
+  exclude: { title: string; artist: string }[];
+  count: number;
+}
+
+/** title absent = artist-level suggestion; the host picks tracks by that artist. */
+type RecommendedTrack = { artistName: string; title?: string };
+```
+
+Feeds radio: the host calls `recommend` when its auto-extending queue runs low.
+Plugins only **suggest** — the host resolves suggestions against the library and
+owns the queue. Suggestions that don't match anything in the library are silently
+dropped.
+
+---
+
+### Acquisition — `ctx.registerAcquisitionProvider(provider)`
+
+Powers the External Artist view (discography lookup with per-album state) and
+the Downloads view (merged `status()` items). This is a service registration,
+not a UI contribution.
+
+```ts
+ctx.registerAcquisitionProvider(provider: AcquisitionProvider): Disposable
+```
+
+#### Full `AcquisitionProvider` interface
+
+```ts
+interface AcquisitionProvider {
+  id: string;
+
+  // ── Required ────────────────────────────────────────────────────────────────
+
+  /** Discography for the named artist. Return [] when the artist is unknown. */
+  lookupArtistAlbums(artistName: string): Promise<AcquirableAlbum[]>;
+
+  /** Request acquisition of one album identified by providerRef (see below). */
+  acquireAlbum(providerRef: string): Promise<void>;
+
+  /** Active downloads + monitored-but-missing albums; polled while the
+   *  Downloads view is open. */
+  status(): Promise<AcquisitionStatusItem[]>;
+
+  // ── Optional ────────────────────────────────────────────────────────────────
+
+  /** External artist search — federated into the app's "Not in your library"
+   *  section. Return [] or omit the method if not supported. */
+  searchArtists?(term: string): Promise<ExternalArtistResult[]>;
+
+  /** Monitor EVERYTHING by this artist and kick off a search. */
+  acquireArtist?(providerRef: string): Promise<void>;
+
+  /** Stop pursuing an album (unmonitor; NEVER delete files). Taste expansion
+   *  calls this when the user taps "Not for me" or on abandon. */
+  cancelAlbum?(providerRef: string): Promise<void>;
+
+  /** Watch/unwatch an artist for FUTURE releases.
+   *  Enabling MUST NOT monitor the artist's existing albums.
+   *  Disabling MUST NOT unmonitor albums that were monitored independently. */
+  watchNewReleases?(artistName: string, enabled: boolean): Promise<void>;
+
+  /** Is this artist currently watched for new releases? */
+  isWatchingNewReleases?(artistName: string): Promise<boolean>;
+
+  /** Names of all artists currently watched for new releases. */
+  listWatchedArtists?(): Promise<string[]>;
+
+  /** Names of artists currently monitored by the provider.
+   *  Feeds "monitored" tile badges. The host caches the answer for ~60s
+   *  and drops the cache after any `acquireArtist` call. */
+  listMonitoredArtists?(): Promise<string[]>;
+}
+```
+
+#### Supporting types
+
+```ts
+interface AcquirableAlbum {
+  title: string;
+  artistName: string;
+  year?: number;
+  imageUrl?: string;
+  /** Opaque — pass back unchanged to acquireAlbum / cancelAlbum. */
+  providerRef: string;
+  /** Host adds "owned" by library cross-check; never return "owned" yourself. */
+  state: "downloaded" | "downloading" | "requested" | "available" | "unavailable";
+  /** e.g. "7/12 tracks", "no release found" */
+  detail?: string;
+}
+
+interface AcquisitionStatusItem {
+  title: string;
+  artistName: string;
+  state: "owned" | "downloaded" | "downloading" | "requested" | "available" | "unavailable";
+  /** 0..1 */
+  progress?: number;
+  detail?: string;
+}
+
+interface ExternalArtistResult {
+  name: string;
+  /** Opaque — pass back to acquireArtist. */
+  providerRef: string;
+  imageUrl?: string;
+  externalUrl?: string;
+  /** e.g. "UK trip-hop duo" — disambiguates same-named artists. */
+  disambiguation?: string;
+  /** True when the artist is already fully monitored in the provider. */
+  monitored?: boolean;
+}
+```
+
+#### The `providerRef` contract
+
+`providerRef` is **opaque to the host** — it passes the string you set on an
+`AcquirableAlbum` or `ExternalArtistResult` back to your `acquireAlbum`,
+`acquireArtist`, or `cancelAlbum` unchanged. Encode whatever your acquisition
+flow needs:
+
+```ts
+// In lookupArtistAlbums / searchArtists — stringify on create:
+const ref = JSON.stringify({ foreignAlbumId: "abc123", artistName: "Portishead" });
+out.push({ ..., providerRef: ref });
+
+// In acquireAlbum / cancelAlbum — parse on receipt:
+const { foreignAlbumId, artistName } = JSON.parse(providerRef);
+```
+
+The host never inspects the contents. The string must survive a round-trip
+through IPC (i.e. JSON-serialisable, no `undefined`/`NaN`).
+
+#### `listMonitoredArtists` cache
+
+The host caches `listMonitoredArtists()` results for **approximately 60 seconds**
+and drops the cache immediately after any `acquireArtist` call. This means tile
+badges may lag briefly after a manual action in your provider's UI; after an
+in-app acquire the badge updates on the next navigation.
+
+#### New-release watch semantics
+
+`watchNewReleases(artistName, enabled)`:
+
+- **Enabling** — watch the artist for FUTURE releases only. Do not separately
+  monitor existing albums; the user can acquire those explicitly.
+- **Disabling** — stop watching for new releases only. Do not unmonitor albums
+  that were requested/monitored through a separate acquisition path.
+
+---
 
 ### Settings — declarative, host-rendered
 
 ```ts
+ctx.registerSettings(schema: SettingField[]): void
+ctx.onSettingsAction(key: string, handler: () => Promise<SettingsActionResult>): void
+
+type SettingsActionResult = { ok: boolean; message?: string };
+```
+
+The host renders the settings form; plugins never ship UI.
+
+```ts
 ctx.registerSettings([
-  { kind: "text",     key: "apiKey",  label: "API key", help: "where to get one" },
-  { kind: "password", key: "secret",  label: "Secret" },          // stored in ctx.secrets; renderer only ever sees { set: boolean }
-  { kind: "toggle",   key: "enabled", label: "Do the thing" },
-  { kind: "action",   key: "connect", label: "Connect account" }, // button
-  { kind: "status",   key: "connection" },                        // read-only; value comes from ctx.storage["connection"]
+  { kind: "text",     key: "serverUrl",  label: "Server URL",  help: "e.g. http://192.168.1.5:8686" },
+  { kind: "password", key: "apiKey",     label: "API key" },
+  { kind: "toggle",   key: "enabled",    label: "Enable feature", help: "Optional help text" },
+  { kind: "action",   key: "connect",    label: "Connect account" },
+  { kind: "status",   key: "connection" },
 ]);
+
 ctx.onSettingsAction("connect", async () => {
-  // long-running OK; the button shows busy until you return
+  // Runs in main; button shows busy until this returns.
   return { ok: true, message: "Connected as someone" };
 });
 ```
 
-Field vocabulary is fixed (text/password/toggle/action/status). If a plugin
-needs a new field kind, the kind gets added to the host so every plugin gains it
-— plugins never ship UI.
+| `kind` | Behavior |
+| --- | --- |
+| `text` | Plain text input; value stored under `key` in `ctx.storage`. |
+| `password` | Text input with hidden value; stored under `key` in `ctx.secrets` (safeStorage-encrypted). The renderer only ever sees `{ set: boolean }` — never the actual value. |
+| `toggle` | Boolean checkbox; value stored in `ctx.storage`. |
+| `action` | Button; fires `onSettingsAction(key)`. The button shows a busy state until the handler returns `{ ok, message? }`. |
+| `status` | Read-only line. The value is whatever the plugin last wrote to `ctx.storage` under the same `key`. Useful for displaying connection status. |
+
+Field vocabulary is **fixed** — `text`, `password`, `toggle`, `action`,
+`status`. New field kinds require a host change so every plugin gains the
+rendering for free; plugins never ship their own UI.
+
+---
+
+### Image URLs
+
+Image URLs passed in any contribution point (`imageUrl` on section items,
+`SimilarItem`, `AcquirableAlbum`, etc.) must be **absolute `http` or `https`
+URLs**. The host proxies and caches them for display.
+
+- `file:` and `data:` URLs are not supported.
+- Relative URLs are not supported.
+- The URL must be publicly reachable (or reachable from the host machine for
+  local servers).
+
+---
 
 ## Building a user plugin
 
-Bundle your plugin to a single ESM file and create a `plugin.json` manifest.
-Example build recipe using esbuild:
+Bundle your source to a single ESM file and create a `plugin.json` manifest.
+
+### esbuild recipe
 
 ```js
-// build.mjs — bundle to a single ESM file + copy the manifest
+// build.mjs
 import { build } from "esbuild";
-import { copyFile, mkdir } from "node:fs/promises";
-await build({ entryPoints: ["src/index.ts"], outfile: "dist/index.mjs",
-              bundle: true, format: "esm", platform: "node" });
+import { copyFile } from "node:fs/promises";
+
+await build({
+  entryPoints: ["src/index.ts"],
+  outfile: "dist/index.mjs",
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  external: [],       // bundle everything; @musex/plugin-api is types-only
+});
 await copyFile("plugin.json", "dist/plugin.json");
 ```
 
-`@musex/plugin-api` is types-only — import it freely; nothing of it lands in the
-bundle. `node:*` builtins are available (main process). Do not import `electron`
-or musex runtime modules; the manifest validator and ctx are your whole contract.
+`@musex/plugin-api` is **types-only** — import it freely and it contributes
+nothing to the bundle. `node:*` builtins are available (the plugin runs in the
+main process). Do **not** import `electron` or any `@musex` runtime module; the
+manifest, `ctx`, and the types are your complete contract.
+
+### Installing
+
+Drop the `dist/` contents (or your output directory containing `index.mjs` +
+`plugin.json`) into:
+
+```
+~/Library/Application Support/@musex/desktop/plugins/<id>/
+```
+
+Then go to **Settings → Plugins → Reload plugins**.
+
+Note: GitHub-based install (one-click install from a repo release) is planned
+for a later musex release. For now, the manual drop-in is the only install path.
+
+---
 
 ## Trust model (read this)
 
 Full trust, by design: a plugin is arbitrary code in the main process. The ctx
 API is the *supported* surface, not a security boundary. musex never hands
-plugins the Plex token, stream URLs, or library ids beyond search results — but
-a malicious plugin doesn't need the API to do harm. Install only what you trust.
+plugins the Plex token, stream URLs, or library ids beyond search results — but a
+malicious plugin doesn't need the API to do harm. **Install only plugins you
+trust.**

@@ -15,6 +15,7 @@ import type {
   TrackRecommender,
 } from "@musex/plugin-api";
 import type { PluginNotification } from "../../shared/ipc-contract.js";
+import { createNetClient } from "./net-client.js";
 import type { PluginSecrets, PluginStorage } from "./plugin-store.js";
 
 export interface PluginEventSubscriber {
@@ -115,6 +116,7 @@ export function buildPluginContext(
     storage: deps.storage,
     secrets: deps.secrets,
     fetch: globalThis.fetch,
+    net: { client: (opts) => createNetClient(opts) },
     events: {
       on(event, handler) {
         const subscriber: PluginEventSubscriber = {
