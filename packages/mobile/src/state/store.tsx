@@ -1,5 +1,5 @@
 import type { Library, PlaybackState, Server, Track } from "@musex/core";
-import { buildQueue, PlaybackSession } from "@musex/core";
+import { buildQueue, PlaybackSession, PlayMonitor } from "@musex/core";
 import {
   createContext,
   type ReactNode,
@@ -10,11 +10,13 @@ import {
   useRef,
 } from "react";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
+import { subscribeRemoteCommands } from "../adapters/lock-screen-commands";
 import { PlexGatewayImpl } from "../adapters/plex-gateway";
 import { PlexStreamResolver } from "../adapters/stream-resolver";
 import { SecureTokenStore } from "../adapters/token-store";
 import { CLIENT_ID } from "../config-client-id";
 import { artUrl } from "../logic/art-url";
+import { TasteService } from "../taste/taste-service";
 
 function safeBaseUrl(gateway: PlexGatewayImpl, serverId: string): string | null {
   try {
@@ -68,6 +70,7 @@ interface Store {
   session: PlaybackSession;
   artBaseFor: (serverId: string) => string | null;
   token: string | null;
+  taste: TasteService;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -95,6 +98,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const gateway = useMemo(() => new PlexGatewayImpl(fetch, CLIENT_ID), []);
   const tokenStore = useMemo(() => new SecureTokenStore(), []);
   const engine = useMemo(() => new ExpoAudioEngine(), []);
+  const taste = useMemo(() => new TasteService(), []);
+  const monitor = useMemo(() => new PlayMonitor(), []);
 
   // ONE long-lived session. PlaybackSession's 3rd ctor arg is `shuffleRest`
   // (a shuffle fn), NOT a state callback; state is observed via subscribe().
@@ -112,6 +117,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       session.subscribe((s) => {
+        const completed = monitor.onState(s);
+        if (completed) {
+          taste.recordPlay(
+            { title: completed.title, artistName: completed.artistName },
+            completed.kind,
+          );
+        }
         dispatch({ type: "playback", state: s });
         const cur = s.queue ? s.queue.tracks[s.queue.index] : undefined;
         if (cur && cur.id !== lastTrackId.current) {
@@ -126,7 +138,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
         }
       }),
-    [session, engine, gateway],
+    [session, engine, gateway, taste, monitor],
+  );
+
+  // Lock-screen / Control-Center next & previous -> queue navigation.
+  useEffect(
+    () =>
+      subscribeRemoteCommands({
+        onNext: () => void session.next(),
+        onPrevious: () => void session.previous(),
+      }),
+    [session],
   );
 
   // Bootstrap: init audio session, restore token, discover servers.
@@ -134,6 +156,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let alive = true;
     (async () => {
       await engine.init();
+      await taste.init();
       const token = await tokenStore.load();
       if (!alive) return;
       if (!token) {
@@ -153,7 +176,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       alive = false;
       engine.dispose();
     };
-  }, [engine, gateway, tokenStore]);
+  }, [engine, gateway, tokenStore, taste]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
   const playTracks = useMemo(
@@ -172,6 +195,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     session,
     artBaseFor: (sid) => safeBaseUrl(gateway, sid),
     token: state.token,
+    taste,
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }
