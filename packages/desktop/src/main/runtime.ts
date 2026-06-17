@@ -22,6 +22,7 @@ import {
 import { StreamProxy } from "./adapters/stream-proxy.js";
 import { SafeStorageTokenStore } from "./adapters/token-store.js";
 import { ExpansionCoordinator } from "./expansion/coordinator.js";
+import { LastfmService } from "./lastfm/service.js";
 import { CORE_PLUGINS } from "./plugins/core-plugins.js";
 import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
@@ -58,6 +59,8 @@ export class Runtime {
    *  PluginHost so it's ready for first-party registrations (e.g. core:lastfm
    *  in a later cluster) and passed into PluginHost as a dep. */
   providers!: ProviderHub;
+  /** The baked-in Last.fm first-party service (non-plugin). */
+  lastfmService: LastfmService | null = null;
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
@@ -144,10 +147,44 @@ export class Runtime {
     }
 
     // Provider hub: Runtime-owned registry + fan-out, shared between
-    // first-party (future core:lastfm) and plugin registrations.
+    // first-party (core:lastfm) and plugin registrations.
     this.providers = new ProviderHub();
 
-    // Plugin host: lastfm is the only statically bundled core plugin —
+    // Last.fm first-party service: registers directly on the hub (no plugin sandbox).
+    this.lastfmService = new LastfmService();
+    this.lastfmService.start(this.providers, {
+      getConfig: async () => {
+        const cfg = persistence.getLastfmConfig();
+        return {
+          apiKey: cfg.apiKey,
+          apiSecret: (await this.lastfmSecretGet("apiSecret")) ?? "",
+          sessionKey: await this.lastfmSecretGet("sessionKey"),
+          username: cfg.username,
+          scrobbling: cfg.scrobbling,
+          loveOnRating: cfg.loveOnRating,
+          connection: cfg.connection,
+        };
+      },
+      setConfig: async (patch) => {
+        if (patch.sessionKey !== undefined && patch.sessionKey !== null)
+          await this.lastfmSecretSet("sessionKey", patch.sessionKey);
+        const { sessionKey: _sk, apiKey, apiSecret: _sec, ...rest } = patch;
+        if (apiKey !== undefined) persistence.setLastfmConfig({ apiKey });
+        if (Object.keys(rest).length > 0) persistence.setLastfmConfig(rest);
+      },
+      openExternal: (url) => {
+        if (isHttpUrl(url)) void shell.openExternal(url);
+        else console.error("[lastfm] blocked openExternal for non-http(s) URL:", url);
+      },
+      notify: (message, level) => {
+        this.pluginNotifySink?.({ pluginId: "core:lastfm", message, level: level ?? "info" });
+      },
+      log: (...args) => console.log("[lastfm]", ...args),
+      storageGet: async (key) => persistence.getLastfmData(key),
+      storageSet: async (key, value) => persistence.setLastfmData(key, value),
+    });
+
+    // Plugin host: no statically bundled core plugins —
     // no filesystem scan for it. Only userData/plugins is scanned for
     // user-installed plugins (e.g. acquisition plugins); core plugin ids win on collision.
     this.plugins = new PluginHost({
@@ -283,6 +320,39 @@ export class Runtime {
     const lib = this.libraries.find((l) => l.id === libraryId);
     if (!lib) throw new Error(`unknown library ${libraryId}`);
     return lib;
+  }
+
+  // ── Last.fm secret helpers (base64 safeStorage blobs in plugin-secrets dir) ─
+
+  private readonly lastfmSecretsCache = new Map<string, string | null>();
+
+  async lastfmSecretGet(key: string): Promise<string | null> {
+    if (this.lastfmSecretsCache.has(key)) return this.lastfmSecretsCache.get(key) ?? null;
+    // Reuse the same encrypted path as the plugin system would: plugin-secrets/lastfm/<key>
+    const { readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { app } = await import("electron");
+    const filePath = join(app.getPath("userData"), "plugin-secrets", "lastfm", key);
+    try {
+      const buf = await readFile(filePath);
+      const { value } = await secureDecrypt(buf);
+      this.lastfmSecretsCache.set(key, value);
+      return value;
+    } catch {
+      this.lastfmSecretsCache.set(key, null);
+      return null;
+    }
+  }
+
+  async lastfmSecretSet(key: string, value: string): Promise<void> {
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { app } = await import("electron");
+    const dir = join(app.getPath("userData"), "plugin-secrets", "lastfm");
+    await mkdir(dir, { recursive: true });
+    const buf = await secureEncrypt(value);
+    await writeFile(join(dir, key), buf);
+    this.lastfmSecretsCache.set(key, value);
   }
 }
 

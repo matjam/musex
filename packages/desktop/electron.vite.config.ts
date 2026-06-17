@@ -10,7 +10,7 @@ export default defineConfig({
   main: {
     plugins: [
       externalizeDepsPlugin({
-        exclude: ["@musex/core", "@musex/plugin-api", "@musex/plugin-lastfm"],
+        exclude: ["@musex/core", "@musex/plugin-api"],
       }),
     ],
     build: { rollupOptions: { output: { format: "es" } } },

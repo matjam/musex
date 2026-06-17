@@ -20,7 +20,6 @@
     "@ctrl/plex": "^6.0.0",
     "@musex/core": "workspace:*",
     "@musex/plugin-api": "workspace:*",
-    "@musex/plugin-lastfm": "workspace:*",
     "@tanstack/react-virtual": "^3.14.2",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.9",

@@ -1,6 +1,8 @@
 import type { Library } from "@musex/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  LastfmConfigDto,
+  LastfmConfigPatchDto,
   LogEntryDto,
   MusexApi,
   NavigateToPayload,
@@ -130,6 +132,9 @@ const api: MusexApi = {
   pluginsFetchManifest: (repoUrl) => ipcRenderer.invoke(IPC.pluginsFetchManifest, repoUrl),
   pluginsInstall: (repoUrl, id) => ipcRenderer.invoke(IPC.pluginsInstall, repoUrl, id),
   pluginsUninstall: (id) => ipcRenderer.invoke(IPC.pluginsUninstall, id),
+  lastfmGetConfig: () => ipcRenderer.invoke(IPC.lastfmGetConfig) as Promise<LastfmConfigDto>,
+  lastfmSetConfig: (patch: LastfmConfigPatchDto) => ipcRenderer.invoke(IPC.lastfmSetConfig, patch),
+  lastfmConnect: () => ipcRenderer.invoke(IPC.lastfmConnect),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

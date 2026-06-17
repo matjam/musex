@@ -115,6 +115,10 @@ export const IPC = {
   pluginsFetchManifest: "musex:plugins:fetchManifest", // (repoUrl) -> FetchManifestResultDto
   pluginsInstall: "musex:plugins:install", // (repoUrl, id) -> void
   pluginsUninstall: "musex:plugins:uninstall", // (id) -> void
+  // Last.fm first-party service config
+  lastfmGetConfig: "musex:lastfm:getConfig", // -> LastfmConfigDto
+  lastfmSetConfig: "musex:lastfm:setConfig", // (LastfmConfigPatchDto) -> void
+  lastfmConnect: "musex:lastfm:connect", // -> { ok: boolean; message: string }
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -349,6 +353,29 @@ export type RadioNextArgs = {
   count: number;
 };
 
+// ── Last.fm first-party service DTOs ──────────────────────────────────────
+
+/** Non-secret Last.fm config fields returned to the renderer. */
+export type LastfmConfigDto = {
+  apiKey: string;
+  scrobbling: boolean;
+  loveOnRating: boolean;
+  username: string | null;
+  connection: string;
+  /** True when the shared secret is stored (never sends the value to the renderer). */
+  apiSecretSet: boolean;
+  /** True when a session key is stored (i.e. account is connected). */
+  sessionKeySet: boolean;
+};
+
+/** Fields the renderer may update (omit a field to leave it unchanged). */
+export type LastfmConfigPatchDto = {
+  apiKey?: string;
+  apiSecret?: string; // stored as a secret; never echoed back
+  scrobbling?: boolean;
+  loveOnRating?: boolean;
+};
+
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
   /** The platform the main process is running on (e.g. "darwin", "linux",
@@ -514,4 +541,10 @@ export interface MusexApi {
   pluginsInstall(repoUrl: string, id: string): Promise<void>;
   /** Remove a user-installed plugin and reload the plugin host. */
   pluginsUninstall(id: string): Promise<void>;
+  /** Get the current Last.fm config (non-secret fields + presence flags for secrets). */
+  lastfmGetConfig(): Promise<LastfmConfigDto>;
+  /** Update Last.fm config fields (apiSecret is stored as a secret, never echoed back). */
+  lastfmSetConfig(patch: LastfmConfigPatchDto): Promise<void>;
+  /** Start the Last.fm account auth flow (opens browser, polls until approved or timeout). */
+  lastfmConnect(): Promise<{ ok: boolean; message: string }>;
 }

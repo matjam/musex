@@ -10,6 +10,8 @@ import type {
   ExpansionEntryDto,
   ExpansionStateDto,
   ExternalArtistResultDto,
+  LastfmConfigDto,
+  LastfmConfigPatchDto,
   LoadPlaybackResult,
   LogLevel,
   NowPlayingMsg,
@@ -936,5 +938,43 @@ export function registerIpc(rt: Runtime): void {
       upcoming.push({ serverId: t.serverId, plexPath: t.media.partKey });
     }
     rt.proxy.prefetch(upcoming);
+  });
+
+  // ── Last.fm first-party service config ────────────────────────────────────
+  ipcMain.handle(IPC.lastfmGetConfig, async (): Promise<LastfmConfigDto> => {
+    const cfg = persistence.getLastfmConfig();
+    const apiSecretSet = await rt.lastfmSecretGet("apiSecret").then((v) => v !== null);
+    const sessionKeySet = await rt.lastfmSecretGet("sessionKey").then((v) => v !== null);
+    return {
+      apiKey: cfg.apiKey,
+      scrobbling: cfg.scrobbling,
+      loveOnRating: cfg.loveOnRating,
+      username: cfg.username,
+      connection: cfg.connection,
+      apiSecretSet,
+      sessionKeySet,
+    };
+  });
+
+  ipcMain.handle(IPC.lastfmSetConfig, async (_e, patch: unknown) => {
+    if (typeof patch !== "object" || patch === null) throw new Error("invalid patch");
+    const p = patch as Record<string, unknown>;
+    const configPatch: LastfmConfigPatchDto = {};
+    if (typeof p.apiKey === "string") configPatch.apiKey = p.apiKey;
+    if (typeof p.apiSecret === "string") configPatch.apiSecret = p.apiSecret;
+    if (typeof p.scrobbling === "boolean") configPatch.scrobbling = p.scrobbling;
+    if (typeof p.loveOnRating === "boolean") configPatch.loveOnRating = p.loveOnRating;
+    if (configPatch.apiSecret !== undefined) {
+      await rt.lastfmSecretSet("apiSecret", configPatch.apiSecret);
+    }
+    const { apiSecret: _dropped, ...rest } = configPatch;
+    if (Object.keys(rest).length > 0) {
+      persistence.setLastfmConfig(rest);
+    }
+  });
+
+  ipcMain.handle(IPC.lastfmConnect, async () => {
+    if (!rt.lastfmService?.connect) throw new Error("Last.fm service not started");
+    return rt.lastfmService.connect();
   });
 }
