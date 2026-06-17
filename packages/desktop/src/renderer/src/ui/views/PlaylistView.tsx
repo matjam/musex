@@ -6,8 +6,10 @@ import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { usePlaylists } from "../../state/playlists";
 import { useSelection } from "../../state/selection";
+import { downloadRecordFor } from "../../util/downloaded-records";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
+import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { useProgressiveList } from "../hooks/useProgressiveList";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -149,10 +151,11 @@ interface Props {
 }
 
 export function PlaylistView({ playlist }: Props) {
-  const { dispatch } = useApp();
+  const { dispatch, library } = useApp();
   const { state, playTracks, playTracksShuffled, playTrackNext } = usePlayer();
   const { playlists, rename, destroy } = usePlaylists();
   const { selectedTrack, select } = useSelection();
+  const downloadRecords = useDownloadRecords();
   const live = playlists.find((p) => p.id === playlist.id) ?? playlist;
 
   // useProgressiveList: on cache HIT → instant "ok"; on MISS → pages in progressively.
@@ -288,6 +291,8 @@ export function PlaylistView({ playlist }: Props) {
             setMenu(null);
           }}
           onChanged={load}
+          downloadRecord={downloadRecordFor(downloadRecords, menu.track)}
+          libraryId={library?.id ?? null}
         />
       )}
 

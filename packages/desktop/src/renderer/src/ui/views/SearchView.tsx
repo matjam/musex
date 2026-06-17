@@ -6,9 +6,11 @@ import { useApp } from "../../state/app";
 import { useMonitoring } from "../../state/monitoring";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
+import { downloadRecordFor } from "../../util/downloaded-records";
 import { AlbumArt } from "../AlbumArt";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
+import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
 import { TrackContextMenu } from "../TrackContextMenu";
@@ -20,6 +22,7 @@ const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
 export function SearchView() {
   // The query lives in app state (driven by the top-bar search box).
   const { library, dispatch, searchQuery: query } = useApp();
+  const downloadRecords = useDownloadRecords();
   const { state, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
   const monitoring = useMonitoring();
@@ -254,6 +257,8 @@ export function SearchView() {
             setNewSeed([id]);
             setMenu(null);
           }}
+          downloadRecord={downloadRecordFor(downloadRecords, menu.track)}
+          libraryId={library?.id ?? null}
         />
       )}
 
