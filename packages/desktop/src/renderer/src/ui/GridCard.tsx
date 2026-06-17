@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Bell, Play } from "lucide-react";
+import { Eye, Play } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { AlbumArt } from "./AlbumArt";
 import { CardCollage } from "./CardCollage";
@@ -22,7 +22,7 @@ interface Props {
   state?: AcquisitionBadgeState;
   /** Download percent for `state="downloading"`. */
   statePercent?: number;
-  /** Show the monitored (watching new releases) corner marker. */
+  /** Show the watched-for-new-releases corner marker (eye). */
   monitored?: boolean;
   /** Dim the whole card (e.g. unavailable acquisition albums). */
   dim?: boolean;
@@ -97,8 +97,8 @@ export function GridCard({
           )
         )}
         {monitored && (
-          <span className="card-monitored">
-            <Bell size={12} />
+          <span className="card-monitored" title="Watched for new releases">
+            <Eye size={12} />
           </span>
         )}
         {onPlay && (
