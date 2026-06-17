@@ -26,6 +26,7 @@ import { CORE_PLUGINS } from "./plugins/core-plugins.js";
 import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
 import { PluginInstaller } from "./plugins/plugin-installer.js";
+import { ProviderHub } from "./providers/provider-hub.js";
 
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
 /** Taste profile writes are debounced: one persist ~5s after the last mutation. */
@@ -53,6 +54,10 @@ export class Runtime {
   mpv: MpvController | null = null;
   /** Human-readable reason set when mpv construction fails; null when mpv is available. */
   mpvUnavailableReason: string | null = null;
+  /** Runtime-owned provider registry + fan-out. Created in init() before the
+   *  PluginHost so it's ready for first-party registrations (e.g. core:lastfm
+   *  in a later cluster) and passed into PluginHost as a dep. */
+  providers!: ProviderHub;
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
@@ -118,10 +123,10 @@ export class Runtime {
     const tasteState = persistence.getTasteState();
     if (tasteState) this.tasteProfile.load(tasteState);
 
-    // Playback monitor: emits into the plugin host's event registry (lazily —
-    // this.plugins is assigned just below, before any playback can happen).
+    // Playback monitor: emits into the provider hub's event registry (lazily —
+    // this.providers is already assigned above, before any playback can happen).
     this.playbackMonitor = new PlaybackMonitor({
-      emit: (event, payload) => this.plugins.emitEvent(event, payload),
+      emit: (event, payload) => this.providers.dispatchEvent(event, payload),
       loadHistory: () => persistence.getRecentlyPlayed(),
       saveHistory: (h) => persistence.setRecentlyPlayed(h),
       recordPlay: (track, kind) => {
@@ -138,10 +143,15 @@ export class Runtime {
       );
     }
 
+    // Provider hub: Runtime-owned registry + fan-out, shared between
+    // first-party (future core:lastfm) and plugin registrations.
+    this.providers = new ProviderHub();
+
     // Plugin host: lastfm is the only statically bundled core plugin —
     // no filesystem scan for it. Only userData/plugins is scanned for
     // user-installed plugins (e.g. acquisition plugins); core plugin ids win on collision.
     this.plugins = new PluginHost({
+      hub: this.providers,
       corePlugins: CORE_PLUGINS,
       scanDirs: [path.join(app.getPath("userData"), "plugins")],
       dataDir: path.join(app.getPath("userData"), "plugin-data"),
@@ -194,7 +204,7 @@ export class Runtime {
     // (similar via lastfm + acquisition via an installed acquisition plugin).
     // Pure planning lives in @musex/core's taste-expansion; this wires its inputs.
     this.expansion = new ExpansionCoordinator({
-      host: this.plugins,
+      host: this.providers,
       getLibrary: () => this.libraries[0] ?? null,
       getToken: () => this.token,
       listArtists: (lib, token) => this.gateway.listArtists(lib, token),

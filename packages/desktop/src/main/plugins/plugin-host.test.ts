@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PluginNotification } from "../../shared/ipc-contract";
+import { ProviderHub } from "../providers/provider-hub";
 import { PluginHost, type PluginHostDeps } from "./plugin-host";
 
 let root: string;
@@ -49,11 +50,18 @@ async function writePlugin(
   await writeFile(join(dir, "index.mjs"), entry);
 }
 
-function makeHost(overrides: Partial<PluginHostDeps> = {}) {
+/** Build a PluginHost + ProviderHub pair for testing.
+ *  providerTimeoutMs now lives on the hub; pass it via hubOpts. */
+function makeHost(
+  overrides: Omit<Partial<PluginHostDeps>, "hub"> = {},
+  hubOpts: { providerTimeoutMs?: number } = {},
+) {
   const disabled = new Set<string>();
   const notifications: PluginNotification[] = [];
   const opened: string[] = [];
+  const hub = new ProviderHub(hubOpts);
   const host = new PluginHost({
+    hub,
     scanDirs: [join(root, "scan")],
     dataDir: join(root, "data"),
     secretsDir: join(root, "secrets"),
@@ -73,7 +81,7 @@ function makeHost(overrides: Partial<PluginHostDeps> = {}) {
     },
     ...overrides,
   });
-  return { host, disabled, notifications, opened };
+  return { host, hub, disabled, notifications, opened };
 }
 
 function activations(): number {
@@ -83,7 +91,7 @@ function activations(): number {
 describe("PluginHost", () => {
   it("loads, activates, and exposes the registered settings schema", async () => {
     await writePlugin("good", GOOD_ENTRY);
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
 
     expect(host.list()).toEqual([
@@ -96,9 +104,9 @@ describe("PluginHost", () => {
     // password presence flag, no value for actions
     expect(settings.values).toEqual({ x: null, apiKey: null, secret: { set: false } });
 
-    // registrations landed in the registry for Tasks 2/4
-    expect(host.registry.eventSubscribers).toHaveLength(1);
-    expect(host.registry.trackActions).toHaveLength(1);
+    // registrations landed in the hub's registry
+    expect(hub.registry.eventSubscribers).toHaveLength(1);
+    expect(hub.registry.trackActions).toHaveLength(1);
   });
 
   it("finds plugins in the direct root layout (<sub>/plugin.json)", async () => {
@@ -175,7 +183,7 @@ describe("PluginHost", () => {
 
   it("does not import disabled plugins, and setEnabled toggles activation", async () => {
     await writePlugin("good", GOOD_ENTRY);
-    const { host, disabled } = makeHost();
+    const { host, hub, disabled } = makeHost();
     disabled.add("good");
     await host.loadAll();
     expect(host.list()[0]?.status).toBe("disabled");
@@ -189,13 +197,13 @@ describe("PluginHost", () => {
     await host.setEnabled("good", false);
     expect(host.list()[0]?.status).toBe("disabled");
     expect(disabled.has("good")).toBe(true);
-    // registrations were disposed
-    expect(host.registry.eventSubscribers).toHaveLength(0);
-    expect(host.registry.trackActions).toHaveLength(0);
+    // registrations were disposed from the hub
+    expect(hub.registry.eventSubscribers).toHaveLength(0);
+    expect(hub.registry.trackActions).toHaveLength(0);
     expect((globalThis as Record<string, unknown>).__deactivated).toBe(true);
   });
 
-  it("emitEvent fans out per subscriber, isolating a throwing handler", async () => {
+  it("emitEvent fans out per subscriber (via hub), isolating a throwing handler", async () => {
     await writePlugin(
       "thrower",
       `export function activate(ctx) {
@@ -227,14 +235,14 @@ describe("PluginHost", () => {
 
   it("reloadAll re-imports fresh module instances and re-activates", async () => {
     await writePlugin("good", GOOD_ENTRY);
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
     expect(activations()).toBe(1);
 
     await host.reloadAll();
     expect(activations()).toBe(2); // fresh import (generation-busted URL) ran again
     expect(host.list()[0]?.status).toBe("active");
-    expect(host.registry.eventSubscribers).toHaveLength(1); // old disposed, new registered
+    expect(hub.registry.eventSubscribers).toHaveLength(1); // old disposed, new registered
   });
 
   it("round-trips settings: storage for text/toggle, secrets for password", async () => {
@@ -274,7 +282,7 @@ describe("PluginHost", () => {
     expect(notifications).toEqual([{ pluginId: "noisy", message: "hello", level: "info" }]);
   });
 
-  it("getSections fans out per target, isolating throwing and slow providers", async () => {
+  it("getSections fans out per target (via hub), isolating throwing and slow providers", async () => {
     await writePlugin(
       "sections-a",
       `export function activate(ctx) {
@@ -308,24 +316,24 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost({ providerTimeoutMs: 50 });
+    const { host, hub } = makeHost({}, { providerTimeoutMs: 50 });
     await host.loadAll();
 
     const sctx = { recentArtists: ["Lamb"], recentTracks: [], topArtists: [] };
-    const discover = await host.getSections("discover", sctx);
+    const discover = await hub.getSections("discover", sctx);
     expect(discover).toEqual([
       {
         pluginId: "sections-a",
         sections: [{ title: "Because you listened to Lamb", items: [{ name: "X" }] }],
       },
     ]);
-    const home = await host.getSections("home", sctx);
+    const home = await hub.getSections("home", sctx);
     expect(home).toEqual([
       { pluginId: "sections-a", sections: [{ title: "Home row", items: [] }] },
     ]);
   });
 
-  it("recommendTracks merges + dedupes recommenders, applies exclude, isolates throws", async () => {
+  it("recommendTracks merges + dedupes recommenders (via hub), applies exclude, isolates throws", async () => {
     await writePlugin(
       "recs-a",
       `export function activate(ctx) {
@@ -371,11 +379,11 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost({ providerTimeoutMs: 50 });
+    const { host, hub } = makeHost({}, { providerTimeoutMs: 50 });
     await host.loadAll();
-    expect(host.registry.trackRecommenders).toHaveLength(4);
+    expect(hub.registry.trackRecommenders).toHaveLength(4);
 
-    const recs = await host.recommendTracks({
+    const recs = await hub.recommendTracks({
       seedTracks: [{ title: "Gabriel", artist: "Lamb" }],
       seedArtists: ["Lamb"],
       exclude: [{ title: "Glory Box", artist: "portishead" }],
@@ -391,7 +399,7 @@ describe("PluginHost", () => {
     ]);
   });
 
-  it("getSimilar routes by kind to the matching method, merges + dedupes, isolates throws", async () => {
+  it("getSimilar routes by kind to the matching method (via hub), merges + dedupes, isolates throws", async () => {
     await writePlugin(
       "sim-a",
       `export function activate(ctx) {
@@ -431,18 +439,18 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost({ providerTimeoutMs: 50 });
+    const { host, hub } = makeHost({}, { providerTimeoutMs: 50 });
     await host.loadAll();
-    expect(host.registry.similarProviders).toHaveLength(3);
+    expect(hub.registry.similarProviders).toHaveLength(3);
 
-    const artists = await host.getSimilar("artist", { name: "Lamb" });
+    const artists = await hub.getSimilar("artist", { name: "Lamb" });
     expect(artists).toEqual([
       { name: "Portishead", externalUrl: "https://last.fm/p" },
       { name: "Massive Attack" },
       { name: "Björk" },
     ]);
 
-    const tracks = await host.getSimilar("track", { title: "Gorecki", artist: "Lamb" });
+    const tracks = await hub.getSimilar("track", { title: "Gorecki", artist: "Lamb" });
     expect(tracks).toEqual([{ name: "Glory Box", artistName: "Lamb" }]);
   });
 
@@ -457,9 +465,9 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
-    const items = await host.getSimilar("artist", { name: "Lamb" });
+    const items = await hub.getSimilar("artist", { name: "Lamb" });
     expect(items).toHaveLength(24);
     expect(items[0]).toEqual({ name: "Artist 0" });
   });
@@ -493,12 +501,12 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
-    expect(host.registry.acquisitionProviders).toHaveLength(2);
-    expect(host.acquisitionAvailable()).toBe(true);
+    expect(hub.registry.acquisitionProviders).toHaveLength(2);
+    expect(hub.acquisitionAvailable()).toBe(true);
 
-    const albums = await host.lookupArtistAlbums("Lamb");
+    const albums = await hub.lookupArtistAlbums("Lamb");
     // acq-a was asked first (sequential), returned [], so acq-b's results won.
     expect((globalThis as Record<string, unknown>).__lookups).toEqual(["a:Lamb"]);
     expect(albums).toEqual([
@@ -549,10 +557,10 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost({ providerTimeoutMs: 50 });
+    const { host, hub } = makeHost({}, { providerTimeoutMs: 50 });
     await host.loadAll();
 
-    const albums = await host.lookupArtistAlbums("Lamb");
+    const albums = await hub.lookupArtistAlbums("Lamb");
     expect(albums).toEqual([
       {
         title: "What Sound",
@@ -588,20 +596,20 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
 
-    await host.acquireAlbum("acq-a", "mb-1");
+    await hub.acquireAlbum("acq-a", "mb-1");
     expect((globalThis as Record<string, unknown>).__acquired).toEqual(["mb-1"]);
 
-    await expect(host.acquireAlbum("nope", "mb-1")).rejects.toThrow(/unknown acquisition provider/);
+    await expect(hub.acquireAlbum("nope", "mb-1")).rejects.toThrow(/unknown acquisition provider/);
     // rethrown with the plugin id so the renderer knows who failed
-    await expect(host.acquireAlbum("acq-boom", "mb-1")).rejects.toThrow(
+    await expect(hub.acquireAlbum("acq-boom", "mb-1")).rejects.toThrow(
       /\[plugin:acq-boom\].*acquire boom/,
     );
   });
 
-  it("acquisitionStatus merges all providers, isolating throwing and slow ones", async () => {
+  it("acquisitionStatus merges all providers (via hub), isolating throwing and slow ones", async () => {
     await writePlugin(
       "acq-a",
       `export function activate(ctx) {
@@ -650,11 +658,11 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost({ providerTimeoutMs: 50 });
+    const { host, hub } = makeHost({}, { providerTimeoutMs: 50 });
     await host.loadAll();
-    expect(host.registry.acquisitionProviders).toHaveLength(4);
+    expect(hub.registry.acquisitionProviders).toHaveLength(4);
 
-    const status = await host.acquisitionStatus();
+    const status = await hub.acquisitionStatus();
     expect(status).toEqual([
       {
         title: "Fear of Fours",
@@ -679,14 +687,14 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
-    expect(host.acquisitionAvailable()).toBe(true);
+    expect(hub.acquisitionAvailable()).toBe(true);
 
     await host.setEnabled("acq-a", false);
-    expect(host.acquisitionAvailable()).toBe(false);
-    expect(await host.lookupArtistAlbums("Lamb")).toEqual([]);
-    expect(await host.acquisitionStatus()).toEqual([]);
+    expect(hub.acquisitionAvailable()).toBe(false);
+    expect(await hub.lookupArtistAlbums("Lamb")).toEqual([]);
+    expect(await hub.acquisitionStatus()).toEqual([]);
   });
 
   it("searchExternalArtists: first provider with results wins, items tagged + junk-filtered + capped", async () => {
@@ -733,10 +741,10 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
 
-    const artists = await host.searchExternalArtists("Lamb");
+    const artists = await hub.searchExternalArtists("Lamb");
     // ext-a was asked first (sequential), returned [], so ext-b's results won.
     expect((globalThis as Record<string, unknown>).__artistSearches).toEqual(["a:Lamb"]);
     expect(artists).toHaveLength(10); // capped
@@ -786,10 +794,10 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost({ providerTimeoutMs: 50 });
+    const { host, hub } = makeHost({}, { providerTimeoutMs: 50 });
     await host.loadAll();
 
-    const artists = await host.searchExternalArtists("Lamb");
+    const artists = await hub.searchExternalArtists("Lamb");
     expect(artists).toEqual([{ name: "Lamb", providerRef: "ar-9", providerId: "ext-z-good" }]);
   });
 
@@ -831,18 +839,16 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
 
-    await host.acquireArtist("ext-a", "ar-1");
+    await hub.acquireArtist("ext-a", "ar-1");
     expect((globalThis as Record<string, unknown>).__monitored).toEqual(["ar-1"]);
 
-    await expect(host.acquireArtist("nope", "ar-1")).rejects.toThrow(
-      /unknown acquisition provider/,
-    );
-    await expect(host.acquireArtist("ext-noop", "ar-1")).rejects.toThrow(/cannot monitor artists/);
+    await expect(hub.acquireArtist("nope", "ar-1")).rejects.toThrow(/unknown acquisition provider/);
+    await expect(hub.acquireArtist("ext-noop", "ar-1")).rejects.toThrow(/cannot monitor artists/);
     // rethrown with the plugin id so the renderer knows who failed
-    await expect(host.acquireArtist("ext-boom", "ar-1")).rejects.toThrow(
+    await expect(hub.acquireArtist("ext-boom", "ar-1")).rejects.toThrow(
       /\[plugin:ext-boom\].*monitor boom/,
     );
   });
@@ -865,13 +871,13 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
 
     // exact (case-insensitive) match wins over the first result
-    await host.acquireArtistByName("lamb");
+    await hub.acquireArtistByName("lamb");
     // no exact match → first result
-    await host.acquireArtistByName("La");
+    await hub.acquireArtistByName("La");
     expect((globalThis as Record<string, unknown>).__monitored).toEqual(["ar-lamb", "ar-log"]);
   });
 
@@ -889,14 +895,14 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
-    await expect(host.acquireArtistByName("Nobody")).rejects.toThrow(
+    await expect(hub.acquireArtistByName("Nobody")).rejects.toThrow(
       /No acquisition source knows this artist/,
     );
   });
 
-  it("lists and invokes track actions; unknown ids and failures throw with context", async () => {
+  it("lists and invokes track actions (via hub); unknown ids and failures throw with context", async () => {
     await writePlugin(
       "actions",
       `export function activate(ctx) {
@@ -911,26 +917,26 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost();
+    const { host, hub } = makeHost();
     await host.loadAll();
 
-    expect(host.listTrackActions()).toEqual([
+    expect(hub.listTrackActions()).toEqual([
       { pluginId: "actions", id: "love", label: "Love", icon: "heart" },
       { pluginId: "actions", id: "explode", label: "Explode" },
     ]);
 
     const track = { title: "T", artistName: "A", durationMs: 1000 };
-    await host.invokeTrackAction("love", track);
+    await hub.invokeTrackAction("love", track);
     expect((globalThis as Record<string, unknown>).__invoked).toEqual(["T"]);
 
-    await expect(host.invokeTrackAction("nope", track)).rejects.toThrow(/unknown track action/);
+    await expect(hub.invokeTrackAction("nope", track)).rejects.toThrow(/unknown track action/);
     // rethrown with the plugin id so the renderer knows who failed
-    await expect(host.invokeTrackAction("explode", track)).rejects.toThrow(
+    await expect(hub.invokeTrackAction("explode", track)).rejects.toThrow(
       /\[plugin:actions\].*action boom/,
     );
   });
 
-  it("getTrackDetails drops nulls and isolates failing providers", async () => {
+  it("getTrackDetails drops nulls and isolates failing providers (via hub)", async () => {
     await writePlugin(
       "detail",
       `export function activate(ctx) {
@@ -945,10 +951,10 @@ describe("PluginHost", () => {
         });
       }`,
     );
-    const { host } = makeHost({ providerTimeoutMs: 50 });
+    const { host, hub } = makeHost({}, { providerTimeoutMs: 50 });
     await host.loadAll();
 
-    const details = await host.getTrackDetails({ title: "T", artistName: "A", durationMs: 1000 });
+    const details = await hub.getTrackDetails({ title: "T", artistName: "A", durationMs: 1000 });
     expect(details).toEqual([
       { pluginId: "detail", title: "Info", rows: [{ label: "Title", value: "T" }] },
     ]);
