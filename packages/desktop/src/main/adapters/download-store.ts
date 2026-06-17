@@ -65,8 +65,9 @@ export class DownloadStore {
 
     // A write error (disk full, EACCES, …) must never bubble up as an unhandled
     // 'error' event — that is fatal in Electron's main process. Mark the writer
-    // failed; commit/abort discard the temp. The client response is a separate
-    // pipe so playback continues (just unsaved).
+    // failed; commit() discards the temp and rejects so the DownloadManager
+    // records the job as failed (a silent return would falsely mark it
+    // "downloaded" while the file isn't on disk).
     //
     // ERR_STREAM_DESTROYED is expected and benign: aborting a write calls
     // destroy() while buffered chunks are still flushing; each then errors.
@@ -84,24 +85,26 @@ export class DownloadStore {
         if (settled) return;
         settled = true;
         if (!failed) {
-          // We piped with { end: false }, so commit owns the single end() and
-          // waits for the flush ('finish') before renaming — guaranteeing the
-          // published file is complete. Resolve on error too, so we never hang.
+          // The caller writes then end()s the stream; commit waits for the
+          // flush ('finish') before renaming so the published file is complete.
+          // The writableFinished guard tolerates an already-ended stream (the
+          // common case) without re-calling end(); resolve on error too so we
+          // never hang.
           await new Promise<void>((resolve) => {
+            if (stream.writableFinished) return resolve();
             stream.once("error", () => resolve());
             stream.end(() => resolve());
           });
         }
         if (failed) {
           await removeTmp();
-          return;
+          throw new Error(`download write failed for ${key}`);
         }
         try {
           await rename(tmp, dest); // atomic publish (overwrites a prior copy)
         } catch (err) {
-          console.error("[musex download-store] commit failed:", err);
           await removeTmp();
-          return;
+          throw err instanceof Error ? err : new Error(String(err));
         }
       },
       abort: async () => {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -40,6 +40,17 @@ describe("DownloadStore", () => {
     await write("k3", "bye");
     await store.remove("k3");
     expect(await store.has("k3")).toBe(false);
+  });
+  it("commit rejects when the atomic rename fails (so the manager marks the job failed)", async () => {
+    // Pre-create a directory at the destination key path: renaming the temp
+    // file onto an existing directory fails, exercising commit's reject path.
+    await mkdir(join(dir, "k4"));
+    const w = store.beginWrite("k4");
+    w.stream.write("data");
+    w.stream.end();
+    await expect(w.commit()).rejects.toThrow();
+    // the .part temp is cleaned up — only the pre-created directory remains
+    expect(await store.listKeys()).toEqual(["k4"]);
   });
   it("stats counts files + bytes; listKeys returns complete keys", async () => {
     await write("a", "12345");
