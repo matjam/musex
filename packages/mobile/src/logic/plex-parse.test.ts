@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseArtists, parseLibraries, parsePlaylists, parsePlaylistTracks, parseTracks } from "./plex-parse";
+import {
+  parseArtists,
+  parseLibraries,
+  parsePlaylists,
+  parsePlaylistTracks,
+  parseTracks,
+} from "./plex-parse";
 
 describe("parseArtists", () => {
   it("maps Metadata entries to Artist", () => {
@@ -146,7 +152,9 @@ describe("parsePlaylistTracks", () => {
   });
 
   it("skips rows with no playable part", () => {
-    const json = { MediaContainer: { Metadata: [{ ratingKey: "9", playlistItemID: "1", title: "x" }] } };
+    const json = {
+      MediaContainer: { Metadata: [{ ratingKey: "9", playlistItemID: "1", title: "x" }] },
+    };
     expect(parsePlaylistTracks(json, "srv")).toHaveLength(0);
   });
 });

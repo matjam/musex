@@ -15,7 +15,12 @@ function track(id: string, durationMs = 200_000): Track {
   };
 }
 
-function state(tracks: Track[], index: number, status: PlaybackState["status"], positionSec: number): PlaybackState {
+function state(
+  tracks: Track[],
+  index: number,
+  status: PlaybackState["status"],
+  positionSec: number,
+): PlaybackState {
   return {
     queue: tracks.length ? { tracks, index, shuffle: false, repeat: "none" } : null,
     status,

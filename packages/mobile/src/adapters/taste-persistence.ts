@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { TasteState } from "@musex/core";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "musex.listening-profile";
 

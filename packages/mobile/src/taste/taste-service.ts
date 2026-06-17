@@ -1,6 +1,5 @@
+import type { ArtistStat, PlayKind, TrackStat } from "@musex/core";
 import { TasteProfile } from "@musex/core";
-import type { ArtistStat, TrackStat } from "@musex/core";
-import type { PlayKind } from "@musex/core";
 import { loadTasteState, saveTasteState } from "../adapters/taste-persistence";
 
 const SAVE_DEBOUNCE_MS = 5_000;

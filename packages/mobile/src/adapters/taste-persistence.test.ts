@@ -22,7 +22,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { loadTasteState, saveTasteState } from "./taste-persistence";
 
 const sample: TasteState = {
-  artists: { lamb: { name: "Lamb", score: 3, plays: 5, skips: 0, lastSeenMs: 1, artistRatingStars: null } },
+  artists: {
+    lamb: { name: "Lamb", score: 3, plays: 5, skips: 0, lastSeenMs: 1, artistRatingStars: null },
+  },
   tracks: {},
 };
 

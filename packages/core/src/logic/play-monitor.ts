@@ -13,7 +13,9 @@ const MAX_CONTINUOUS_DELTA = 2;
  *  otherwise "partial". Unknown duration (<=0) uses the absolute thresholds. */
 export function classifyPlay(playedSec: number, durationSec: number): PlayKind {
   const scrobbleAt =
-    durationSec > 0 ? Math.min(SCROBBLE_ABS_SEC, durationSec * SCROBBLE_FRACTION) : SCROBBLE_ABS_SEC;
+    durationSec > 0
+      ? Math.min(SCROBBLE_ABS_SEC, durationSec * SCROBBLE_FRACTION)
+      : SCROBBLE_ABS_SEC;
   if (playedSec >= scrobbleAt) return "full";
   const skipFrac = durationSec > 0 ? durationSec * SKIP_MAX_FRACTION : Number.POSITIVE_INFINITY;
   if (playedSec < SKIP_MAX_SEC && playedSec < skipFrac) return "skip";

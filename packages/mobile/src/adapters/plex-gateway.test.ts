@@ -130,12 +130,20 @@ describe("PlexGatewayImpl", () => {
       }),
     );
     const gw = new PlexGatewayImpl(fetchFn, "CID");
-    const lib = { id: "3", serverId: "srv", serverName: "T", title: "Music", type: "music" as const };
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
     await gw.listMusicLibraries(server, "TOK"); // prime base url
     const pls = await gw.listPlaylists(lib, "TOK");
     expect(pls[0]).toMatchObject({ id: "55", title: "Late Night", trackCount: 42 });
     const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
-    expect(urls.some((u) => u.includes("/playlists") && u.includes("playlistType=audio"))).toBe(true);
+    expect(urls.some((u) => u.includes("/playlists") && u.includes("playlistType=audio"))).toBe(
+      true,
+    );
   });
 
   it("listPlaylistTracks queries items and parses PlaylistTracks", async () => {
