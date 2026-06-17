@@ -1,12 +1,9 @@
 import type { Album, LibrarySort } from "@musex/core";
 import { listValidator } from "@musex/core";
-import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
-import { acquisitionKey } from "../../util/acquisition-map";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
-import { useAcquisitionMap } from "../hooks/useAcquisitionMap";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
 import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
@@ -29,13 +26,9 @@ export function AlbumsView() {
   // track-level (keyed by plexPath) and can't be cheaply attributed to a
   // container card, so it's deliberately not reflected here — track lists below
   // get exact downloaded∪cached availability. The Lidarr acquisition queue is
-  // NOT overlaid on library cards.
+  // NOT overlaid on library cards (it lives in the Acquisition activity feed).
   const downloaded = useDownloadedSet("albumId");
   const downloading = useDownloadingSet("albumId");
-  // Acquisition status (album-granular, matched by title) drives the Acquiring
-  // FILTER only — not the card badge. Degrades to an empty map offline / on
-  // error (see useAcquisitionMap).
-  const acquiring = useAcquisitionMap("title");
   const offline = connectivity === "offline";
 
   // Local download state → card badge. Downloaded wins over in-flight.
@@ -83,59 +76,20 @@ export function AlbumsView() {
   }
 
   // "all" shows everything (offline: un-downloaded cards are dimmed, not hidden);
-  // "downloaded" shows only cards with a downloaded track; "acquiring" shows
-  // only albums currently being acquired (by title), plus a link to the full
-  // acquisition activity feed.
-  const visible =
-    filter === "downloaded"
-      ? albums.filter((a) => downloaded.has(a.id))
-      : filter === "acquiring"
-        ? albums.filter((a) => acquiring.has(acquisitionKey(a.title)))
-        : albums;
+  // "downloaded" shows only cards with a downloaded track. Watching is artist-
+  // level, so the Albums view offers no Watching mode.
+  const visible = filter === "downloaded" ? albums.filter((a) => downloaded.has(a.id)) : albums;
 
   return (
     <div className="browse-section">
       <div className="browse-header">
         <h3 className="browse-title">Albums</h3>
         <div className="browse-controls">
-          <LibraryFilter value={filter} onChange={setFilter} />
+          <LibraryFilter value={filter} onChange={setFilter} modes={["all", "downloaded"]} />
           <SortSelector value={sort} onChange={setSort} />
         </div>
       </div>
-      {filter === "acquiring" ? (
-        <>
-          <button
-            type="button"
-            className="acquiring-activity-link"
-            onClick={() => dispatch({ type: "navigate", view: { name: "acquiring" } })}
-          >
-            <ListChecks size={14} />
-            View acquisition activity
-          </button>
-          {visible.length === 0 ? (
-            <div className="content-placeholder">No albums are being acquired right now.</div>
-          ) : (
-            <>
-              <div className="browse-sub">
-                {visible.length} album{visible.length !== 1 ? "s" : ""} acquiring
-              </div>
-              <div className="browse-grid">
-                {visible.map((album) => (
-                  <GridCard
-                    key={album.id}
-                    thumb={album.thumb}
-                    title={album.title}
-                    subtitle={album.year != null ? String(album.year) : undefined}
-                    state={cardState(album.id)}
-                    onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
-                    onPlay={() => void playAlbum(album)}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </>
-      ) : filter === "downloaded" && visible.length === 0 ? (
+      {filter === "downloaded" && visible.length === 0 ? (
         <div className="content-placeholder">No downloaded albums yet.</div>
       ) : (
         <>

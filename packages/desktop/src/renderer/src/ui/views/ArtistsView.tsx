@@ -4,10 +4,8 @@ import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { useMonitoring } from "../../state/monitoring";
-import { acquisitionKey } from "../../util/acquisition-map";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
-import { useAcquisitionMap } from "../hooks/useAcquisitionMap";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
 import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
@@ -31,9 +29,6 @@ export function ArtistsView() {
   // exact availability. The Lidarr acquisition queue is NOT overlaid on cards.
   const downloaded = useDownloadedSet("artistId");
   const downloading = useDownloadingSet("artistId");
-  // Acquisition status (rolled up to the artist) drives the Acquiring FILTER
-  // only — not the card badge. Degrades to an empty map offline / on error.
-  const acquiring = useAcquisitionMap("artistName");
   const offline = connectivity === "offline";
 
   // Local download state → card badge. Downloaded wins over in-flight.
@@ -81,14 +76,14 @@ export function ArtistsView() {
   }
 
   // "all" shows everything (offline: un-downloaded cards dimmed, not hidden);
-  // "downloaded" shows only artists with a downloaded track; "acquiring" shows
-  // only artists with an album currently being acquired (by name), plus a link
-  // to the full acquisition activity feed.
+  // "downloaded" shows only artists with a downloaded track; "watching" shows
+  // only artists watched for new releases, plus a link to the full acquisition
+  // activity feed.
   const visible =
     filter === "downloaded"
       ? artists.filter((a) => downloaded.has(a.id))
-      : filter === "acquiring"
-        ? artists.filter((a) => acquiring.has(acquisitionKey(a.name)))
+      : filter === "watching"
+        ? artists.filter((a) => isWatched(a.name))
         : artists;
 
   return (
@@ -96,10 +91,14 @@ export function ArtistsView() {
       <div className="browse-header">
         <h3 className="browse-title">Artists</h3>
         <div className="browse-controls">
-          <LibraryFilter value={filter} onChange={setFilter} />
+          <LibraryFilter
+            value={filter}
+            onChange={setFilter}
+            modes={["all", "downloaded", "watching"]}
+          />
         </div>
       </div>
-      {filter === "acquiring" ? (
+      {filter === "watching" ? (
         <>
           <button
             type="button"
@@ -110,11 +109,13 @@ export function ArtistsView() {
             View acquisition activity
           </button>
           {visible.length === 0 ? (
-            <div className="content-placeholder">No artists are being acquired right now.</div>
+            <div className="content-placeholder">
+              No artists are being watched for new releases.
+            </div>
           ) : (
             <>
               <div className="browse-sub">
-                {visible.length} artist{visible.length !== 1 ? "s" : ""} acquiring
+                {visible.length} artist{visible.length !== 1 ? "s" : ""} watched
               </div>
               <div className="browse-grid">
                 {visible.map((artist) => (
