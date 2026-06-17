@@ -700,6 +700,22 @@ html:not([data-platform="darwin"]) .topbar {
   margin-bottom: 18px;
 }
 
+/* "On this device" header: title + size on the left, Play/Shuffle on the right. */
+.on-device-header {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.on-device-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.on-device-heading .on-device-size {
+  margin-bottom: 0;
+}
+
 /* "View acquisition activity" link shown in the Acquiring filter mode. */
 .acquiring-activity-link {
   display: inline-flex;
@@ -2033,6 +2049,36 @@ img.queue-row-art {
 
 .grid-card-play:hover {
   filter: brightness(1.08);
+}
+
+/* Secondary corner action (e.g. Remove) shown alongside the Play overlay on a
+   playable card. Top-left so it clears the bottom-right Play button. */
+.grid-card-action {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.grid-card:hover .grid-card-action,
+.grid-card-action:focus-visible {
+  opacity: 1;
+}
+
+.grid-card-action:hover {
+  background: rgba(0, 0, 0, 0.85);
+  color: var(--green);
 }
 
 /* Small chip over the artwork corner (Discover "external" items) */

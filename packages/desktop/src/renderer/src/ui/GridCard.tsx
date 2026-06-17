@@ -127,6 +127,22 @@ export function GridCard({
             <ActionIcon size={18} />
           </button>
         )}
+        {onPlay && onAction && ActionIcon && (
+          // Secondary corner action alongside the Play overlay (e.g. Remove on a
+          // playable downloaded album) — small, top-left, so it doesn't collide
+          // with the bottom-right Play button or the top-right badge.
+          <button
+            type="button"
+            className="grid-card-action"
+            title={actionTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAction();
+            }}
+          >
+            <ActionIcon size={14} />
+          </button>
+        )}
       </div>
       <div className="grid-card-title">{title}</div>
       {subtitle && <div className="grid-card-sub">{subtitle}</div>}
