@@ -117,6 +117,8 @@ interface Store {
   artBaseFor: (serverId: string) => string | null;
   token: string | null;
   taste: TasteService;
+  /** Finish sign-in for a fresh token: discover + auto-select the owned library. */
+  completeSignIn: (token: string) => Promise<void>;
   selectLibrary: (library: Library) => Promise<void>;
   listAllLibraries: () => Promise<Library[]>;
 }
@@ -150,6 +152,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const engine = useMemo(() => new ExpoAudioEngine(), []);
   const taste = useMemo(() => new TasteService(), []);
   const monitor = useMemo(() => new PlayMonitor(), []);
+
+  // Finish sign-in / restore: discover servers, auto-select the owned server's
+  // library (or a still-valid persisted choice), persist it, and enter the app.
+  // Shared by bootstrap (token already stored) and the sign-in screen (fresh
+  // token) so the owned library is auto-picked on the first sign-in too.
+  const completeSignIn = useMemo(
+    () => async (token: string) => {
+      try {
+        const servers = await gateway.listServers(token);
+        const library = await resolveLibrary(gateway, servers, token);
+        if (library) await saveSelectedLibrary(library);
+        dispatch({ type: "signed-in", token, servers, library });
+      } catch {
+        // Bad/expired token -> signed out (never loop).
+        await tokenStore.clear();
+        dispatch({ type: "bootstrapped", token: null });
+      }
+    },
+    [gateway, tokenStore],
+  );
 
   // ONE long-lived session. PlaybackSession's 3rd ctor arg is `shuffleRest`
   // (a shuffle fn), NOT a state callback; state is observed via subscribe().
@@ -213,22 +235,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "bootstrapped", token: null });
         return;
       }
-      try {
-        const servers = await gateway.listServers(token);
-        const library = await resolveLibrary(gateway, servers, token);
-        if (library) await saveSelectedLibrary(library);
-        if (alive) dispatch({ type: "signed-in", token, servers, library });
-      } catch {
-        // Bad/expired token -> signed out (never loop).
-        await tokenStore.clear();
-        if (alive) dispatch({ type: "bootstrapped", token: null });
-      }
+      if (alive) await completeSignIn(token);
     })();
     return () => {
       alive = false;
       engine.dispose();
     };
-  }, [engine, gateway, tokenStore, taste]);
+  }, [engine, tokenStore, taste, completeSignIn]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
   const playTracks = useMemo(
@@ -275,6 +288,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     artBaseFor: (sid) => safeBaseUrl(gateway, sid),
     token: state.token,
     taste,
+    completeSignIn,
     selectLibrary,
     listAllLibraries,
   };

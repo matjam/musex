@@ -7,7 +7,7 @@ import { useStore } from "../src/state/store";
 import { theme } from "../src/ui/theme";
 
 export default function SignIn() {
-  const { gateway, tokenStore, dispatch } = useStore();
+  const { gateway, tokenStore, completeSignIn } = useStore();
   const router = useRouter();
   const [pin, setPin] = useState<Pin | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,9 +29,10 @@ export default function SignIn() {
           const { authToken } = await gateway.pollPin(p.id);
           if (authToken) {
             await tokenStore.save(authToken);
-            const servers = await gateway.listServers(authToken);
-            dispatch({ type: "signed-in", token: authToken, servers, library: null });
-            router.replace("/picker");
+            // Discover + auto-select the owned library, then let index route
+            // (to the app, or to /picker only if no library was resolvable).
+            await completeSignIn(authToken);
+            router.replace("/");
             return;
           }
         } catch (err) {
