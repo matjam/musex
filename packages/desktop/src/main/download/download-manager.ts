@@ -114,9 +114,10 @@ export class DownloadManager {
       this.record(job, "failed", 0, e instanceof Error ? e.message : String(e));
     } finally {
       if (quality.mode === "mp3") {
-        // Best-effort stop: uses globalThis.fetch so it doesn't pollute the
-        // injected fetch used for the actual download (keeps tests clean).
-        globalThis
+        // Best-effort: free the Plex transcode session. Uses the injected fetch
+        // (same seam as the download) so a custom client — e.g. self-signed TLS
+        // — applies to the stop call too.
+        await this.deps
           .fetch(
             stopSessionUrl({
               baseUrl: ep.baseUrl,

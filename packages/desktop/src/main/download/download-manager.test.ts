@@ -49,12 +49,12 @@ describe("DownloadManager", () => {
     expect(progress).toContain("a:downloaded");
   });
 
-  it("transcode mode fetches the MP3 transcode URL", async () => {
+  it("transcode mode fetches the MP3 start URL then the stop URL, both via the injected fetch", async () => {
     const store = fakeStore();
     const index = new DownloadIndex([], () => {});
-    let fetchedUrl = "";
+    const urls: string[] = [];
     const fetchFn = vi.fn(async (url: string) => {
-      fetchedUrl = url;
+      urls.push(url);
       return new Response("MP3", { status: 200 });
     });
     const mgr = new DownloadManager({
@@ -66,8 +66,12 @@ describe("DownloadManager", () => {
     });
     await mgr.enqueue([job("b")]);
     await mgr.drain();
-    expect(fetchedUrl).toContain("/audio/:/transcode/universal/start.mp3");
-    expect(fetchedUrl).toContain("musicBitrate=192");
+    const start = urls.find((u) => u.includes("/audio/:/transcode/universal/start.mp3"));
+    expect(start).toBeDefined();
+    expect(start).toContain("musicBitrate=192");
+    // The best-effort stop call must use the same injected fetch (so a custom
+    // TLS client applies to it too), not globalThis.fetch.
+    expect(urls.some((u) => u.includes("/audio/:/transcode/universal/stop"))).toBe(true);
     expect(index.get("b")?.format).toBe("mp3");
   });
 
