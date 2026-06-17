@@ -1,3 +1,4 @@
+import type { Library } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
 import { Blocks, HardDrive, Puzzle, Settings2, Sparkles, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -69,18 +70,76 @@ function HelpText({ text }: { text: string }) {
 
 /** Plex server / library info. */
 function AccountSection() {
-  const { library } = useApp();
+  const { library, dispatch } = useApp();
+  const [libs, setLibs] = useState<Library[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    window.musex
+      .discoverLibraries()
+      .then((res) => {
+        if (!alive) return;
+        const sorted = res.libraries
+          .slice()
+          .sort((a, b) => Number(Boolean(b.owned)) - Number(Boolean(a.owned)));
+        setLibs(sorted);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function choose(lib: Library) {
+    if (busy || lib.id === library?.id) return;
+    setBusy(true);
+    try {
+      await window.musex.selectLibrary(lib.id);
+      dispatch({ type: "library-switched", library: lib });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="settings-section">
       <div className="settings-section-title">Account</div>
-      <div className="settings-row">
-        <div className="settings-row-text">
-          <div className="settings-row-label">Plex server</div>
-          <div className="settings-row-desc">
-            {library ? `${library.serverName} · ${library.title}` : "No library selected"}
-          </div>
+      {loading ? (
+        <div className="settings-row">
+          <div className="settings-row-desc">Finding your libraries…</div>
         </div>
-      </div>
+      ) : (
+        libs.map((lib) => {
+          const current = lib.id === library?.id && lib.serverId === library?.serverId;
+          return (
+            <div className="settings-row" key={`${lib.serverId}-${lib.id}`}>
+              <div className="settings-row-text">
+                <div className="settings-row-label">
+                  {lib.serverName} · {lib.title}
+                </div>
+                <div className="settings-row-desc">
+                  {lib.owned
+                    ? "Your server"
+                    : `Shared${lib.sourceTitle ? ` by ${lib.sourceTitle}` : ""}`}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="settings-btn"
+                disabled={busy || current}
+                onClick={() => void choose(lib)}
+              >
+                {current ? "Current" : "Use"}
+              </button>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

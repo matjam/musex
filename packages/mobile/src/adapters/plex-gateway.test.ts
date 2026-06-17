@@ -122,4 +122,52 @@ describe("PlexGatewayImpl", () => {
     const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
     expect(urls.some((u) => u.includes("/library/metadata/1/allLeaves"))).toBe(true);
   });
+
+  it("listPlaylists queries audio playlists and parses", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({
+        MediaContainer: { Metadata: [{ ratingKey: "55", title: "Late Night", leafCount: 42 }] },
+      }),
+    );
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
+    await gw.listMusicLibraries(server, "TOK"); // prime base url
+    const pls = await gw.listPlaylists(lib, "TOK");
+    expect(pls[0]).toMatchObject({ id: "55", title: "Late Night", trackCount: 42 });
+    const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
+    expect(urls.some((u) => u.includes("/playlists") && u.includes("playlistType=audio"))).toBe(
+      true,
+    );
+  });
+
+  it("listPlaylistTracks queries items and parses PlaylistTracks", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({
+        MediaContainer: {
+          Metadata: [
+            {
+              ratingKey: "9",
+              playlistItemID: "777",
+              title: "Song",
+              grandparentTitle: "BoC",
+              Media: [{ Part: [{ id: "1", key: "/p/1" }] }],
+            },
+          ],
+        },
+      }),
+    );
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK"); // prime base url for serverId "srv"
+    const items = await gw.listPlaylistTracks("55", "srv", "TOK");
+    expect(items[0]).toMatchObject({ playlistItemId: "777" });
+    expect(items[0]?.track.title).toBe("Song");
+    const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
+    expect(urls.some((u) => u.includes("/playlists/55/items"))).toBe(true);
+  });
 });

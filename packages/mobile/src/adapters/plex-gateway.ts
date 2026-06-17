@@ -4,6 +4,7 @@ import type {
   Library,
   LibrarySort,
   Pin,
+  Playlist,
   PlaylistTrack,
   PlexGateway,
   SearchResults,
@@ -16,6 +17,8 @@ import {
   parseAlbums,
   parseArtists,
   parseLibraries,
+  parsePlaylists,
+  parsePlaylistTracks,
   parseServers,
   parseTracks,
 } from "../logic/plex-parse";
@@ -75,7 +78,7 @@ export class PlexGatewayImpl implements PlexGateway {
   async listMusicLibraries(server: Server, token: string): Promise<Library[]> {
     const base = await this.resolveBaseUrl(server, token);
     const json = await this.getJson(`${base}/library/sections`, token);
-    return parseLibraries(json, server.id, server.name);
+    return parseLibraries(json, server.id, server.name, server.owned, server.sourceTitle);
   }
 
   async listArtists(library: Library, token: string): Promise<Artist[]> {
@@ -159,11 +162,20 @@ export class PlexGatewayImpl implements PlexGateway {
   search(): Promise<SearchResults> {
     throw new Error("search not implemented in Phase 1");
   }
-  listPlaylists(): Promise<never> {
-    throw new Error("playlists not implemented in Phase 1");
+  async listPlaylists(library: Library, token: string): Promise<Playlist[]> {
+    const base = this.requireBase(library.serverId);
+    const json = await this.getJson(`${base}/playlists?playlistType=audio`, token);
+    return parsePlaylists(json, library.serverId);
   }
-  listPlaylistTracks(): Promise<PlaylistTrack[]> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async listPlaylistTracks(
+    playlistId: string,
+    serverId: string,
+    token: string,
+  ): Promise<PlaylistTrack[]> {
+    const base = this.requireBase(serverId);
+    const json = await this.getJson(`${base}/playlists/${playlistId}/items`, token);
+    return parsePlaylistTracks(json, serverId);
   }
   createPlaylist(): Promise<never> {
     throw new Error("playlists not implemented in Phase 1");

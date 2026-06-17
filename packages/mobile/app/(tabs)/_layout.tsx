@@ -1,5 +1,5 @@
 import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from "expo-router/ui";
-import { Cog, Library, type LucideIcon } from "lucide-react-native";
+import { Cog, Home, Library, type LucideIcon } from "lucide-react-native";
 import { forwardRef } from "react";
 import { Pressable, type View as RNView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -45,6 +45,9 @@ export default function TabsLayout() {
           paddingBottom: insets.bottom,
         }}
       >
+        <TabTrigger name="home" href="/(tabs)/home" asChild>
+          <TabButton icon={Home} label="Home" />
+        </TabTrigger>
         <TabTrigger name="library" href="/(tabs)/library" asChild>
           <TabButton icon={Library} label="Library" />
         </TabTrigger>

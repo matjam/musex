@@ -1,5 +1,5 @@
 import type { Album, Artist, LibrarySort, Queue, Track } from "@musex/core";
-import { createPlaylist, discoverMusicLibraries, isHttpUrl } from "@musex/core";
+import { createPlaylist, discoverMusicLibraries, isHttpUrl, pickDefaultLibrary } from "@musex/core";
 import type { SectionContext } from "@musex/plugin-api";
 import { ipcMain, shell } from "electron";
 import { buildAf, replaygainMode, sanitizeAudioPrefs } from "../logic/audio-filters.js";
@@ -133,7 +133,7 @@ export function registerIpc(rt: Runtime): void {
     try {
       const result = await discoverMusicLibraries(rt.gateway, rt.token);
       rt.libraries = result.libraries;
-      const first = result.libraries[0] ?? null;
+      const first = pickDefaultLibrary(result.libraries);
       if (first) persistence.setLibrary(first);
       return { library: first };
     } catch {

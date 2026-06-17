@@ -1,3 +1,4 @@
+import { pickDefaultLibrary } from "@musex/core";
 import { useState } from "react";
 import { useApp } from "../state/app";
 
@@ -32,7 +33,7 @@ export function SignIn() {
       }
 
       const result = await window.musex.discoverLibraries();
-      const lib = result.libraries[0];
+      const lib = pickDefaultLibrary(result.libraries);
       if (!lib) {
         setError("No music library found on your Plex server.");
         setLoading(false);

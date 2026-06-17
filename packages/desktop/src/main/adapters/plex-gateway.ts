@@ -115,6 +115,10 @@ export class PlexapiGateway implements PlexGateway {
         .map((r) => ({
           id: r.clientIdentifier,
           name: r.name,
+          owned: Boolean(r.owned),
+          // sourceTitle is on the raw resources response but not on @ctrl/plex's
+          // MyPlexResource instance, so desktop can't capture the owner's name —
+          // shared servers are labeled "Shared" (mobile reads it from raw JSON).
           // ResourceConnection exposes uri + local; relay is in the raw Connection
           // data only. Default relay to false — callers should prefer local connections.
           connections: (r.connections ?? []).map((c) => ({
@@ -145,6 +149,8 @@ export class PlexapiGateway implements PlexGateway {
           // section-settings changes. The max is what "content changed"
           // actually keys on — the whole validator system derives from it.
           updatedAt: Math.max(s.updatedAt.getTime(), s.scannedAt.getTime()),
+          owned: server.owned,
+          sourceTitle: server.sourceTitle,
         }));
     } catch (err) {
       asPlexAuthError(err);
