@@ -30,7 +30,7 @@ export default function SignIn() {
           if (authToken) {
             await tokenStore.save(authToken);
             const servers = await gateway.listServers(authToken);
-            dispatch({ type: "signed-in", token: authToken, servers });
+            dispatch({ type: "signed-in", token: authToken, servers, library: null });
             router.replace("/picker");
             return;
           }
