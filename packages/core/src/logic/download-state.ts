@@ -1,3 +1,4 @@
+import type { Track } from "../models/index.js";
 import type { DownloadMeta } from "./download-plan.js";
 
 export type DownloadStatus = "queued" | "downloading" | "downloaded" | "failed" | "missing";
@@ -79,4 +80,54 @@ export function groupDownloadsByAlbum(records: DownloadRecord[]): DownloadAlbumG
       a.albumTitle.localeCompare(b.albumTitle, undefined, { sensitivity: "base" }) ||
       a.artistName.localeCompare(b.artistName, undefined, { sensitivity: "base" }),
   );
+}
+
+/** Rebuild a playable Track from a download record. `media` is assembled from
+ *  the meta fields stored at enqueue time; the record's `plexPath` is the
+ *  partKey the stream proxy serves the downloaded file by. Records written
+ *  before the media fields existed fall back to empty strings — playback still
+ *  works (the proxy serves by cacheKey(serverId, plexPath), not codec).
+ *
+ *  NOTE: `thumb` is whatever the record stored — a STALE baked proxy URL with a
+ *  past launch's secret. Re-baking it with the current secret is the host's
+ *  job (the desktop downloadedTracks IPC); this pure helper passes it through. */
+export function recordToTrack(record: DownloadRecord): Track {
+  const { meta } = record;
+  return {
+    id: record.trackId,
+    serverId: record.serverId,
+    albumId: meta.albumId,
+    artistId: meta.artistId,
+    artistName: meta.artistName,
+    albumTitle: meta.albumTitle,
+    title: meta.title,
+    durationMs: meta.durationMs,
+    trackNumber: meta.trackNumber,
+    thumb: meta.thumb,
+    media: {
+      container: meta.container ?? "",
+      audioCodec: meta.audioCodec ?? "",
+      bitrate: meta.bitrate,
+      partId: meta.partId ?? "",
+      partKey: record.plexPath,
+    },
+  };
+}
+
+/** Reconstruct playable Tracks from the `downloaded` records only, sorted album
+ *  by album (album title, locale case-insensitive) then by track number
+ *  (undefined last), so the collection plays in a sensible order offline. */
+export function recordsToTracks(records: DownloadRecord[]): Track[] {
+  return records
+    .filter((r) => r.state === "downloaded")
+    .map(recordToTrack)
+    .sort((a, b) => {
+      const byAlbum = (a.albumTitle ?? "").localeCompare(b.albumTitle ?? "", undefined, {
+        sensitivity: "base",
+      });
+      if (byAlbum !== 0) return byAlbum;
+      const an = a.trackNumber ?? Number.POSITIVE_INFINITY;
+      const bn = b.trackNumber ?? Number.POSITIVE_INFINITY;
+      return an - bn;
+    });
 }

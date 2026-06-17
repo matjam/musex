@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type DownloadRecord, groupDownloadsByAlbum, reconcileRecords } from "./download-state.js";
+import {
+  type DownloadRecord,
+  groupDownloadsByAlbum,
+  reconcileRecords,
+  recordsToTracks,
+  recordToTrack,
+} from "./download-state.js";
 
 const rec = (key: string, state: DownloadRecord["state"]): DownloadRecord => ({
   key,
@@ -103,5 +109,80 @@ describe("groupDownloadsByAlbum", () => {
       downloaded("t1", { albumId: "a1", albumTitle: undefined }),
     ]);
     expect(groups[0]?.albumTitle).toBe("Unknown Album");
+  });
+});
+
+describe("recordToTrack", () => {
+  it("rebuilds a Track with id/serverId/partKey and media from the stored meta", () => {
+    const r = downloaded("k1", {
+      title: "Song",
+      artistName: "Artist",
+      albumTitle: "Album",
+      durationMs: 240_000,
+      trackNumber: 3,
+      thumb: "http://127.0.0.1:5/secret/s1/library/metadata/9/thumb/1",
+      albumId: "al",
+      artistId: "ar",
+      container: "flac",
+      audioCodec: "flac",
+      partId: "p1",
+      bitrate: 900,
+    });
+    const t = recordToTrack(r);
+    expect(t.id).toBe("k1");
+    expect(t.serverId).toBe("s1");
+    expect(t.media.partKey).toBe(r.plexPath);
+    expect(t.media).toEqual({
+      container: "flac",
+      audioCodec: "flac",
+      bitrate: 900,
+      partId: "p1",
+      partKey: r.plexPath,
+    });
+    // thumb is passed through verbatim (host re-bakes it).
+    expect(t.thumb).toBe("http://127.0.0.1:5/secret/s1/library/metadata/9/thumb/1");
+    expect(t.title).toBe("Song");
+    expect(t.trackNumber).toBe(3);
+  });
+
+  it("falls back to empty-string media for old records missing the media fields", () => {
+    // Simulate a pre-media-fields record (dev data) by stripping the fields.
+    const r = downloaded("old", {});
+    const { container: _c, audioCodec: _a, partId: _p, ...legacyMeta } = r.meta;
+    const legacy: DownloadRecord = { ...r, meta: legacyMeta as DownloadRecord["meta"] };
+    const t = recordToTrack(legacy);
+    expect(t.media).toEqual({
+      container: "",
+      audioCodec: "",
+      bitrate: undefined,
+      partId: "",
+      partKey: legacy.plexPath,
+    });
+    // Still a valid, playable Track (proxy serves by serverId + partKey).
+    expect(t.serverId).toBe("s1");
+    expect(t.media.partKey).toBe(legacy.plexPath);
+  });
+});
+
+describe("recordsToTracks", () => {
+  it("includes only downloaded records", () => {
+    const tracks = recordsToTracks([
+      downloaded("d1", { albumId: "a1", albumTitle: "A" }),
+      rec("q1", "queued"),
+      rec("dl1", "downloading"),
+      rec("m1", "missing"),
+      rec("f1", "failed"),
+    ]);
+    expect(tracks.map((t) => t.id)).toEqual(["d1"]);
+  });
+
+  it("sorts by album title (case-insensitive) then track number, undefined last", () => {
+    const tracks = recordsToTracks([
+      downloaded("z2", { albumTitle: "Zebra", trackNumber: 2 }),
+      downloaded("a-no", { albumTitle: "apple", trackNumber: undefined }),
+      downloaded("z1", { albumTitle: "Zebra", trackNumber: 1 }),
+      downloaded("a1", { albumTitle: "apple", trackNumber: 1 }),
+    ]);
+    expect(tracks.map((t) => t.id)).toEqual(["a1", "a-no", "z1", "z2"]);
   });
 });
