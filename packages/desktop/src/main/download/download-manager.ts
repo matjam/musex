@@ -110,6 +110,26 @@ export class DownloadManager {
         return;
       }
       const buf = new Uint8Array(await res.arrayBuffer());
+
+      // Validate the response body before committing to disk.
+      if (buf.byteLength === 0) {
+        this.record(job, "failed", 0, "empty body");
+        return;
+      }
+      const contentLength = res.headers.get("content-length");
+      if (contentLength !== null) {
+        const expected = Number(contentLength);
+        if (!Number.isNaN(expected) && buf.byteLength !== expected) {
+          this.record(job, "failed", 0, `truncated: got ${buf.byteLength} of ${expected} bytes`);
+          return;
+        }
+      }
+      const contentType = res.headers.get("content-type");
+      if (contentType?.startsWith("text/")) {
+        this.record(job, "failed", 0, `non-audio content-type: ${contentType}`);
+        return;
+      }
+
       const w = this.deps.store.beginWrite(job.key);
       w.stream.write(Buffer.from(buf));
       w.stream.end();

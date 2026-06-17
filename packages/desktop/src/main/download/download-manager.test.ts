@@ -53,7 +53,11 @@ describe("DownloadManager", () => {
     const index = new DownloadIndex([], () => {});
     const progress: string[] = [];
     const fetchFn = vi.fn(
-      async () => new Response("AUDIODATA", { status: 200, headers: { "content-length": "9" } }),
+      async () =>
+        new Response("AUDIODATA", {
+          status: 200,
+          headers: { "content-length": "9", "content-type": "audio/flac" },
+        }),
     );
     const mgr = new DownloadManager({
       store: store as never,
@@ -77,7 +81,7 @@ describe("DownloadManager", () => {
     const urls: string[] = [];
     const fetchFn = vi.fn(async (url: string) => {
       urls.push(url);
-      return new Response("MP3", { status: 200 });
+      return new Response("MP3", { status: 200, headers: { "content-type": "audio/mpeg" } });
     });
     const mgr = new DownloadManager({
       store: store as never,
@@ -115,5 +119,93 @@ describe("DownloadManager", () => {
     await mgr.drain();
     expect(store.files.has("c")).toBe(false);
     expect(index.get("c")?.state).toBe("failed");
+  });
+
+  it("marks failed on empty body and stores nothing", async () => {
+    const store = fakeStore();
+    const index = new DownloadIndex([], () => {});
+    const mgr = new DownloadManager({
+      store: store as never,
+      index,
+      fetch: (async () => new Response("", { status: 200 })) as never,
+      endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
+      clientId: "cid",
+      getQuality: () => ({ mode: "original", bitrateKbps: 256 }),
+      onProgress: () => {},
+    });
+    await mgr.enqueue([job("d")]);
+    await mgr.drain();
+    expect(store.files.has("d")).toBe(false);
+    expect(index.get("d")?.state).toBe("failed");
+    expect(index.get("d")?.error).toBe("empty body");
+  });
+
+  it("marks failed when content-length mismatches actual body size and stores nothing", async () => {
+    const store = fakeStore();
+    const index = new DownloadIndex([], () => {});
+    const mgr = new DownloadManager({
+      store: store as never,
+      index,
+      fetch: (async () =>
+        new Response("SHORT", { status: 200, headers: { "content-length": "9999" } })) as never,
+      endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
+      clientId: "cid",
+      getQuality: () => ({ mode: "original", bitrateKbps: 256 }),
+      onProgress: () => {},
+    });
+    await mgr.enqueue([job("e")]);
+    await mgr.drain();
+    expect(store.files.has("e")).toBe(false);
+    expect(index.get("e")?.state).toBe("failed");
+    expect(index.get("e")?.error).toMatch(/truncated: got 5 of 9999 bytes/);
+  });
+
+  it("marks failed when content-type is text/* (Plex error page) and stores nothing", async () => {
+    const store = fakeStore();
+    const index = new DownloadIndex([], () => {});
+    const mgr = new DownloadManager({
+      store: store as never,
+      index,
+      fetch: (async () =>
+        new Response("<html>error</html>", {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        })) as never,
+      endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
+      clientId: "cid",
+      getQuality: () => ({ mode: "original", bitrateKbps: 256 }),
+      onProgress: () => {},
+    });
+    await mgr.enqueue([job("f")]);
+    await mgr.drain();
+    expect(store.files.has("f")).toBe(false);
+    expect(index.get("f")?.state).toBe("failed");
+    expect(index.get("f")?.error).toBe("non-audio content-type: text/html; charset=utf-8");
+  });
+
+  it("saves a valid audio response with matching content-length as downloaded", async () => {
+    const store = fakeStore();
+    const index = new DownloadIndex([], () => {});
+    const body = "VALIDAUDIO";
+    const mgr = new DownloadManager({
+      store: store as never,
+      index,
+      fetch: (async () =>
+        new Response(body, {
+          status: 200,
+          headers: {
+            "content-type": "audio/flac",
+            "content-length": String(Buffer.byteLength(body)),
+          },
+        })) as never,
+      endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
+      clientId: "cid",
+      getQuality: () => ({ mode: "original", bitrateKbps: 256 }),
+      onProgress: () => {},
+    });
+    await mgr.enqueue([job("g")]);
+    await mgr.drain();
+    expect(store.files.has("g")).toBe(true);
+    expect(index.get("g")?.state).toBe("downloaded");
   });
 });
