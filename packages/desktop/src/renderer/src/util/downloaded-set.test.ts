@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DownloadDto } from "../../../shared/ipc-contract";
-import { downloadedContainerIds } from "./downloaded-set";
+import { downloadedContainerIds, downloadingContainerIds } from "./downloaded-set";
 
 function rec(over: Partial<DownloadDto> & { state: DownloadDto["state"] }): DownloadDto {
   return {
@@ -57,6 +57,40 @@ describe("downloadedContainerIds", () => {
     const records = [rec({ state: "downloaded", meta: makeMeta("", "") })];
     expect(downloadedContainerIds(records, "albumId").size).toBe(0);
     expect(downloadedContainerIds(records, "artistId").size).toBe(0);
+  });
+});
+
+describe("downloadingContainerIds", () => {
+  it("collects albumIds only from in-flight (downloading/queued) records", () => {
+    const records = [
+      rec({ state: "downloading", meta: makeMeta("alb1", "art1") }),
+      rec({ state: "queued", meta: makeMeta("alb2", "art1") }),
+      rec({ state: "downloaded", meta: makeMeta("alb3", "art2") }),
+      rec({ state: "failed", meta: makeMeta("alb4", "art2") }),
+      rec({ state: "missing", meta: makeMeta("alb5", "art3") }),
+    ];
+    expect([...downloadingContainerIds(records, "albumId")].sort()).toEqual(["alb1", "alb2"]);
+  });
+
+  it("collects artistIds only from in-flight records", () => {
+    const records = [
+      rec({ state: "downloading", meta: makeMeta("alb1", "art1") }),
+      rec({ state: "queued", meta: makeMeta("alb2", "art1") }),
+      rec({ state: "queued", meta: makeMeta("alb3", "art2") }),
+      rec({ state: "downloaded", meta: makeMeta("alb4", "art3") }),
+    ];
+    expect([...downloadingContainerIds(records, "artistId")].sort()).toEqual(["art1", "art2"]);
+  });
+
+  it("returns an empty set when nothing is in flight", () => {
+    expect(downloadingContainerIds([], "albumId").size).toBe(0);
+    expect(downloadingContainerIds([rec({ state: "downloaded" })], "albumId").size).toBe(0);
+  });
+
+  it("ignores empty container ids", () => {
+    const records = [rec({ state: "downloading", meta: makeMeta("", "") })];
+    expect(downloadingContainerIds(records, "albumId").size).toBe(0);
+    expect(downloadingContainerIds(records, "artistId").size).toBe(0);
   });
 });
 

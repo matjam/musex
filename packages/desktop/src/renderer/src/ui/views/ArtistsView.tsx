@@ -3,11 +3,12 @@ import { listValidator } from "@musex/core";
 import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
-import { acquisitionKey, acquisitionStateFor } from "../../util/acquisition-map";
+import { acquisitionKey } from "../../util/acquisition-map";
+import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
 import { useAcquisitionMap } from "../hooks/useAcquisitionMap";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
-import { useDownloadedSet } from "../hooks/useDownloadedSet";
+import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
 import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
 
 type FetchState =
@@ -20,16 +21,25 @@ export function ArtistsView() {
   const { playArtist } = useCollectionPlay();
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
-  // Artist cards reflect DOWNLOADED-presence only (≥1 track on disk for the
-  // artistId). Cached content is track-level (keyed by plexPath) and can't be
-  // cheaply attributed to a container card without fetching its tracks, so it's
-  // deliberately not reflected here — track lists get exact availability.
+  // Artist cards reflect LOCAL download state only: a downloaded artist (≥1
+  // track on disk for the artistId) → "downloaded"; else an in-flight (queued/
+  // downloading) artist → "downloading"; else no badge. Cached content is
+  // track-level (keyed by plexPath) and can't be cheaply attributed to a
+  // container card, so it's deliberately not reflected here — track lists get
+  // exact availability. The Lidarr acquisition queue is NOT overlaid on cards.
   const downloaded = useDownloadedSet("artistId");
-  // Acquisition status rows are album-level; roll them up to the artist (any
-  // acquiring album → the artist tile shows the furthest-along state). Degrades
-  // to an empty map offline / on error (see useAcquisitionMap).
+  const downloading = useDownloadingSet("artistId");
+  // Acquisition status (rolled up to the artist) drives the Acquiring FILTER
+  // only — not the card badge. Degrades to an empty map offline / on error.
   const acquiring = useAcquisitionMap("artistName");
   const offline = connectivity === "offline";
+
+  // Local download state → card badge. Downloaded wins over in-flight.
+  function cardState(artistId: string): AcquisitionBadgeState | undefined {
+    if (downloaded.has(artistId)) return "downloaded";
+    if (downloading.has(artistId)) return "downloading";
+    return undefined;
+  }
 
   useEffect(() => {
     if (!library) return;
@@ -111,11 +121,7 @@ export function ArtistsView() {
                     thumb={artist.thumb}
                     title={artist.name}
                     round
-                    state={
-                      downloaded.has(artist.id)
-                        ? "downloaded"
-                        : acquisitionStateFor(acquiring, artist.name)
-                    }
+                    state={cardState(artist.id)}
                     onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
                     onPlay={() => void playArtist(artist)}
                   />
@@ -138,13 +144,7 @@ export function ArtistsView() {
                 thumb={artist.thumb}
                 title={artist.name}
                 round
-                // Downloaded wins over an in-flight acquisition badge — an artist
-                // already (partly) on disk shouldn't read as "Requested".
-                state={
-                  downloaded.has(artist.id)
-                    ? "downloaded"
-                    : acquisitionStateFor(acquiring, artist.name)
-                }
+                state={cardState(artist.id)}
                 dim={offline && !downloaded.has(artist.id)}
                 onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
                 onPlay={() => void playArtist(artist)}

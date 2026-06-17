@@ -3,11 +3,12 @@ import { listValidator } from "@musex/core";
 import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
-import { acquisitionKey, acquisitionStateFor } from "../../util/acquisition-map";
+import { acquisitionKey } from "../../util/acquisition-map";
+import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
 import { useAcquisitionMap } from "../hooks/useAcquisitionMap";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
-import { useDownloadedSet } from "../hooks/useDownloadedSet";
+import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
 import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
 import { SortSelector } from "../SortSelector";
 
@@ -22,16 +23,27 @@ export function AlbumsView() {
   const [sort, setSort] = useState<LibrarySort>("title");
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
-  // Album cards reflect DOWNLOADED-presence only (≥1 track on disk for the
-  // albumId). Cached content is track-level (keyed by plexPath) and can't be
-  // cheaply attributed to a container card without fetching its track list, so
-  // it's deliberately not reflected here — track lists below get exact
-  // downloaded∪cached availability.
+  // Album cards reflect LOCAL download state only: a downloaded album (≥1 track
+  // on disk for the albumId) → "downloaded"; else an in-flight (queued/
+  // downloading) album → "downloading"; else no badge. Cached content is
+  // track-level (keyed by plexPath) and can't be cheaply attributed to a
+  // container card, so it's deliberately not reflected here — track lists below
+  // get exact downloaded∪cached availability. The Lidarr acquisition queue is
+  // NOT overlaid on library cards.
   const downloaded = useDownloadedSet("albumId");
-  // Acquisition status is album-granular, so albums match by title. Degrades to
-  // an empty map offline / on error (see useAcquisitionMap).
+  const downloading = useDownloadingSet("albumId");
+  // Acquisition status (album-granular, matched by title) drives the Acquiring
+  // FILTER only — not the card badge. Degrades to an empty map offline / on
+  // error (see useAcquisitionMap).
   const acquiring = useAcquisitionMap("title");
   const offline = connectivity === "offline";
+
+  // Local download state → card badge. Downloaded wins over in-flight.
+  function cardState(albumId: string): AcquisitionBadgeState | undefined {
+    if (downloaded.has(albumId)) return "downloaded";
+    if (downloading.has(albumId)) return "downloading";
+    return undefined;
+  }
 
   useEffect(() => {
     if (!library) return;
@@ -114,11 +126,7 @@ export function AlbumsView() {
                     thumb={album.thumb}
                     title={album.title}
                     subtitle={album.year != null ? String(album.year) : undefined}
-                    state={
-                      downloaded.has(album.id)
-                        ? "downloaded"
-                        : acquisitionStateFor(acquiring, album.title)
-                    }
+                    state={cardState(album.id)}
                     onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
                     onPlay={() => void playAlbum(album)}
                   />
@@ -141,13 +149,7 @@ export function AlbumsView() {
                 thumb={album.thumb}
                 title={album.title}
                 subtitle={album.year != null ? String(album.year) : undefined}
-                // Downloaded wins over an in-flight acquisition badge — an album
-                // already on disk shouldn't read as "Requested".
-                state={
-                  downloaded.has(album.id)
-                    ? "downloaded"
-                    : acquisitionStateFor(acquiring, album.title)
-                }
+                state={cardState(album.id)}
                 dim={offline && !downloaded.has(album.id)}
                 onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
                 onPlay={() => void playAlbum(album)}
