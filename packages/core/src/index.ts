@@ -7,6 +7,7 @@ export * from "./logic/download-plan";
 export * from "./logic/download-state";
 export * from "./logic/external-url";
 export * from "./logic/for-you";
+export * from "./logic/format";
 export * from "./logic/genres";
 export * from "./logic/library-select";
 export * from "./logic/library-sort";

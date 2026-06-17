@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDuration, relativeTime } from "./format";
+import { formatBytes, formatDuration, relativeTime } from "./format.js";
 
 describe("formatDuration", () => {
   it("formats ms as m:ss", () => {

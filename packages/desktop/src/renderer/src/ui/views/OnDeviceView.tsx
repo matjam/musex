@@ -1,10 +1,9 @@
 import type { Track } from "@musex/core";
-import { groupDownloadsByAlbum } from "@musex/core";
+import { formatBytes, groupDownloadsByAlbum } from "@musex/core";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { DownloadDto } from "../../../../shared/ipc-contract";
 import { usePlayer } from "../../state/player";
-import { formatBytes } from "../../util/format";
 import { groupTracksByAlbum } from "../../util/group-tracks-by-album";
 import { ActionBar } from "../discovery/ActionBar";
 import { GridCard } from "../GridCard";
