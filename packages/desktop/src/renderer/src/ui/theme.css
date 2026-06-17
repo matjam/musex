@@ -279,6 +279,26 @@ html:not([data-platform="darwin"]) .topbar {
   cursor: default;
 }
 
+/* Red pill shown when the Plex server is unreachable. Sits to the right of
+   the centered search box. Uses position:absolute so it doesn't disturb the
+   flex layout that centers the search box on the window. */
+.topbar-offline-pill {
+  position: absolute;
+  left: calc(50% + min(19%, 180px) + 18px);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 95, 87, 0.15);
+  border: 1px solid var(--red);
+  color: var(--red);
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
 /* ---- App layout ---- */
 
 .app-root {
