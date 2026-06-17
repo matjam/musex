@@ -34,16 +34,17 @@ Today (verified): the desktop **user-plugin loader already works** — `PluginHo
 - **Security:** installing remote JS = full-trust on desktop. A clear trust-on-install confirmation + **release-asset checksum verification**; pin to a release (not arbitrary repo contents). Documented decision.
 - **Done when:** a fresh musex has no Lidarr; pasting the `musex-plugins` repo URL installs + configures Lidarr; update/uninstall work; `pnpm check` green.
 
-### SP4 — Sandboxed iOS plugin runtime  *(mobile; research-heavy, deferred)*
-**Goal:** source plugins (like Lidarr) run on iOS, sandboxed.
-- Mobile has **no plugin host today**, and RN/Hermes has no built-in isolate for untrusted code. This needs a **research spike** before design: candidate runtimes — QuickJS via a native module (e.g. `react-native-quickjs`), a WASM/component-model approach (Extism), or a restricted-realm JS sandbox — plus a **capability bridge** exposing only the kernel (`fetch`/`net`, `storage`, `secrets`, `log`, the contribution points) into the sandbox.
-- Depends on SP1 (capability-based API; no Node) and SP2/SP3 (distribution). Likely splits into "runtime spike" → "mobile plugin host" → "install on mobile."
-- **Its own deep brainstorm after a spike** — not designed in this roadmap.
+### SP4 — Unified sandboxed plugin runtime (desktop + iOS)  *(the next major piece; revises the model)*
+**Decision (2026-06-16):** full-trust, main-process execution is **interim**. We need a sandbox for iOS anyway, so plugins get sandboxed on **both** surfaces with **one consistent plugin-facing API**. SP3 ships the GitHub installer on the interim full-trust model (with checksum/zip-slip/apiVersion guards + a trust confirmation); SP4 then replaces the execution model underneath it.
+- **Engine: QuickJS everywhere** (chosen, spike-to-confirm) — `quickjs-emscripten` (WASM) embedded in the Electron host; native QuickJS via an RN module on iOS. Same engine semantics, same bridge, different binding per platform. (Alternative considered: per-platform isolates — Node worker/vm + JSC — same API, two engines; rejected for consistency.)
+- **Capability bridge / RPC:** a plugin is plain ESM touching only `@musex/plugin-api`, runs in a QuickJS isolate with **zero ambient host access**; every `ctx.*` call is marshalled to the host (async RPC), and contribution points (AcquisitionProvider methods, event handlers) are host-calls-into-sandbox. Same API surface on every platform.
+- **API revision (consequence):** the kernel must become **serializable/RPC-shaped**. SP1's `ctx.fetch` and `ctx.net.client(opts): typeof fetch` hand the plugin **live host functions** that can't cross an isolate boundary → they become RPC (e.g. `ctx.net.fetch(url, init) → {status, headers, body}`). This is a deliberate revision of the SP1 API once the sandbox lands; `apiVersion` bumps when it does.
+- **Order:** a focused **research spike first** (QuickJS-WASM running lidarr inside an Electron isolate over the bridge — perf + effort), then desktop sandbox runtime + the RPC API revision (re-point the installer into it), then iOS (native QuickJS, same bridge). Its own spec(s) after the spike.
 
 ## Cross-cutting decisions
 - **`apiVersion`** stays `1`; the `ctx.net` addition is an *optional* field (back-compatible). Bumping only on a breaking change.
 - **Distribution contract** (manifest + release-asset shape + checksum) is defined in SP2 and consumed in SP3 — they must agree; SP3 is built against SP2's published format.
-- **Security/trust** is decided in SP3 (trust-on-install + checksum + release pinning). Desktop user plugins are already full-trust; GitHub install widens the supply-chain surface, hence integrity verification.
+- **Security/trust** — full-trust execution is **interim**. SP3 ships GitHub install on it with integrity guards (checksum + zip-slip + apiVersion) + an explicit trust confirmation; **SP4 sandboxes execution** (QuickJS, both platforms) so the trust gate gets much lighter. Don't over-invest in full-trust UX in SP3 — it's a stepping stone.
 - **Lidarr removal timing:** SP2 makes Lidarr available externally while musex still bundles it; SP3 removes the bundled copy once install works — so users never lose Lidarr.
 
 ## Workflow

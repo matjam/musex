@@ -44,9 +44,6 @@ importers:
       '@musex/plugin-lastfm':
         specifier: workspace:*
         version: link:../../plugins/lastfm
-      '@musex/plugin-lidarr':
-        specifier: workspace:*
-        version: link:../../plugins/lidarr
       '@tanstack/react-virtual':
         specifier: ^3.14.2
         version: 3.14.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -56,6 +53,9 @@ importers:
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.3)
@@ -162,15 +162,6 @@ importers:
         version: 25.9.2
 
   plugins/lastfm:
-    devDependencies:
-      '@musex/plugin-api':
-        specifier: workspace:*
-        version: link:../../packages/plugin-api
-      '@types/node':
-        specifier: ^25.0.0
-        version: 25.9.2
-
-  plugins/lidarr:
     devDependencies:
       '@musex/plugin-api':
         specifier: workspace:*
@@ -2808,6 +2799,9 @@ packages:
 
   fetch-nodeshim@0.4.10:
     resolution: {integrity: sha512-m6I8ALe4L4XpdETy7MJZWs6L1IVMbjs99bwbpIKphxX+0CTns4IKDWJY0LWfr4YsFjfg+z1TjzTMU8lKl8rG0w==}
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   filelist@1.0.6:
     resolution: {integrity: sha512-5giy2PkLYY1cP39p17Ech+2xlpTRL9HLspOfEgm0L6CwBXBTgsK5ou0JtzYuepxkaQ/tvhCFIJ5uXo0OrM2DxA==}
@@ -7673,6 +7667,8 @@ snapshots:
       picomatch: 4.0.4
 
   fetch-nodeshim@0.4.10: {}
+
+  fflate@0.8.3: {}
 
   filelist@1.0.6:
     dependencies:

@@ -25,6 +25,7 @@ import { ExpansionCoordinator } from "./expansion/coordinator.js";
 import { CORE_PLUGINS } from "./plugins/core-plugins.js";
 import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
+import { PluginInstaller } from "./plugins/plugin-installer.js";
 
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
 /** Taste profile writes are debounced: one persist ~5s after the last mutation. */
@@ -55,6 +56,7 @@ export class Runtime {
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
+  pluginInstaller!: PluginInstaller;
   expansion!: ExpansionCoordinator;
   libraryWatcher!: LibraryWatcher;
   /** Set by main/index per window (same pattern as pluginNotifySink). */
@@ -136,9 +138,9 @@ export class Runtime {
       );
     }
 
-    // Plugin host: core plugins (lastfm, lidarr) are statically bundled —
-    // no filesystem scan for them. Only userData/plugins is scanned for
-    // user-installed plugins; core plugin ids win on collision.
+    // Plugin host: lastfm is the only statically bundled core plugin —
+    // no filesystem scan for it. Only userData/plugins is scanned for
+    // user-installed plugins (e.g. acquisition plugins); core plugin ids win on collision.
     this.plugins = new PluginHost({
       corePlugins: CORE_PLUGINS,
       scanDirs: [path.join(app.getPath("userData"), "plugins")],
@@ -180,9 +182,17 @@ export class Runtime {
     });
     await this.plugins.loadAll();
 
+    this.pluginInstaller = new PluginInstaller({
+      fetch: globalThis.fetch,
+      pluginsDir: path.join(app.getPath("userData"), "plugins"),
+      reload: () => this.plugins.reloadAll(),
+      getSource: (id) => persistence.getPluginSource(id),
+      setSource: (id, src) => persistence.setPluginSource(id, src),
+    });
+
     // Taste expansion: host-owned coordinator over the plugin providers
-    // (similar/lastfm + acquisition/lidarr). Pure planning lives in
-    // @musex/core's taste-expansion; this just wires its inputs.
+    // (similar via lastfm + acquisition via an installed acquisition plugin).
+    // Pure planning lives in @musex/core's taste-expansion; this wires its inputs.
     this.expansion = new ExpansionCoordinator({
       host: this.plugins,
       getLibrary: () => this.libraries[0] ?? null,

@@ -21,8 +21,8 @@ function fetchAvailable(): Promise<boolean> {
   return promise;
 }
 
-/** Whether any acquisition provider (e.g. Lidarr) is registered. Defaults to
- *  false until the one-shot IPC fetch resolves. */
+/** Whether any acquisition provider is registered. Defaults to false until
+ *  the one-shot IPC fetch resolves. */
 export function useAcquisitionAvailable(): boolean {
   const [available, setAvailable] = useState(resolved);
 

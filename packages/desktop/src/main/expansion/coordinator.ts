@@ -381,7 +381,7 @@ export class ExpansionCoordinator {
       try {
         await this.deps.host.acquireArtistByName(landed.artistName);
         // Monitoring is established the moment the call succeeds — the entry
-        // records the action; individual downloads show in the Lidarr queue.
+        // records the action; individual downloads show in the acquisition plugin queue.
         ledger.push({
           artistKey: landed.artistKey,
           artistName: landed.artistName,

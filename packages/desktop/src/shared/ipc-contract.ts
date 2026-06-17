@@ -85,7 +85,7 @@ export const IPC = {
   trackActionsInvoke: "musex:trackActions:invoke", // (actionId, trackInfo) -> void
   trackDetailGet: "musex:trackDetail:get", // (trackInfo) -> TrackDetailDto[]
   similarGet: "musex:similar:get", // (SimilarGetArgs) -> SectionItemDto[]
-  // Acquisition (e.g. Lidarr): external-artist discography + Downloads view
+  // Acquisition (any registered acquisition plugin): external-artist discography + Downloads view
   acquisitionAvailable: "musex:acquisition:available", // -> boolean
   acquisitionLookupArtist: "musex:acquisition:lookupArtist", // (artistName) -> AcquirableAlbumDto[]
   acquisitionAcquire: "musex:acquisition:acquire", // ({ providerId, providerRef }) -> void
@@ -112,6 +112,9 @@ export const IPC = {
   acquisitionDiscography: "musex:acquisition:discography", // (artistName) -> AcquirableAlbumDto[] incl. lastfm-only "unavailable" rows
   updaterCheck: "musex:updater:check", // -> void (results surface as native dialogs in main)
   menuPopup: "musex:menu:popup", // (x, y) -> void — pops up the app menu at window coords (non-mac hamburger)
+  pluginsFetchManifest: "musex:plugins:fetchManifest", // (repoUrl) -> FetchManifestResultDto
+  pluginsInstall: "musex:plugins:install", // (repoUrl, id) -> void
+  pluginsUninstall: "musex:plugins:uninstall", // (id) -> void
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -208,6 +211,20 @@ export type NowPlayingMsg =
   | { kind: "pause" }
   | { kind: "resume" }
   | { kind: "stop" };
+
+export interface AvailablePluginDto {
+  id: string;
+  name: string;
+  description?: string;
+  version: string;
+  apiVersion: number;
+  compatible: boolean;
+  installedVersion?: string;
+}
+export interface FetchManifestResultDto {
+  repo: string;
+  plugins: AvailablePluginDto[];
+}
 
 export type PluginStatus = "active" | "error" | "disabled" | "incompatible";
 export interface PluginInfo {
@@ -491,4 +508,10 @@ export interface MusexApi {
    *  hamburger to reach the File/Edit/View/Help menu the frameless window
    *  has no visible menu bar for. */
   popupMenu(x: number, y: number): Promise<void>;
+  /** Fetch the plugins manifest from a GitHub repo URL (or owner/repo shorthand). */
+  pluginsFetchManifest(repoUrl: string): Promise<FetchManifestResultDto>;
+  /** Download, verify (checksum + apiVersion), and install a plugin from a repo. */
+  pluginsInstall(repoUrl: string, id: string): Promise<void>;
+  /** Remove a user-installed plugin and reload the plugin host. */
+  pluginsUninstall(id: string): Promise<void>;
 }
