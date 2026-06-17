@@ -1003,7 +1003,11 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.downloadsList, () => rt.downloadIndex.list());
 
   ipcMain.handle(IPC.removeDownload, (_e, key: unknown) => {
-    if (typeof key !== "string" || !key) throw new Error("invalid download key");
+    // The key becomes a path under userData/downloads via rm(join(dir, key)).
+    // IPC is an untrusted boundary, so require the exact shape cacheKey emits
+    // (a 64-char hex sha256 digest) — a bare typeof-string check would let
+    // "../../…" escape the store. Same defense as isSafePluginId on uninstall.
+    if (typeof key !== "string" || !/^[a-f0-9]{64}$/.test(key)) throw new Error("invalid download key");
     return rt.downloadManager.removeDownload(key);
   });
 

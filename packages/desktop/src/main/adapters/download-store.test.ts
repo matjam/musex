@@ -41,6 +41,10 @@ describe("DownloadStore", () => {
     await store.remove("k3");
     expect(await store.has("k3")).toBe(false);
   });
+  it("remove rejects a key that would escape the store directory", async () => {
+    await expect(store.remove("../escape")).rejects.toThrow();
+    await expect(store.remove("../../etc/passwd")).rejects.toThrow();
+  });
   it("commit rejects when the atomic rename fails (so the manager marks the job failed)", async () => {
     // Pre-create a directory at the destination key path: renaming the temp
     // file onto an existing directory fails, exercising commit's reject path.

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 
 export interface StoreWriter {
   stream: WriteStream;
@@ -117,7 +117,14 @@ export class DownloadStore {
   }
 
   async remove(key: string): Promise<void> {
-    await rm(this.full(key), { force: true });
+    // Defense in depth: `key` ultimately drives rm(join(dir, key)). Keys are
+    // cacheKey() sha256 hex digests; reject anything that could traverse out of
+    // the store, so a bad key can never delete a file outside `dir`.
+    const target = this.full(key);
+    if (relative(this.dir, target).startsWith("..") || isAbsolute(relative(this.dir, target))) {
+      throw new Error(`refusing to remove key outside store: ${key}`);
+    }
+    await rm(target, { force: true });
   }
 
   /** Complete entries (excludes in-progress `.part` files). */
