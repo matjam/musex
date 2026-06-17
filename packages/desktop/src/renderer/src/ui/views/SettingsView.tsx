@@ -1,4 +1,5 @@
 import type { Library } from "@musex/core";
+import { TRANSCODE_BITRATES } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
 import { Blocks, HardDrive, Music2, Puzzle, Settings2, Sparkles, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -18,6 +19,7 @@ import type {
   PluginSettings,
   SettingField,
   SettingsActionResult,
+  StorageQualityDto,
 } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { formatBytes } from "../../util/format";
@@ -42,7 +44,7 @@ const CATEGORIES: ReadonlyArray<{
 }> = [
   { id: "general", label: "General", icon: Settings2 },
   { id: "playback", label: "Playback", icon: Volume2 },
-  { id: "library", label: "Library & Cache", icon: HardDrive },
+  { id: "library", label: "Downloads & Storage", icon: HardDrive },
   { id: "discovery", label: "Discovery", icon: Sparkles },
   { id: "lastfm", label: "Last.fm", icon: Music2 },
   { id: "plugins", label: "Plugins", icon: Blocks },
@@ -212,6 +214,187 @@ function AppSection() {
           }}
         >
           {busy ? "Checking…" : "Check for Updates"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Download storage quality: original file or MP3 at a chosen bitrate.
+ *  Optimistic update — reverts on rejection, shows error-text. */
+function StorageQualitySection() {
+  const [quality, setQuality] = useState<StorageQualityDto | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .storageGetQuality()
+      .then((q) => {
+        if (!cancelled) setQuality(q);
+      })
+      .catch(() => {
+        if (!cancelled) setQuality({ mode: "original", bitrateKbps: 256 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!quality) return null;
+
+  async function applyQuality(next: StorageQualityDto) {
+    const prev = quality;
+    if (!prev) return;
+    setQuality(next);
+    setError(null);
+    try {
+      await window.musex.storageSetQuality(next);
+    } catch (err) {
+      setQuality(prev);
+      setError(
+        `Couldn't save download quality: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Download Quality</div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Format</div>
+          <div className="settings-row-desc">
+            Downloads are saved in the chosen format. Live playback always streams the original file
+            from Plex regardless of this setting.
+          </div>
+        </div>
+        <select
+          className="settings-input settings-input--select"
+          aria-label="Download format"
+          value={quality.mode}
+          onChange={(e) =>
+            void applyQuality({
+              mode: e.target.value as StorageQualityDto["mode"],
+              bitrateKbps: quality.bitrateKbps,
+            })
+          }
+        >
+          <option value="original">Original</option>
+          <option value="mp3">MP3</option>
+        </select>
+      </div>
+
+      {quality.mode === "mp3" ? (
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">Bitrate</div>
+            <div className="settings-row-desc">
+              MP3 is transcoded at this bitrate ceiling — files land at or below it.
+            </div>
+          </div>
+          <select
+            className="settings-input settings-input--select"
+            aria-label="MP3 bitrate"
+            value={quality.bitrateKbps}
+            onChange={(e) =>
+              void applyQuality({ mode: "mp3", bitrateKbps: Number(e.target.value) })
+            }
+          >
+            {TRANSCODE_BITRATES.map((kbps) => (
+              <option key={kbps} value={kbps}>
+                {kbps} kbps
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="settings-row">
+          <div className="settings-row-desc error-text">{error}</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function sumDownloadedBytes(records: { state: string; bytes: number }[]): number {
+  return records.reduce((acc, r) => (r.state === "downloaded" ? acc + r.bytes : acc), 0);
+}
+
+/** Downloads size summary + remove-all button. Subscribes to live progress. */
+function DownloadsSizeSection() {
+  const [downloadedBytes, setDownloadedBytes] = useState<number | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .downloadsList()
+      .then((records) => {
+        if (!cancelled) setDownloadedBytes(sumDownloadedBytes(records));
+      })
+      .catch(() => {
+        if (!cancelled) setDownloadedBytes(0);
+      });
+
+    const unsub = window.musex.onDownloadsProgress(() => {
+      // Re-fetch the full list on any progress event to recompute the total.
+      window.musex
+        .downloadsList()
+        .then((records) => {
+          if (!cancelled) setDownloadedBytes(sumDownloadedBytes(records));
+        })
+        .catch(() => {});
+    });
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  async function removeAll() {
+    const confirmed = window.confirm(
+      "Remove all downloaded tracks? The files will be deleted from this device.",
+    );
+    if (!confirmed) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      const records = await window.musex.downloadsList();
+      const downloaded = records.filter((r) => r.state === "downloaded");
+      await Promise.allSettled(downloaded.map((r) => window.musex.removeDownload(r.key)));
+      const updated = await window.musex.downloadsList();
+      setDownloadedBytes(sumDownloadedBytes(updated));
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Downloaded Tracks</div>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Storage used</div>
+          <div className="settings-row-desc">
+            {downloadedBytes === null ? "—" : formatBytes(downloadedBytes)}
+          </div>
+          {removeError ? <div className="settings-row-desc error-text">{removeError}</div> : null}
+        </div>
+        <button
+          type="button"
+          className="settings-btn danger"
+          disabled={removing || downloadedBytes === 0}
+          onClick={() => void removeAll()}
+        >
+          {removing ? "Removing…" : "Remove all"}
         </button>
       </div>
     </div>
@@ -1372,7 +1555,13 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
             </>
           )}
           {category === "playback" && <AudioSection />}
-          {category === "library" && <CacheSection />}
+          {category === "library" && (
+            <>
+              <StorageQualitySection />
+              <DownloadsSizeSection />
+              <CacheSection />
+            </>
+          )}
           {category === "discovery" && <ExpansionSection />}
           {category === "lastfm" && <LastfmSection />}
           {category === "plugins" && (
