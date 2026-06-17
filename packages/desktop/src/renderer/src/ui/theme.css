@@ -702,6 +702,8 @@ html:not([data-platform="darwin"]) .topbar {
 
 /* "On this device" header: title + size on the left, Play/Shuffle on the right. */
 .on-device-header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 18px;
 }
