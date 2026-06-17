@@ -1,6 +1,5 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import type {
   Disposable,
   LibrarySearchResult,
@@ -22,6 +21,7 @@ import {
   type PluginSecrets,
   type PluginStorage,
 } from "./plugin-store.js";
+import { loadSandboxedPlugin } from "./sandbox/index.js";
 
 export const HOST_API_VERSION = 2;
 
@@ -89,13 +89,10 @@ interface LoadedPlugin {
  */
 export class PluginHost {
   private readonly plugins = new Map<string, LoadedPlugin>();
-  /** Bumped per (re)load; appended to import URLs to bust the ESM cache. */
-  private generation = 0;
 
   constructor(private readonly deps: PluginHostDeps) {}
 
   async loadAll(): Promise<void> {
-    this.generation += 1;
     // Core plugins run first so their ids win on collision with user plugins.
     await this.loadCore(this.deps.corePlugins ?? []);
     for (const found of await this.scan()) {
@@ -103,9 +100,8 @@ export class PluginHost {
     }
   }
 
-  /** Dispose all registrations, deactivate, re-scan and re-import everything
-   *  (fresh module instances via the generation query). Core plugins are
-   *  re-activated against the fresh registry on every reload. */
+  /** Dispose all registrations, deactivate, re-scan and re-import everything.
+   *  Core plugins are re-activated against the fresh registry on every reload. */
   async reloadAll(): Promise<void> {
     for (const rec of this.plugins.values()) {
       if (rec.status === "active") await this.deactivatePlugin(rec);
@@ -246,7 +242,6 @@ export class PluginHost {
         }
         await this.activateCorePlugin(rec, cp.activate, cp.deactivate);
       } else {
-        this.generation += 1; // fresh import on re-enable
         await this.activatePlugin(rec);
       }
     } else {
@@ -429,32 +424,32 @@ export class PluginHost {
 
   private async activatePlugin(rec: LoadedPlugin): Promise<void> {
     try {
-      const entryUrl =
-        pathToFileURL(join(rec.dir, rec.manifest.entry)).href + `?gen=${this.generation}`;
-      const mod = (await import(/* @vite-ignore */ entryUrl)) as PluginModule;
-      if (typeof mod.activate !== "function") {
-        throw new Error("plugin entry has no activate() export");
-      }
-      rec.module = mod;
-      const ctx = buildPluginContext(
-        rec.manifest,
-        {
-          storage: rec.storage,
-          secrets: rec.secrets,
-          notifySink: this.deps.notifySink,
-          openExternal: this.deps.openExternal,
-          library: this.deps.library,
-          registerSettings: (schema) => {
-            rec.settingsSchema = schema;
-          },
-          onSettingsAction: (key, handler) => {
-            rec.settingsActions.set(key, handler);
-          },
+      // User plugins run in a QuickJS sandbox (security boundary — no Node, no
+      // import(), no Electron). The sandbox loads the ESM bundle, installs the
+      // capability bridge, and calls activate(ctx). Provider registrations flow
+      // through the bridge into the ProviderHub. The returned dispose tears down
+      // the QuickJS context and hub registrations on deactivation.
+      const sandboxDispose = await loadSandboxedPlugin({
+        manifest: rec.manifest,
+        pluginId: rec.manifest.id,
+        dir: rec.dir,
+        storage: rec.storage,
+        secrets: rec.secrets,
+        hub: this.deps.hub,
+        notifySink: this.deps.notifySink,
+        openExternal: this.deps.openExternal,
+        library: this.deps.library,
+        registerSettings: (schema) => {
+          rec.settingsSchema = schema;
         },
-        this.deps.hub,
-        (d) => rec.disposables.push(d),
-      );
-      await mod.activate(ctx);
+        onSettingsAction: (key, handler) => {
+          rec.settingsActions.set(key, handler);
+        },
+        trackDisposable: (d) => rec.disposables.push(d),
+      });
+      // Track the sandbox dispose so deactivatePlugin's disposeRegistrations
+      // tears down the QuickJS context + hub registrations.
+      rec.disposables.push(sandboxDispose);
       rec.status = "active";
       rec.error = undefined;
     } catch (err) {
