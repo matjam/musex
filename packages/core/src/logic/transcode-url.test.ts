@@ -25,7 +25,14 @@ describe("buildTranscodeUrl", () => {
   });
 
   it("stopSessionUrl targets the universal stop endpoint with the session", () => {
-    const u = new URL(stopSessionUrl({ baseUrl: "https://pms:32400", token: "tok", clientId: "cid", session: "s1" }));
+    const u = new URL(
+      stopSessionUrl({
+        baseUrl: "https://pms:32400",
+        token: "tok",
+        clientId: "cid",
+        session: "s1",
+      }),
+    );
     expect(u.pathname).toBe("/audio/:/transcode/universal/stop");
     expect(u.searchParams.get("session")).toBe("s1");
     expect(u.searchParams.get("X-Plex-Token")).toBe("tok");

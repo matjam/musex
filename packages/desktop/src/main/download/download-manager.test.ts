@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { DownloadManager } from "./download-manager.js";
-import { DownloadIndex } from "../adapters/download-index.js";
 import type { DownloadJob } from "@musex/core";
+import { describe, expect, it, vi } from "vitest";
+import { DownloadIndex } from "../adapters/download-index.js";
+import { DownloadManager } from "./download-manager.js";
 
 function fakeStore() {
   const files = new Map<string, string>();
@@ -11,17 +11,30 @@ function fakeStore() {
     beginWrite(key: string) {
       let buf = "";
       return {
-        stream: { write: (c: string) => { buf += c; }, end: () => {}, destroyed: false } as never,
-        commit: async () => { files.set(key, buf); },
+        stream: {
+          write: (c: string) => {
+            buf += c;
+          },
+          end: () => {},
+          destroyed: false,
+        } as never,
+        commit: async () => {
+          files.set(key, buf);
+        },
         abort: async () => {},
       };
     },
-    remove: async (k: string) => { files.delete(k); },
+    remove: async (k: string) => {
+      files.delete(k);
+    },
   };
 }
 
 const job = (key: string): DownloadJob => ({
-  key, serverId: "s1", plexPath: `/library/parts/${key}/f.flac`, trackId: key,
+  key,
+  serverId: "s1",
+  plexPath: `/library/parts/${key}/f.flac`,
+  trackId: key,
   meta: { title: key, artistName: "A", durationMs: 1, albumId: "al", artistId: "ar" },
 });
 
@@ -30,8 +43,8 @@ describe("DownloadManager", () => {
     const store = fakeStore();
     const index = new DownloadIndex([], () => {});
     const progress: string[] = [];
-    const fetchFn = vi.fn(async () =>
-      new Response("AUDIODATA", { status: 200, headers: { "content-length": "9" } }),
+    const fetchFn = vi.fn(
+      async () => new Response("AUDIODATA", { status: 200, headers: { "content-length": "9" } }),
     );
     const mgr = new DownloadManager({
       store: store as never,
@@ -58,7 +71,9 @@ describe("DownloadManager", () => {
       return new Response("MP3", { status: 200 });
     });
     const mgr = new DownloadManager({
-      store: store as never, index, fetch: fetchFn as never,
+      store: store as never,
+      index,
+      fetch: fetchFn as never,
       endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
       clientId: "cid",
       getQuality: () => ({ mode: "mp3", bitrateKbps: 192 }),
@@ -79,10 +94,12 @@ describe("DownloadManager", () => {
     const store = fakeStore();
     const index = new DownloadIndex([], () => {});
     const mgr = new DownloadManager({
-      store: store as never, index,
+      store: store as never,
+      index,
       fetch: (async () => new Response("nope", { status: 500 })) as never,
       endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
-      clientId: "cid", getQuality: () => ({ mode: "original", bitrateKbps: 256 }),
+      clientId: "cid",
+      getQuality: () => ({ mode: "original", bitrateKbps: 256 }),
       onProgress: () => {},
     });
     await mgr.enqueue([job("c")]);

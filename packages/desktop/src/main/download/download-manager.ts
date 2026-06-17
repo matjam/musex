@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
   buildTranscodeUrl,
-  stopSessionUrl,
   type DownloadJob,
   type DownloadRecord,
   type StorageQuality,
+  stopSessionUrl,
 } from "@musex/core";
-import type { DownloadStore } from "../adapters/download-store.js";
 import type { DownloadIndex } from "../adapters/download-index.js";
+import type { DownloadStore } from "../adapters/download-store.js";
 
 export interface DownloadProgressEvent {
   key: string;
@@ -47,7 +47,12 @@ export class DownloadManager {
     return this.idle;
   }
 
-  private record(job: DownloadJob, state: DownloadRecord["state"], bytes: number, error?: string): void {
+  private record(
+    job: DownloadJob,
+    state: DownloadRecord["state"],
+    bytes: number,
+    error?: string,
+  ): void {
     const rec: DownloadRecord = {
       key: job.key,
       serverId: job.serverId,

@@ -1007,7 +1007,8 @@ export function registerIpc(rt: Runtime): void {
     // IPC is an untrusted boundary, so require the exact shape cacheKey emits
     // (a 64-char hex sha256 digest) — a bare typeof-string check would let
     // "../../…" escape the store. Same defense as isSafePluginId on uninstall.
-    if (typeof key !== "string" || !/^[a-f0-9]{64}$/.test(key)) throw new Error("invalid download key");
+    if (typeof key !== "string" || !/^[a-f0-9]{64}$/.test(key))
+      throw new Error("invalid download key");
     return rt.downloadManager.removeDownload(key);
   });
 

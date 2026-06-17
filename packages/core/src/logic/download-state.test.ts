@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { reconcileRecords, type DownloadRecord } from "./download-state.js";
+import { type DownloadRecord, reconcileRecords } from "./download-state.js";
 
 const rec = (key: string, state: DownloadRecord["state"]): DownloadRecord => ({
-  key, serverId: "s1", plexPath: `/library/parts/${key}/f.flac`, trackId: key,
-  format: "original", state, bytes: 10, addedAt: 1,
+  key,
+  serverId: "s1",
+  plexPath: `/library/parts/${key}/f.flac`,
+  trackId: key,
+  format: "original",
+  state,
+  bytes: 10,
+  addedAt: 1,
   meta: { title: key, artistName: "A", durationMs: 1, albumId: "al", artistId: "ar" },
 });
 

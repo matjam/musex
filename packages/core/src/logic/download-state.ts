@@ -23,7 +23,10 @@ export interface DownloadRecord {
 
 /** On launch, mark any 'downloaded' record whose file vanished as 'missing'. Records
  *  still queued/downloading have no file yet, so they're left as-is. */
-export function reconcileRecords(records: DownloadRecord[], presentKeys: ReadonlySet<string>): DownloadRecord[] {
+export function reconcileRecords(
+  records: DownloadRecord[],
+  presentKeys: ReadonlySet<string>,
+): DownloadRecord[] {
   return records.map((r) =>
     r.state === "downloaded" && !presentKeys.has(r.key) ? { ...r, state: "missing" as const } : r,
   );

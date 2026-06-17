@@ -33,7 +33,12 @@ export function buildTranscodeUrl(o: TranscodeUrlOpts): string {
   return `${o.baseUrl}/audio/:/transcode/universal/start.mp3?${sp.toString()}`;
 }
 
-export function stopSessionUrl(o: { baseUrl: string; token: string; clientId: string; session: string }): string {
+export function stopSessionUrl(o: {
+  baseUrl: string;
+  token: string;
+  clientId: string;
+  session: string;
+}): string {
   const sp = new URLSearchParams({
     session: o.session,
     "X-Plex-Token": o.token,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { trackAvailability, type LocalPresence } from "./offline-availability.js";
+import { type LocalPresence, trackAvailability } from "./offline-availability.js";
 
 const p = (downloaded: boolean, cached: boolean): LocalPresence => ({ downloaded, cached });
 

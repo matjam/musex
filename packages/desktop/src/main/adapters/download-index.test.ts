@@ -1,10 +1,16 @@
+import type { DownloadRecord } from "@musex/core";
 import { describe, expect, it } from "vitest";
 import { DownloadIndex } from "./download-index.js";
-import type { DownloadRecord } from "@musex/core";
 
 const rec = (key: string): DownloadRecord => ({
-  key, serverId: "s1", plexPath: `/library/parts/${key}/f.flac`, trackId: key,
-  format: "original", state: "queued", bytes: 0, addedAt: 1,
+  key,
+  serverId: "s1",
+  plexPath: `/library/parts/${key}/f.flac`,
+  trackId: key,
+  format: "original",
+  state: "queued",
+  bytes: 0,
+  addedAt: 1,
   meta: { title: key, artistName: "A", durationMs: 1, albumId: "al", artistId: "ar" },
 });
 

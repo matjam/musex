@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { dedupeJobs, type DownloadJob } from "./download-plan.js";
+import { type DownloadJob, dedupeJobs } from "./download-plan.js";
 
 const job = (key: string): DownloadJob => ({
   key,
   serverId: "s1",
   plexPath: `/library/parts/${key}/file.flac`,
   trackId: key,
-  meta: { title: key, artistName: "A", albumTitle: "Al", durationMs: 1000, thumb: undefined, trackNumber: 1, albumId: "al", artistId: "ar" },
+  meta: {
+    title: key,
+    artistName: "A",
+    albumTitle: "Al",
+    durationMs: 1000,
+    thumb: undefined,
+    trackNumber: 1,
+    albumId: "al",
+    artistId: "ar",
+  },
 });
 
 describe("dedupeJobs", () => {
