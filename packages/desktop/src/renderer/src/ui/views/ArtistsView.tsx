@@ -3,6 +3,7 @@ import { listValidator } from "@musex/core";
 import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
+import { useMonitoring } from "../../state/monitoring";
 import { acquisitionKey } from "../../util/acquisition-map";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
@@ -19,6 +20,7 @@ type FetchState =
 export function ArtistsView() {
   const { library, connectivity, dispatch } = useApp();
   const { playArtist } = useCollectionPlay();
+  const { isWatched } = useMonitoring();
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   // Artist cards reflect LOCAL download state only: a downloaded artist (≥1
@@ -122,6 +124,7 @@ export function ArtistsView() {
                     title={artist.name}
                     round
                     state={cardState(artist.id)}
+                    monitored={isWatched(artist.name)}
                     onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
                     onPlay={() => void playArtist(artist)}
                   />
@@ -145,6 +148,7 @@ export function ArtistsView() {
                 title={artist.name}
                 round
                 state={cardState(artist.id)}
+                monitored={isWatched(artist.name)}
                 dim={offline && !downloaded.has(artist.id)}
                 onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
                 onPlay={() => void playArtist(artist)}
