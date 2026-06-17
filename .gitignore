@@ -20,9 +20,10 @@ vendor/
 # Local env / secrets
 .env
 .env.local
-# Cached Plex token for the transcode spike (PIN-flow output; plaintext, local only)
+# Throwaway transcode spike (token helper + scratch output; deleted when done)
 .plex-spike-credentials.json
 spike/
+scripts/link-plex-spike.mjs
 
 # OS / editor
 .DS_Store
