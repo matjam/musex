@@ -511,6 +511,19 @@ export function registerIpc(rt: Runtime): void {
     if (typeof key !== "string" || !key) throw new Error("invalid action key");
     return rt.plugins.runSettingsAction(id, key);
   });
+  ipcMain.handle(IPC.pluginsFetchManifest, (_e, repoUrl: string) => {
+    if (typeof repoUrl !== "string" || !repoUrl) throw new Error("invalid repo url");
+    return rt.pluginInstaller.fetchManifest(repoUrl);
+  });
+  ipcMain.handle(IPC.pluginsInstall, (_e, repoUrl: string, id: string) => {
+    if (typeof repoUrl !== "string" || !repoUrl) throw new Error("invalid repo url");
+    if (typeof id !== "string" || !id) throw new Error("invalid plugin id");
+    return rt.pluginInstaller.install(repoUrl, id);
+  });
+  ipcMain.handle(IPC.pluginsUninstall, (_e, id: string) => {
+    if (typeof id !== "string" || !id) throw new Error("invalid plugin id");
+    return rt.pluginInstaller.uninstall(id);
+  });
 
   // Plugin contribution surfaces — sections (Discover/Home), track actions
   // (context menu), track detail (right panel), and the renderer-facing

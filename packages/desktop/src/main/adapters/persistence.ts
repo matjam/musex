@@ -8,6 +8,12 @@ import {
   sanitizeAudioPrefs,
 } from "../../logic/audio-filters.js";
 
+export interface PluginSource {
+  owner: string;
+  repo: string;
+  version: string;
+}
+
 export interface PersistedState {
   clientId: string;
   library: Library | null;
@@ -26,6 +32,9 @@ export interface PersistedState {
   // Recently-played history (most recent first, capped by the PlaybackMonitor)
   // — TrackInfo only (no ids/URLs/tokens); backs ctx.library.recentlyPlayed.
   recentlyPlayed: TrackInfo[];
+  // Source record for user-installed plugins (owner/repo/version), keyed by
+  // plugin id — used to detect updates and power the installer.
+  pluginSources: Record<string, PluginSource>;
 }
 
 /** Default local-cache cap: 5 GiB. */
@@ -42,6 +51,7 @@ const store = new Store<PersistedState>({
     serverUrls: {},
     disabledPlugins: [],
     recentlyPlayed: [],
+    pluginSources: {},
   },
 });
 
@@ -178,5 +188,14 @@ export const persistence = {
     if (enabled) set.delete(id);
     else set.add(id);
     store.set("disabledPlugins", [...set]);
+  },
+  getPluginSource(id: string): PluginSource | undefined {
+    return store.get("pluginSources")[id];
+  },
+  setPluginSource(id: string, src: PluginSource | null): void {
+    const all = { ...store.get("pluginSources") };
+    if (src) all[id] = src;
+    else delete all[id];
+    store.set("pluginSources", all);
   },
 };

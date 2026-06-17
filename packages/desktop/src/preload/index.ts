@@ -127,6 +127,9 @@ const api: MusexApi = {
     ipcRenderer.invoke(IPC.acquisitionDiscography, artistName),
   updaterCheck: () => ipcRenderer.invoke(IPC.updaterCheck),
   popupMenu: (x, y) => ipcRenderer.invoke(IPC.menuPopup, x, y),
+  pluginsFetchManifest: (repoUrl) => ipcRenderer.invoke(IPC.pluginsFetchManifest, repoUrl),
+  pluginsInstall: (repoUrl, id) => ipcRenderer.invoke(IPC.pluginsInstall, repoUrl, id),
+  pluginsUninstall: (id) => ipcRenderer.invoke(IPC.pluginsUninstall, id),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {
