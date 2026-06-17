@@ -16,12 +16,12 @@ import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";
 import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
+import { AcquiringView } from "./views/AcquiringView";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
 import { DiscoverView } from "./views/DiscoverView";
-import { DownloadsView } from "./views/DownloadsView";
 import { ExternalArtistView } from "./views/ExternalArtistView";
 import { GenresView } from "./views/GenresView";
 import { GenreView } from "./views/GenreView";
@@ -128,9 +128,10 @@ export function Shell() {
       case "on-device":
         return <OnDeviceView />;
       case "acquiring":
-        // The acquisition feed — reachable via a filter in a later task; kept
-        // as a valid route so the union stays exhaustive.
-        return <DownloadsView />;
+        // The acquisition activity feed — reachable via the "Acquiring" filter
+        // in Albums/Artists (the "View acquisition activity" link), not a
+        // sidebar slot.
+        return <AcquiringView />;
     }
   }
 
