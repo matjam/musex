@@ -317,7 +317,7 @@ const rec = (key: string, state: DownloadRecord["state"]): DownloadRecord => ({
 });
 
 describe("reconcileRecords", () => {
-  it("downgrades a 'downloaded' record to 'failed' when its file is missing on disk", () => {
+  it("downgrades a 'downloaded' record to 'missing' when its file is missing on disk", () => {
     const out = reconcileRecords([rec("a", "downloaded"), rec("b", "downloaded")], new Set(["a"]));
     expect(out.find((r) => r.key === "a")?.state).toBe("downloaded");
     expect(out.find((r) => r.key === "b")?.state).toBe("missing");
