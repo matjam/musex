@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { useMonitoring } from "../../state/monitoring";
+import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
 import { ActionBar } from "../discovery/ActionBar";
 import { useMonitorAction, useWatchAction } from "../discovery/MonitorButton";
 import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
@@ -18,7 +19,8 @@ type FetchState =
  *  into the library; available ones get a hover Add (acquire) action;
  *  last.fm-only titles are shown dimmed as unavailable. */
 export function ExternalArtistView({ artistName }: { artistName: string }) {
-  const { dispatch } = useApp();
+  const { dispatch, connectivity } = useApp();
+  const offline = connectivity === "offline";
   const monitoring = useMonitoring();
   // "Monitor entire artist" (one-way acquire) + "Watch new releases" (toggle).
   const monitor = useMonitorAction(artistName);
@@ -26,6 +28,9 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {
+    // The discography lookup is an online-only acquisition call; skip it
+    // offline (the view renders the offline message instead).
+    if (offline) return;
     setFetch({ status: "loading" });
     let cancelled = false;
     window.musex
@@ -45,7 +50,7 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
     return () => {
       cancelled = true;
     };
-  }, [artistName]);
+  }, [artistName, offline]);
 
   function openOwned(album: AcquirableAlbumDto) {
     if (!album.albumId || !album.serverId) return;
@@ -96,6 +101,19 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
             : prev,
         );
       });
+  }
+
+  // The whole view is online-only (discography lookup + acquire/monitor). When
+  // offline, show the artist name and the friendly offline message — no actions.
+  if (offline) {
+    return (
+      <div className="browse-section external-artist-view">
+        <div className="artist-header">
+          <h3 className="browse-title">{artistName}</h3>
+        </div>
+        <div className="content-placeholder">{OFFLINE_VIEW_MESSAGE}</div>
+      </div>
+    );
   }
 
   return (

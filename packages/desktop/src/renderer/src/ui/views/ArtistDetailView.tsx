@@ -190,7 +190,17 @@ export function ArtistDetailView({ artist }: Props) {
               thumb: artist.thumb,
             })
           }
-          monitor={monitor.supported ? monitor : undefined}
+          monitor={
+            monitor.supported
+              ? {
+                  on: monitor.on,
+                  busy: monitor.busy,
+                  disabled: offline,
+                  title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
+                  onToggle: monitor.onToggle,
+                }
+              : undefined
+          }
           overflow={
             fetch.status === "ok" && fetch.albums.length > 0 ? (
               <button

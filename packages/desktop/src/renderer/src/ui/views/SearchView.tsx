@@ -7,6 +7,7 @@ import { useMonitoring } from "../../state/monitoring";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
 import { downloadRecordFor } from "../../util/downloaded-records";
+import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
@@ -21,7 +22,8 @@ const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
 
 export function SearchView() {
   // The query lives in app state (driven by the top-bar search box).
-  const { library, dispatch, searchQuery: query } = useApp();
+  const { library, dispatch, searchQuery: query, connectivity } = useApp();
+  const offline = connectivity === "offline";
   const downloadRecords = useDownloadRecords();
   const { state, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
@@ -70,8 +72,14 @@ export function SearchView() {
 
   // Federated external search (acquisition plugin) — a second
   // debounced fetch, independent loading flag, never blocks library results.
+  // Skipped entirely when offline: the lookup needs the network, and the
+  // section is replaced by the offline message below.
   useEffect(() => {
-    if (!acquisitionAvailable) return;
+    if (!acquisitionAvailable || offline) {
+      setExternal([]);
+      setExternalLoading(false);
+      return;
+    }
     const q = query.trim();
     if (q === "") {
       setExternal([]);
@@ -101,7 +109,7 @@ export function SearchView() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [query, acquisitionAvailable]);
+  }, [query, acquisitionAvailable, offline]);
 
   // Monitor via the precise providerRef, then refresh the live monitoring
   // store so the marker lights up (the plugin itself toasts success/failure).
@@ -215,6 +223,13 @@ export function SearchView() {
               );
             }}
           />
+        </div>
+      )}
+
+      {hasQuery && offline && acquisitionAvailable && (
+        <div className="browse-section">
+          <h3 className="browse-title">Not in your library</h3>
+          <div className="content-placeholder">{OFFLINE_VIEW_MESSAGE}</div>
         </div>
       )}
 
