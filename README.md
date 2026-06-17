@@ -1,7 +1,7 @@
 # musex
 
-A Spotify-style desktop music player (macOS and Linux) for your own Plex
-library.
+A desktop music player (macOS and Linux) for your own Plex library — the feel of
+a popular music streaming app, over music you actually own.
 
 musex streams directly from your Plex Media Server and plays the **original
 files** — every codec Plex can store (FLAC, ALAC, Opus, MP3, …) is decoded by
@@ -20,7 +20,7 @@ playlists, mood mixes, radio, and recommendations.
 - **Volume leveling & EQ** — optional ReplayGain or real-time loudness
   leveling, plus EQ presets (Bass Boost, Vocal, Loudness, …) applied in the
   audio engine, not the UI.
-- **Your library, Spotify-shaped** — home view, artist/album/genre browsing,
+- **A familiar streaming-app layout** — home view, artist/album/genre browsing,
   full-library search, playlists, queue, shuffle/repeat, keyboard shortcuts
   (`⌘/` shows them all).
 - **Taste profile** — plays, skips, and star ratings feed an on-device
@@ -31,21 +31,24 @@ playlists, mood mixes, radio, and recommendations.
     genre/mood tags and ordered by your taste.
   - **Radio** — start a station from any track or artist and musex keeps the
     queue topped up with similar music from your library.
-- **Plugins** — a small, full-trust plugin system extends the app:
-  - **last.fm** — scrobbling, loved tracks (synced with your star ratings),
-    similar artists/tracks, listening stats.
-  - **Acquisition plugins** (e.g. Lidarr) — see an external artist's full
-    discography, add albums (or monitor a whole artist) for download, and
-    watch request status — turning "I wish I had this" into "it's in my
-    library." Install acquisition plugins (e.g. Lidarr) from a plugin repo
-    via **Settings → Plugins → Add from GitHub**.
-  - Federated search: results show what you own next to what you could
-    acquire.
-  - The plugin API is deliberately source-agnostic: a plugin that can look up
-    an artist's albums and fetch one (an online music store like Bandcamp, a
-    different download manager, anything) plugs into the same search,
-    downloads, and taste-expansion machinery with no app changes.
-    See [docs/plugins.md](docs/plugins.md).
+- **Discovery, built in** — last.fm is integrated directly: scrobbling, loved
+  tracks (synced with your star ratings), similar artists/tracks, and listening
+  stats feed the Similar panel, radio, and Discover. Configure it in **Settings
+  → Last.fm**.
+- **Plugins** — a small, **sandboxed** plugin system extends the app. Plugins
+  run in an isolated runtime with no access to your files, system, or Plex
+  account — only a deliberately narrow, source-agnostic API
+  (`@musex/plugin-api`). Acquisition plugins let you browse an external artist's
+  full discography, add albums (or monitor a whole artist) for download, and
+  watch request status — turning "I wish I had this" into "it's in my library" —
+  while federated search shows what you own next to what you could acquire.
+  Because the API is source-agnostic, any plugin that can look up an artist's
+  albums and fetch one (an online store, a download manager, anything) plugs
+  into the same search, downloads, and taste-expansion machinery with no app
+  changes. **Optional example plugins that demonstrate the system are published
+  in the [`musex-plugins`](https://github.com/matjam/musex-plugins) repo** —
+  install them via **Settings → Plugins → Add from GitHub**. See
+  [docs/plugins.md](docs/plugins.md).
 - **Auto-update** — checks GitHub Releases silently and updates in place on
   macOS and the Linux AppImage; `.deb`/package installs update through your
   package manager.
@@ -70,8 +73,10 @@ On first launch musex signs you in via plex.tv (PIN flow) and stores the token
 in the OS keychain (macOS Keychain / libsecret or kwallet on Linux; if no
 keyring is available the token is stored unencrypted with a warning).
 
-The last.fm plugin is bundled. Acquisition plugins (e.g. Lidarr) are installed
-from a plugin repo via Settings → Plugins → Add from GitHub.
+last.fm is built in — configure it in Settings → Last.fm. Optional example
+plugins that demonstrate the plugin system live in the
+[`musex-plugins`](https://github.com/matjam/musex-plugins) repo; install them
+via Settings → Plugins → Add from GitHub.
 
 ## Development
 
@@ -97,8 +102,10 @@ In the Electron app, the **main process is the data plane**: it talks to Plex,
 holds the token, proxies audio/art through a localhost server (the token never
 reaches the UI), caches media and lists, and runs the mpv playback engine. The
 **renderer is purely UI** — it drives playback through a typed IPC port and
-plays no audio itself. Plugins run in the main process against a deliberately
-narrow API (`@musex/plugin-api`) that never exposes Plex tokens or URLs; see
+plays no audio itself. Plugins run **sandboxed** (a QuickJS isolate with no
+file, system, or Plex access) against a deliberately narrow API
+(`@musex/plugin-api`) that never exposes Plex tokens or URLs; last.fm is a
+built-in first-party feature, not a plugin. See
 [docs/plugins.md](docs/plugins.md).
 
 Releases are automated with release-please: conventional commits on `main`
