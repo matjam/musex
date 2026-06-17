@@ -47,7 +47,7 @@ import type {
 } from "@musex/plugin-api";
 import { LidarrClient, LidarrError } from "./client.js";
 import { deriveAlbumState } from "./state.js";
-import { createNodeTransport, fetchTransport } from "./transport.js";
+import { httpFnFrom } from "./transport.js";
 
 /** Album metadata may not exist immediately after adding an artist (Lidarr
  *  refreshes it asynchronously, often taking 30–60s) — poll briefly inline,
@@ -394,13 +394,15 @@ export async function activate(ctx: PluginContext): Promise<void> {
   const client = async (): Promise<LidarrClient | null> => {
     const cfg = await configured();
     if (!cfg) return null;
-    // Global fetch cannot relax TLS per-request; when the user opts in to
-    // self-signed certs, swap in the node:https transport.
+    // TLS control (self-signed certs) is provided by the host via ctx.net;
+    // fall back to ctx.fetch when the host doesn't expose it.
     const allowSelfSigned = (await ctx.storage.get<boolean>("allowSelfSigned")) === true;
-    const httpFn = allowSelfSigned
-      ? createNodeTransport({ allowSelfSigned: true })
-      : fetchTransport;
-    return new LidarrClient({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, httpFn });
+    const netFetch = ctx.net?.client({ allowSelfSigned }) ?? ctx.fetch;
+    return new LidarrClient({
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      httpFn: httpFnFrom(netFetch),
+    });
   };
 
   // ── Pending albums (deferred until Lidarr's artist refresh finishes) ─────
