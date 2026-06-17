@@ -2,10 +2,11 @@
  *  only bundled code. The dynamic import() path in PluginHost remains
  *  exclusively for user plugins in userData/plugins/.
  *
- *  lastfm is the only bundled core plugin. Acquisition plugins (e.g. Lidarr)
- *  are installed at runtime from a GitHub repo via Settings → Plugins. */
+ *  Last.fm is now a first-party service registered directly on the ProviderHub
+ *  (see main/lastfm/service.ts + runtime.ts). It no longer goes through the
+ *  plugin system. Acquisition plugins (e.g. Lidarr) are installed at runtime
+ *  from a GitHub repo via Settings → Plugins. */
 import type { PluginContext } from "@musex/plugin-api";
-import * as lastfm from "@musex/plugin-lastfm";
 
 export interface CorePlugin {
   manifest: { id: string; name: string; version: string; apiVersion: number };
@@ -13,6 +14,4 @@ export interface CorePlugin {
   deactivate?: () => void | Promise<void>;
 }
 
-export const CORE_PLUGINS: readonly CorePlugin[] = [
-  { manifest: lastfm.manifest, activate: lastfm.activate },
-];
+export const CORE_PLUGINS: readonly CorePlugin[] = [];

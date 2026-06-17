@@ -12,8 +12,8 @@ import {
   planPicks,
   type SimilarNeighbor,
 } from "@musex/core";
-import { type ExpansionPrefs, persistence } from "../adapters/persistence.js";
-import type { PluginHost } from "../plugins/plugin-host.js";
+import { persistence } from "../adapters/persistence.js";
+import type { ProviderHub } from "../providers/provider-hub.js";
 
 /** Cycle cadence; the weekly budget is the real limiter, frequency just
  *  bounds how quickly stalls/landings are noticed. */
@@ -26,7 +26,7 @@ const VIA_FETCH_MAX = 4;
 const PICK_SPARES = 4;
 
 export interface CoordinatorDeps {
-  host: PluginHost;
+  host: ProviderHub;
   getLibrary(): Library | null;
   getToken(): string | null;
   listArtists(library: Library, token: string): Promise<Artist[]>;
@@ -312,7 +312,7 @@ export class ExpansionCoordinator {
       createdAt: now,
     };
 
-    let lookup: Awaited<ReturnType<PluginHost["lookupArtistAlbumsStrict"]>>;
+    let lookup: Awaited<ReturnType<ProviderHub["lookupArtistAlbumsStrict"]>>;
     try {
       lookup = await this.deps.host.lookupArtistAlbumsStrict(pick.artistName);
     } catch (err) {
@@ -422,7 +422,7 @@ export class ExpansionCoordinator {
         .map((e) => e.albumTitle.trim().toLowerCase()),
     );
 
-    let lookup: Awaited<ReturnType<PluginHost["lookupArtistAlbumsStrict"]>>;
+    let lookup: Awaited<ReturnType<ProviderHub["lookupArtistAlbumsStrict"]>>;
     try {
       lookup = await this.deps.host.lookupArtistAlbumsStrict(landed.artistName);
     } catch (err) {

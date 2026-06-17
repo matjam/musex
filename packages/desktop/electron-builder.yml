@@ -87,7 +87,7 @@ linux:
   synopsis: Spotify-style desktop player for your Plex music library
   description: >-
     musex streams your own Plex music library with gapless, all-codec direct
-    play (via mpv), smart mixes, and Lidarr-powered discovery.
+    play (via mpv), smart mixes, Last.fm discovery, and installable plugins.
   desktop:
     entry:
       Categories: AudioVideo;Audio;Player;

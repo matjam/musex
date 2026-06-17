@@ -1,9 +1,10 @@
 /**
- * @musex/plugin-api — the complete type surface for musex plugins (API v1).
+ * @musex/plugin-api — the complete type surface for musex plugins (API v2).
  *
- * Types only; no runtime code. Plugins are full-trust ESM modules loaded in
- * the Electron main process. A plugin directory contains a `plugin.json`
- * manifest plus a single bundled ESM entry exporting:
+ * Types only; no runtime code. Plugins run inside a QuickJS sandbox (pure ES
+ * + host preamble; bundle target es2022 / platform:neutral). A plugin
+ * directory contains a `plugin.json` manifest plus a single bundled ESM entry
+ * exporting:
  *
  *   export function activate(ctx: PluginContext): void | Promise<void>
  *   export function deactivate(): void | Promise<void>   // optional
@@ -231,11 +232,25 @@ export type SettingField =
 
 export type SettingsActionResult = { ok: boolean; message?: string };
 
-/** Options for the kernel HTTP client (`ctx.net.client`). */
-export interface NetClientOptions {
+/** Init options for the host HTTP capability (`ctx.net.fetch`). */
+export interface NetFetchInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
   /** Skip TLS certificate verification — for self-hosted servers behind a
    *  self-signed cert. Default false. Honored by the host's HTTP transport. */
   allowSelfSigned?: boolean;
+}
+
+/** Serializable HTTP response returned by `ctx.net.fetch`.
+ *  The plugin gets data, never a live Response/fetch (those can't cross the
+ *  sandbox boundary). Binary bodies are out of scope for API v2. */
+export interface NetFetchResponse {
+  ok: boolean;
+  status: number;
+  headers: Record<string, string>;
+  /** Response body as text. */
+  body: string;
 }
 
 export interface PluginContext {
@@ -251,15 +266,11 @@ export interface PluginContext {
     get(key: string): Promise<string | null>;
     set(key: string, v: string | null): Promise<void>;
   };
-  /** Convenience; full trust anyway. */
-  fetch: typeof fetch;
-  /** HTTP with platform-honored transport options (e.g. relaxed TLS for a
-   *  self-hosted server with a self-signed cert) WITHOUT importing `node:*`.
-   *  `client(opts)` returns a `fetch`-shaped function; `ctx.fetch` covers the
-   *  common case. Optional — a host may not provide it; plugins should fall
-   *  back to `ctx.fetch` (`ctx.net?.client(opts) ?? ctx.fetch`). */
-  net?: {
-    client(opts?: NetClientOptions): typeof fetch;
+  /** HTTP via the host. The plugin gets a serializable response, never a live
+   *  Response/fetch (those can't cross the sandbox boundary).
+   *  `init.allowSelfSigned` routes through the host's TLS-relaxed transport. */
+  net: {
+    fetch(url: string, init?: NetFetchInit): Promise<NetFetchResponse>;
   };
 
   /** Events (generalizes "Scrobbler"): playback lifecycle + curated domain events. */

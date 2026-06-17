@@ -1,77 +1,31 @@
 import type {
-  AcquisitionProvider,
   Disposable,
   LibrarySearchResult,
   PluginContext,
   PluginEvents,
   PluginManifest,
-  SectionProvider,
   SettingField,
   SettingsActionResult,
-  SimilarProvider,
-  TrackAction,
-  TrackDetailProvider,
   TrackInfo,
-  TrackRecommender,
 } from "@musex/plugin-api";
 import type { PluginNotification } from "../../shared/ipc-contract.js";
+import type { ProviderHub } from "../providers/provider-hub.js";
 import { createNetClient } from "./net-client.js";
 import type { PluginSecrets, PluginStorage } from "./plugin-store.js";
 
-export interface PluginEventSubscriber {
-  pluginId: string;
-  event: keyof PluginEvents;
-  handler: (payload: PluginEvents[keyof PluginEvents]) => void;
-}
-export interface RegisteredSectionProvider {
-  pluginId: string;
-  target: "discover" | "home";
-  provider: SectionProvider;
-}
-export interface RegisteredTrackAction {
-  pluginId: string;
-  action: TrackAction;
-}
-export interface RegisteredTrackDetailProvider {
-  pluginId: string;
-  provider: TrackDetailProvider;
-}
-export interface RegisteredTrackRecommender {
-  pluginId: string;
-  recommender: TrackRecommender;
-}
-export interface RegisteredSimilarProvider {
-  pluginId: string;
-  provider: SimilarProvider;
-}
-export interface RegisteredAcquisitionProvider {
-  pluginId: string;
-  provider: AcquisitionProvider;
-}
-
-/** Registrations from all active plugins. Stored now; consumed by the events
- *  pipeline (Task 2) and the sections/actions/detail surfaces (Task 4). */
-export interface PluginRegistry {
-  eventSubscribers: PluginEventSubscriber[];
-  sectionProviders: RegisteredSectionProvider[];
-  trackActions: RegisteredTrackAction[];
-  trackDetailProviders: RegisteredTrackDetailProvider[];
-  trackRecommenders: RegisteredTrackRecommender[];
-  similarProviders: RegisteredSimilarProvider[];
-  acquisitionProviders: RegisteredAcquisitionProvider[];
-}
-
-export function createPluginRegistry(): PluginRegistry {
-  return {
-    eventSubscribers: [],
-    sectionProviders: [],
-    trackActions: [],
-    trackDetailProviders: [],
-    trackRecommenders: [],
-    similarProviders: [],
-    acquisitionProviders: [],
-  };
-}
+// Re-export registry types from provider-hub so callers that import them from
+// here continue to work without needing to change their imports.
+export type {
+  PluginEventSubscriber,
+  PluginRegistry,
+  RegisteredAcquisitionProvider,
+  RegisteredSectionProvider,
+  RegisteredSimilarProvider,
+  RegisteredTrackAction,
+  RegisteredTrackDetailProvider,
+  RegisteredTrackRecommender,
+} from "../providers/provider-hub.js";
+export { createPluginRegistry } from "../providers/provider-hub.js";
 
 /** Everything a plugin's context needs from the host, injected so the ctx
  *  builder stays pure and testable (no Electron imports anywhere here). */
@@ -89,24 +43,10 @@ export interface PluginContextDeps {
   onSettingsAction: (key: string, handler: () => Promise<SettingsActionResult>) => void;
 }
 
-/** Push `entry` into a registry list, returning (and tracking) a Disposable
- *  that removes it again. */
-function register<T>(list: T[], entry: T, track: (d: Disposable) => void): Disposable {
-  list.push(entry);
-  const d: Disposable = {
-    dispose() {
-      const i = list.indexOf(entry);
-      if (i !== -1) list.splice(i, 1);
-    },
-  };
-  track(d);
-  return d;
-}
-
 export function buildPluginContext(
   manifest: PluginManifest,
   deps: PluginContextDeps,
-  registry: PluginRegistry,
+  hub: ProviderHub,
   trackDisposable: (d: Disposable) => void,
 ): PluginContext {
   const prefix = `[plugin:${manifest.id}]`;
@@ -115,18 +55,34 @@ export function buildPluginContext(
     log: (msg, ...args) => console.log(prefix, msg, ...args),
     storage: deps.storage,
     secrets: deps.secrets,
-    fetch: globalThis.fetch,
-    net: { client: (opts) => createNetClient(opts) },
-    events: {
-      on(event, handler) {
-        const subscriber: PluginEventSubscriber = {
-          pluginId: manifest.id,
-          event,
-          // Safe: the emitter (Task 2) always dispatches the payload matching
-          // the subscriber's stored event key.
-          handler: handler as (payload: PluginEvents[keyof PluginEvents]) => void,
+    net: {
+      async fetch(url, init) {
+        const client = createNetClient({ allowSelfSigned: init?.allowSelfSigned });
+        const res = await client(url, {
+          method: init?.method,
+          headers: init?.headers,
+          body: init?.body,
+        });
+        return {
+          ok: res.ok,
+          status: res.status,
+          headers: Object.fromEntries(res.headers),
+          body: await res.text(),
         };
-        return register(registry.eventSubscribers, subscriber, trackDisposable);
+      },
+    },
+    events: {
+      on<K extends keyof PluginEvents>(event: K, handler: (payload: PluginEvents[K]) => void) {
+        return hub.registerTracked(
+          hub.registry.eventSubscribers,
+          {
+            pluginId: manifest.id,
+            event,
+            // Safe: the emitter always dispatches the payload matching the stored event key.
+            handler: handler as (payload: PluginEvents[keyof PluginEvents]) => void,
+          },
+          trackDisposable,
+        );
       },
     },
     library: {
@@ -142,40 +98,44 @@ export function buildPluginContext(
         deps.openExternal(url);
       },
       contributeSections(target, provider) {
-        return register(
-          registry.sectionProviders,
+        return hub.registerTracked(
+          hub.registry.sectionProviders,
           { pluginId: manifest.id, target, provider },
           trackDisposable,
         );
       },
       contributeTrackAction(action) {
-        return register(registry.trackActions, { pluginId: manifest.id, action }, trackDisposable);
+        return hub.registerTracked(
+          hub.registry.trackActions,
+          { pluginId: manifest.id, action },
+          trackDisposable,
+        );
       },
       contributeTrackDetail(provider) {
-        return register(
-          registry.trackDetailProviders,
+        return hub.registerTracked(
+          hub.registry.trackDetailProviders,
           { pluginId: manifest.id, provider },
           trackDisposable,
         );
       },
       registerSimilarProvider(provider) {
-        return register(
-          registry.similarProviders,
+        return hub.registerTracked(
+          hub.registry.similarProviders,
           { pluginId: manifest.id, provider },
           trackDisposable,
         );
       },
     },
     registerTrackRecommender(recommender) {
-      return register(
-        registry.trackRecommenders,
+      return hub.registerTracked(
+        hub.registry.trackRecommenders,
         { pluginId: manifest.id, recommender },
         trackDisposable,
       );
     },
     registerAcquisitionProvider(provider) {
-      return register(
-        registry.acquisitionProviders,
+      return hub.registerTracked(
+        hub.registry.acquisitionProviders,
         { pluginId: manifest.id, provider },
         trackDisposable,
       );

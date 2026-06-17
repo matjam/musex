@@ -10,6 +10,8 @@ import type {
   ExpansionEntryDto,
   ExpansionStateDto,
   ExternalArtistResultDto,
+  LastfmConfigDto,
+  LastfmConfigPatchDto,
   LoadPlaybackResult,
   LogLevel,
   NowPlayingMsg,
@@ -425,7 +427,7 @@ export function registerIpc(rt: Runtime): void {
         typeof ti.title === "string" &&
         typeof ti.artistName === "string"
       ) {
-        rt.plugins.emitEvent("trackRated", { track: ti, rating10: r });
+        rt.providers.dispatchEvent("trackRated", { track: ti, rating10: r });
         rt.tasteProfile.recordTrackRating(ti, r);
         rt.saveTasteProfileSoon();
       } else if (typeof args.artistName === "string" && args.artistName) {
@@ -538,7 +540,7 @@ export function registerIpc(rt: Runtime): void {
         .map((t) => ({ title: t.title, artist: t.artistName })),
       topArtists: rt.tasteProfile.topArtists(TOP_ARTISTS_MAX),
     };
-    const results = await rt.plugins.getSections(target, ctx);
+    const results = await rt.providers.getSections(target, ctx);
     // Match items against the (cached) library artist list — one fetch per call.
     let artists: Artist[] = [];
     const lib = rt.libraries[0];
@@ -568,7 +570,7 @@ export function registerIpc(rt: Runtime): void {
     const token = rt.token;
     if (args.kind === "artist") {
       if (typeof args.name !== "string" || !args.name) throw new Error("invalid artist name");
-      const items = await rt.plugins.getSimilar("artist", { name: args.name });
+      const items = await rt.providers.getSimilar("artist", { name: args.name });
       let artists: Artist[] = [];
       if (lib && token) {
         try {
@@ -583,7 +585,7 @@ export function registerIpc(rt: Runtime): void {
     if (args.kind === "track") {
       if (typeof args.title !== "string" || !args.title) throw new Error("invalid track title");
       if (typeof args.artist !== "string" || !args.artist) throw new Error("invalid track artist");
-      const items = await rt.plugins.getSimilar("track", {
+      const items = await rt.providers.getSimilar("track", {
         title: args.title,
         artist: args.artist,
       });
@@ -611,13 +613,13 @@ export function registerIpc(rt: Runtime): void {
   });
   // Acquisition (any registered acquisition plugin): external-artist discography
   // lookup with an owned cross-check against the library, acquire routing, download status.
-  ipcMain.handle(IPC.acquisitionAvailable, () => rt.plugins.acquisitionAvailable());
+  ipcMain.handle(IPC.acquisitionAvailable, () => rt.providers.acquisitionAvailable());
 
   ipcMain.handle(
     IPC.acquisitionLookupArtist,
     async (_e, artistName: unknown): Promise<AcquirableAlbumDto[]> => {
       if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
-      const items = await rt.plugins.lookupArtistAlbums(artistName);
+      const items = await rt.providers.lookupArtistAlbums(artistName);
       // Owned cross-check: find the artist in the library (case-insensitive
       // exact name via search), then mark lookup items whose title matches an
       // owned album. Best-effort — signed out / lookup failure means items
@@ -680,11 +682,11 @@ export function registerIpc(rt: Runtime): void {
       if (typeof args.providerRef !== "string" || !args.providerRef) {
         throw new Error("invalid providerRef");
       }
-      return rt.plugins.acquireAlbum(args.providerId, args.providerRef);
+      return rt.providers.acquireAlbum(args.providerId, args.providerRef);
     },
   );
 
-  ipcMain.handle(IPC.acquisitionStatus, () => rt.plugins.acquisitionStatus());
+  ipcMain.handle(IPC.acquisitionStatus, () => rt.providers.acquisitionStatus());
 
   // Federated external artist search (SearchView's "Not in your library"
   // section). Artwork is baked through the proxy's /ext endpoint like every
@@ -693,7 +695,7 @@ export function registerIpc(rt: Runtime): void {
     IPC.acquisitionSearchArtists,
     async (_e, term: unknown): Promise<ExternalArtistResultDto[]> => {
       if (typeof term !== "string" || !term) throw new Error("invalid search term");
-      const items = await rt.plugins.searchExternalArtists(term);
+      const items = await rt.providers.searchExternalArtists(term);
       return items.map((item): ExternalArtistResultDto => {
         if (item.imageUrl === undefined) return item;
         const proxied = rt.proxy.externalArtUrl(item.imageUrl);
@@ -715,20 +717,20 @@ export function registerIpc(rt: Runtime): void {
       if (typeof args.providerRef !== "string" || !args.providerRef) {
         throw new Error("invalid providerRef");
       }
-      return rt.plugins.acquireArtist(args.providerId, args.providerRef);
+      return rt.providers.acquireArtist(args.providerId, args.providerRef);
     },
   );
 
   ipcMain.handle(IPC.acquisitionAcquireArtistByName, (_e, artistName: unknown) => {
     if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
-    return rt.plugins.acquireArtistByName(artistName);
+    return rt.providers.acquireArtistByName(artistName);
   });
 
   ipcMain.handle(
     IPC.artistInfoGet,
     async (_e, artistName: unknown): Promise<ArtistInfoDto | null> => {
       if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
-      const info = await rt.plugins.artistInfo(String(artistName));
+      const info = await rt.providers.artistInfo(String(artistName));
       if (!info) return null;
       if (info.imageUrl === undefined) return info;
       // Bake plugin-supplied artwork through the proxy's /ext endpoint so it
@@ -743,13 +745,13 @@ export function registerIpc(rt: Runtime): void {
     },
   );
 
-  ipcMain.handle(IPC.acquisitionMonitoredArtists, () => rt.plugins.listMonitoredArtists());
+  ipcMain.handle(IPC.acquisitionMonitoredArtists, () => rt.providers.listMonitoredArtists());
 
   ipcMain.handle(
     IPC.acquisitionDiscography,
     async (_e, artistName: unknown): Promise<AcquirableAlbumDto[]> => {
       if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
-      const items = await rt.plugins.externalDiscography(artistName);
+      const items = await rt.providers.externalDiscography(artistName);
       // Same owned cross-check + image-proxy enrichment as acquisitionLookupArtist.
       const lib = rt.libraries[0];
       const token = rt.token;
@@ -800,15 +802,15 @@ export function registerIpc(rt: Runtime): void {
     },
   );
 
-  ipcMain.handle(IPC.trackActionsList, () => rt.plugins.listTrackActions());
+  ipcMain.handle(IPC.trackActionsList, () => rt.providers.listTrackActions());
   ipcMain.handle(IPC.trackActionsInvoke, (_e, actionId: string, track: unknown) => {
     if (typeof actionId !== "string" || !actionId) throw new Error("invalid action id");
     if (!isTrackInfo(track)) throw new Error("invalid track info");
-    return rt.plugins.invokeTrackAction(actionId, track);
+    return rt.providers.invokeTrackAction(actionId, track);
   });
   ipcMain.handle(IPC.trackDetailGet, (_e, track: unknown) => {
     if (!isTrackInfo(track)) throw new Error("invalid track info");
-    return rt.plugins.getTrackDetails(track);
+    return rt.providers.getTrackDetails(track);
   });
   ipcMain.handle(IPC.openExternal, (_e, url: unknown) => {
     if (typeof url !== "string" || !isHttpUrl(url)) throw new Error("invalid external url");
@@ -841,7 +843,7 @@ export function registerIpc(rt: Runtime): void {
       running: status.running,
       lastRunAt: status.lastRunAt,
       lastSummary: status.lastSummary,
-      available: rt.plugins.expansionCapabilities(),
+      available: rt.providers.expansionCapabilities(),
       entries,
     };
   };
@@ -872,14 +874,14 @@ export function registerIpc(rt: Runtime): void {
   });
   ipcMain.handle(IPC.newReleaseWatchGet, (_e, artistName: unknown) => {
     if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
-    return rt.plugins.isWatchingNewReleases(artistName);
+    return rt.providers.isWatchingNewReleases(artistName);
   });
   ipcMain.handle(IPC.newReleaseWatchSet, (_e, artistName: unknown, enabled: unknown) => {
     if (typeof artistName !== "string" || !artistName) throw new Error("invalid artist name");
     if (typeof enabled !== "boolean") throw new Error("invalid enabled flag");
-    return rt.plugins.watchNewReleases(artistName, enabled);
+    return rt.providers.watchNewReleases(artistName, enabled);
   });
-  ipcMain.handle(IPC.newReleaseWatchList, () => rt.plugins.listWatchedArtists());
+  ipcMain.handle(IPC.newReleaseWatchList, () => rt.providers.listWatchedArtists());
 
   // Unified log buffer (Help → Show Logs).
   ipcMain.handle(IPC.logsGet, () => logBuffer.snapshot());
@@ -919,7 +921,7 @@ export function registerIpc(rt: Runtime): void {
     const token = rt.token;
     if (!lib || !token) return [];
 
-    const recs = await rt.plugins.recommendTracks({ seedTracks, seedArtists, exclude, count });
+    const recs = await rt.providers.recommendTracks({ seedTracks, seedArtists, exclude, count });
     if (recs.length === 0) return [];
 
     await rt.ensureProxyEndpoint(lib.serverId);
@@ -936,5 +938,43 @@ export function registerIpc(rt: Runtime): void {
       upcoming.push({ serverId: t.serverId, plexPath: t.media.partKey });
     }
     rt.proxy.prefetch(upcoming);
+  });
+
+  // ── Last.fm first-party service config ────────────────────────────────────
+  ipcMain.handle(IPC.lastfmGetConfig, async (): Promise<LastfmConfigDto> => {
+    const cfg = persistence.getLastfmConfig();
+    const apiSecretSet = await rt.lastfmSecretGet("apiSecret").then((v) => v !== null);
+    const sessionKeySet = await rt.lastfmSecretGet("sessionKey").then((v) => v !== null);
+    return {
+      apiKey: cfg.apiKey,
+      scrobbling: cfg.scrobbling,
+      loveOnRating: cfg.loveOnRating,
+      username: cfg.username,
+      connection: cfg.connection,
+      apiSecretSet,
+      sessionKeySet,
+    };
+  });
+
+  ipcMain.handle(IPC.lastfmSetConfig, async (_e, patch: unknown) => {
+    if (typeof patch !== "object" || patch === null) throw new Error("invalid patch");
+    const p = patch as Record<string, unknown>;
+    const configPatch: LastfmConfigPatchDto = {};
+    if (typeof p.apiKey === "string") configPatch.apiKey = p.apiKey;
+    if (typeof p.apiSecret === "string") configPatch.apiSecret = p.apiSecret;
+    if (typeof p.scrobbling === "boolean") configPatch.scrobbling = p.scrobbling;
+    if (typeof p.loveOnRating === "boolean") configPatch.loveOnRating = p.loveOnRating;
+    if (configPatch.apiSecret !== undefined) {
+      await rt.lastfmSecretSet("apiSecret", configPatch.apiSecret);
+    }
+    const { apiSecret: _dropped, ...rest } = configPatch;
+    if (Object.keys(rest).length > 0) {
+      persistence.setLastfmConfig(rest);
+    }
+  });
+
+  ipcMain.handle(IPC.lastfmConnect, async () => {
+    if (!rt.lastfmService?.connect) throw new Error("Last.fm service not started");
+    return rt.lastfmService.connect();
   });
 }

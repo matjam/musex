@@ -14,6 +14,21 @@ export interface PluginSource {
   version: string;
 }
 
+/** Last.fm service config — non-secret fields live here; secrets (apiSecret,
+ *  sessionKey) are stored encrypted via secureEncrypt/secureDecrypt. */
+export interface LastfmConfig {
+  /** Last.fm API key (public). */
+  apiKey: string;
+  /** Whether scrobbling is enabled (default: true). */
+  scrobbling: boolean;
+  /** Whether to sync ratings ≥ 4★ as "loved" tracks (default: true). */
+  loveOnRating: boolean;
+  /** Last.fm username, populated after a successful auth. */
+  username: string | null;
+  /** Human-readable connection status shown in the settings UI. */
+  connection: string;
+}
+
 export interface PersistedState {
   clientId: string;
   library: Library | null;
@@ -35,10 +50,20 @@ export interface PersistedState {
   // Source record for user-installed plugins (owner/repo/version), keyed by
   // plugin id — used to detect updates and power the installer.
   pluginSources: Record<string, PluginSource>;
+  // Last.fm non-secret config (secrets are stored encrypted in separate files).
+  lastfm: LastfmConfig;
 }
 
 /** Default local-cache cap: 5 GiB. */
 export const DEFAULT_CACHE_MAX_BYTES = 5 * 1024 ** 3;
+
+const DEFAULT_LASTFM_CONFIG: LastfmConfig = {
+  apiKey: "",
+  scrobbling: true,
+  loveOnRating: true,
+  username: null,
+  connection: "Not connected",
+};
 
 const store = new Store<PersistedState>({
   defaults: {
@@ -52,6 +77,7 @@ const store = new Store<PersistedState>({
     disabledPlugins: [],
     recentlyPlayed: [],
     pluginSources: {},
+    lastfm: DEFAULT_LASTFM_CONFIG,
   },
 });
 
@@ -73,6 +99,13 @@ const cursorStore = new Store<{ cursor: PlaybackCursor | null }>({
   name: "playback-cursor",
   defaults: { cursor: null },
 });
+// Last.fm service miscellaneous storage (artist art cache, etc.) — separate
+// file to keep the main settings store from growing unboundedly.
+const lastfmStore = new Store<Record<string, unknown>>({
+  name: "lastfm-data",
+  defaults: {},
+});
+
 // Taste profile (artist affinity + track stats) — its own file because it's
 // written on every play/rating (debounced in the Runtime) and can grow large.
 const tasteStore = new Store<{ taste: TasteState | null }>({
@@ -197,5 +230,18 @@ export const persistence = {
     if (src) all[id] = src;
     else delete all[id];
     store.set("pluginSources", all);
+  },
+  getLastfmConfig(): LastfmConfig {
+    return store.get("lastfm") ?? DEFAULT_LASTFM_CONFIG;
+  },
+  setLastfmConfig(patch: Partial<LastfmConfig>): void {
+    store.set("lastfm", { ...store.get("lastfm"), ...patch });
+  },
+  getLastfmData<T>(key: string): T | null {
+    const v = lastfmStore.get(key);
+    return v !== undefined ? (v as T) : null;
+  },
+  setLastfmData(key: string, value: unknown): void {
+    lastfmStore.set(key, value);
   },
 };

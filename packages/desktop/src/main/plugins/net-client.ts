@@ -1,12 +1,18 @@
 import http from "node:http";
 import https from "node:https";
-import type { NetClientOptions } from "@musex/plugin-api";
 
-/** A `fetch`-shaped HTTP client the host hands to plugins via `ctx.net.client`.
+/** Internal options for the host HTTP transport; mirrors the NetFetchInit
+ *  subset relevant to the transport layer. */
+export interface NetClientOptions {
+  /** Skip TLS certificate verification — for self-hosted servers behind a
+   *  self-signed cert. Default false. */
+  allowSelfSigned?: boolean;
+}
+
+/** A `fetch`-shaped HTTP client used by the host's `ctx.net.fetch` impl.
  *  Default (verify TLS) is just global fetch. When `allowSelfSigned` is set,
  *  requests go through node:http(s) with `rejectUnauthorized:false` and a
- *  buffered Response is returned (sufficient for JSON APIs) — so plugins never
- *  import `node:*`. */
+ *  buffered Response is returned (sufficient for JSON APIs). */
 export function createNetClient(opts?: NetClientOptions): typeof fetch {
   if (!opts?.allowSelfSigned) return globalThis.fetch;
   return ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>

@@ -1,21 +1,23 @@
-# musex plugins (API v1)
+# musex plugins (API v2)
 
 musex supports **dynamically loaded plugins**: directories containing a manifest
-and a single bundled ESM module, loaded at runtime in the Electron **main
-process**. Plugins are **full-trust** — they run with Node privileges, like
-Obsidian or VS Code extensions. Only install plugins you trust.
+and a single bundled ESM module, loaded at runtime in a **QuickJS sandbox**
+(pure ES + host preamble; bundle target `es2022` / `platform:neutral`).
+Plugins are isolated from the main process: they cannot import `node:*` or
+`electron` — all host capabilities go through `ctx`. Only install plugins you
+trust.
 
 The complete, authoritative type surface is `@musex/plugin-api`
 (`packages/plugin-api/src/index.ts`). This document explains how to use it.
 
-## Bundled integrations (core plugins)
+> **Breaking change from API v1:** `ctx.fetch` and `ctx.net.client` are gone.
+> Use `ctx.net.fetch(url, init?)` instead — see below.
 
-Last.fm and Lidarr are **core plugins**: they ship as workspace packages
-(`plugins/lastfm`, `plugins/lidarr`), statically imported by the desktop app,
-and compiled in by electron-vite. There is no build step, no `plugin.json`, and
-no `dist/` directory for them. They appear in Settings → Last.fm / Settings →
-Lidarr as regular entries and cannot be overridden by user plugins (core wins on
-id collision).
+## Bundled integrations
+
+Last.fm is baked into core as a first-party provider (Settings → Last.fm).
+Lidarr ships as a user plugin at API v2. Neither is implemented as a PluginHost
+plugin.
 
 ## User plugins
 
@@ -34,7 +36,7 @@ my-plugin/
   "id": "my-plugin",
   "name": "My Plugin",
   "version": "0.1.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "entry": "index.mjs",
   "description": "Optional one-liner shown in Settings"
 }
@@ -47,7 +49,7 @@ Field rules:
 | `id` | `string` | Must match `^[a-z0-9-]+$`. Unique — first scan wins on duplicates. Use the same value as your directory name. |
 | `name` | `string` | Human-readable display name. |
 | `version` | `string` | Semver string; shown in Settings. |
-| `apiVersion` | `number` | Must equal the host's API version (`1`). A mismatch causes the plugin to be listed as **incompatible** and never activated. |
+| `apiVersion` | `number` | Must equal the host's API version (`2`). A mismatch causes the plugin to be listed as **incompatible** and never activated. |
 | `entry` | `string` | Plain filename — no paths, no `./` prefix. The host loads `<pluginDir>/<entry>`. |
 | `description` | `string?` | Optional one-liner shown in Settings. |
 
@@ -104,39 +106,54 @@ document every field.
 | `ctx.storage.set` | `<T>(key: string, v: T) => Promise<void>` | Persist any JSON-serialisable value. |
 | `ctx.secrets.get` | `(key: string) => Promise<string \| null>` | Read a safeStorage-encrypted secret. Returns `null` when absent. |
 | `ctx.secrets.set` | `(key: string, v: string \| null) => Promise<void>` | Write a safeStorage-encrypted secret. **Passing `null` deletes the key.** |
-| `ctx.fetch` | `typeof fetch` | Global `fetch`. Use for ordinary HTTP requests; credentials/CORS are not an issue (main process). |
-| `ctx.net` | `{ client(opts?: NetClientOptions): typeof fetch } \| undefined` | HTTP with platform-controlled transport (see below). Optional — fall back to `ctx.fetch`. |
+| `ctx.net.fetch` | `(url: string, init?: NetFetchInit) => Promise<NetFetchResponse>` | HTTP via the host — see below. |
 | `ctx.ui.notify` | `(message: string, level?: "info" \| "error") => void` | Toast in the renderer. |
 | `ctx.ui.openExternal` | `(url: string) => void` | Open an http(s) URL in the system browser (plugins cannot import `electron`). |
 
-#### `ctx.net` — HTTP with transport options
+> **API v1 removed:** `ctx.fetch` and `ctx.net.client` no longer exist. Update
+> all HTTP calls to use `ctx.net.fetch`.
 
-`ctx.net` is the kernel HTTP capability for plugins that need TLS control (e.g.
-a Lidarr server behind a self-signed certificate). If the host provides it,
-`ctx.net.client(opts)` returns a **`fetch`-shaped function** configured with the
-given options. `ctx.fetch` covers the common case.
+#### `ctx.net.fetch` — HTTP via the host
+
+Plugins run inside a QuickJS sandbox and cannot reach the outside world
+directly. `ctx.net.fetch` is the **only** HTTP capability — it sends the request
+from the host (main process) and returns a **serializable response**.
 
 ```ts
-export interface NetClientOptions {
-  /** Skip TLS certificate verification for servers behind a self-signed cert.
-   *  Default: false. */
-  allowSelfSigned?: boolean;
+const res = await ctx.net.fetch("https://api.example.com/data", {
+  method: "GET",
+  headers: { "Authorization": `Bearer ${token}` },
+});
+if (res.ok) {
+  const data = JSON.parse(res.body);
 }
 ```
 
-`ctx.net` is **optional** — a host that doesn't implement it leaves the field
-`undefined`. Always write the fallback pattern:
+**Interfaces:**
 
 ```ts
-const httpFetch = ctx.net?.client({ allowSelfSigned }) ?? ctx.fetch;
+interface NetFetchInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  /** Skip TLS certificate verification — for self-hosted servers behind a
+   *  self-signed cert. Default: false. */
+  allowSelfSigned?: boolean;
+}
+
+interface NetFetchResponse {
+  ok: boolean;           // status in 200–299
+  status: number;
+  headers: Record<string, string>;
+  body: string;          // response body as text; binary bodies are out of scope
+}
 ```
 
 **Security caveat:** `allowSelfSigned: true` disables TLS certificate
-verification for that client, making the connection vulnerable to
-man-in-the-middle attacks. It is off by default and should only be used when you
-control the server and cannot issue a CA-signed cert. The recommended alternative
-is adding your server's CA certificate to the OS trust store — that keeps
-verification on without requiring `allowSelfSigned`.
+verification, making the connection vulnerable to man-in-the-middle attacks. Use
+only when you control the server and cannot issue a CA-signed cert. The
+recommended alternative is adding your server's CA certificate to the OS trust
+store.
 
 ---
 
@@ -558,16 +575,17 @@ await build({
   outfile: "dist/index.mjs",
   bundle: true,
   format: "esm",
-  platform: "node",
-  external: [],       // bundle everything; @musex/plugin-api is types-only
+  target: "es2022",
+  platform: "neutral",  // QuickJS sandbox: no node: builtins available
+  external: [],         // bundle everything; @musex/plugin-api is types-only
 });
 await copyFile("plugin.json", "dist/plugin.json");
 ```
 
 `@musex/plugin-api` is **types-only** — import it freely and it contributes
-nothing to the bundle. `node:*` builtins are available (the plugin runs in the
-main process). Do **not** import `electron` or any `@musex` runtime module; the
-manifest, `ctx`, and the types are your complete contract.
+nothing to the bundle. Do **not** import `node:*`, `electron`, or any `@musex`
+runtime module: the plugin runs in a QuickJS sandbox. Use `ctx.net.fetch` for
+all HTTP. The manifest, `ctx`, and the types are your complete contract.
 
 ### Installing
 

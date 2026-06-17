@@ -1,6 +1,6 @@
 import type { Library } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
-import { Blocks, HardDrive, Puzzle, Settings2, Sparkles, Volume2 } from "lucide-react";
+import { Blocks, HardDrive, Music2, Puzzle, Settings2, Sparkles, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_AUDIO_PREFS,
@@ -13,6 +13,7 @@ import type {
   CacheStats,
   ExpansionStateDto,
   FetchManifestResultDto,
+  LastfmConfigDto,
   PluginInfo,
   PluginSettings,
   SettingField,
@@ -25,7 +26,14 @@ declare const __APP_VERSION__: string;
 
 const GiB = 1024 ** 3;
 
-type CategoryId = "general" | "playback" | "library" | "discovery" | "plugins" | `plugin:${string}`;
+type CategoryId =
+  | "general"
+  | "playback"
+  | "library"
+  | "discovery"
+  | "lastfm"
+  | "plugins"
+  | `plugin:${string}`;
 
 const CATEGORIES: ReadonlyArray<{
   id: CategoryId;
@@ -36,6 +44,7 @@ const CATEGORIES: ReadonlyArray<{
   { id: "playback", label: "Playback", icon: Volume2 },
   { id: "library", label: "Library & Cache", icon: HardDrive },
   { id: "discovery", label: "Discovery", icon: Sparkles },
+  { id: "lastfm", label: "Last.fm", icon: Music2 },
   { id: "plugins", label: "Plugins", icon: Blocks },
 ];
 
@@ -450,6 +459,174 @@ function AudioSection() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Last.fm first-party service settings: API key, shared secret, Connect
+ *  button, connection status, scrobbling + love-on-rating toggles. */
+function LastfmSection() {
+  const [cfg, setCfg] = useState<LastfmConfigDto | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [connectResult, setConnectResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
+  const refresh = useCallback(() => {
+    window.musex
+      .lastfmGetConfig()
+      .then((c) => {
+        setCfg(c);
+        setApiKey(c.apiKey);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function saveApiKey() {
+    if (!cfg || apiKey === cfg.apiKey) return;
+    await window.musex.lastfmSetConfig({ apiKey });
+    refresh();
+  }
+
+  async function saveApiSecret() {
+    if (!apiSecret) return;
+    await window.musex.lastfmSetConfig({ apiSecret });
+    setApiSecret("");
+    refresh();
+  }
+
+  async function connect() {
+    setConnecting(true);
+    setConnectResult(null);
+    try {
+      const result = await window.musex.lastfmConnect();
+      setConnectResult(result);
+      refresh();
+    } catch (err) {
+      setConnectResult({
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function toggleScrobbling() {
+    if (!cfg) return;
+    await window.musex.lastfmSetConfig({ scrobbling: !cfg.scrobbling });
+    refresh();
+  }
+
+  async function toggleLoveOnRating() {
+    if (!cfg) return;
+    await window.musex.lastfmSetConfig({ loveOnRating: !cfg.loveOnRating });
+    refresh();
+  }
+
+  if (!cfg) return <div className="content-placeholder">Loading…</div>;
+
+  return (
+    <>
+      <div className="settings-section">
+        <div className="settings-section-title">API Credentials</div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">API key</div>
+            <HelpText text="Sign in to last.fm in your browser, then create one at https://www.last.fm/api/account/create (leave callback URL blank)" />
+          </div>
+          <input
+            className="settings-input settings-input--text"
+            type="text"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            onBlur={() => void saveApiKey()}
+          />
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">Shared secret</div>
+          </div>
+          <input
+            className="settings-input settings-input--text"
+            type="password"
+            value={apiSecret}
+            placeholder={cfg.apiSecretSet ? "••••• (set)" : ""}
+            onChange={(e) => setApiSecret(e.target.value)}
+            onBlur={() => void saveApiSecret()}
+          />
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">Account connection</div>
+            <div className="settings-row-desc">{cfg.connection}</div>
+            {connectResult ? (
+              <div className={`settings-row-desc${connectResult.ok ? "" : " error-text"}`}>
+                {connectResult.message}
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="settings-btn"
+            disabled={connecting || !cfg.apiSecretSet || !cfg.apiKey}
+            onClick={() => void connect()}
+          >
+            {connecting ? "Connecting…" : "Connect account"}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">Scrobbling</div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">Scrobble plays</div>
+            <div className="settings-row-desc">Report tracks to Last.fm as you listen.</div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={cfg.scrobbling}
+            aria-label="Scrobble plays"
+            className={`toggle${cfg.scrobbling ? " toggle--on" : ""}`}
+            onClick={() => void toggleScrobbling()}
+          >
+            <span className="toggle-knob" />
+          </button>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">Love tracks rated ★★★★ or more</div>
+            <div className="settings-row-desc">
+              Automatically love tracks when you rate them 4 stars or higher, and unlove when you
+              rate them lower.
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={cfg.loveOnRating}
+            aria-label="Love tracks rated 4 stars or more"
+            className={`toggle${cfg.loveOnRating ? " toggle--on" : ""}`}
+            onClick={() => void toggleLoveOnRating()}
+          >
+            <span className="toggle-knob" />
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1197,6 +1374,7 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
           {category === "playback" && <AudioSection />}
           {category === "library" && <CacheSection />}
           {category === "discovery" && <ExpansionSection />}
+          {category === "lastfm" && <LastfmSection />}
           {category === "plugins" && (
             <PluginsOverview
               plugins={plugins}

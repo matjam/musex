@@ -20,12 +20,12 @@
     "@ctrl/plex": "^6.0.0",
     "@musex/core": "workspace:*",
     "@musex/plugin-api": "workspace:*",
-    "@musex/plugin-lastfm": "workspace:*",
     "@tanstack/react-virtual": "^3.14.2",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
-    "lucide-react": "^1.17.0"
+    "lucide-react": "^1.17.0",
+    "quickjs-emscripten": "0.32.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
