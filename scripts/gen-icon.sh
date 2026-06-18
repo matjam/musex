@@ -1,52 +1,58 @@
-#!/bin/sh
-# Build the app icon artifacts from assets/icon.svg:
-#   - packages/desktop/build/icon.icns  (all 10 macOS representations)
-#   - packages/desktop/build/icon.png   (1024px master)
-# Both are COMMITTED so CI needs no SVG toolchain (rsvg-convert is not
-# installed on the runners; iconutil is macOS-only).
+#!/usr/bin/env bash
+# Build the musex app icon artifacts from the raster master assets/icon-master.png
+# (a metallic disc on a blue→purple gradient, drawn as a full-bleed squircle whose
+#  rounded corners are filled solid black). Produces:
+#   - packages/desktop/build/icon.icns + icon.png — macOS: a squircle with the
+#       black corners made TRANSPARENT (macOS draws the rounded shape itself).
+#   - packages/mobile/assets/icon.png — iOS: FULL-BLEED OPAQUE (the gradient is
+#       extended into the corners; iOS masks the rounded corners itself and
+#       REJECTS transparency).
+# All outputs are COMMITTED (CI has no ImageMagick). Re-run after changing the master.
 #
-# We build the .icns ourselves because electron-builder's PNG->ICNS
-# conversion produced CORRUPT 16/32px representations (rainbow noise in
-# Finder list view / Get Info). electron-builder uses a provided .icns as-is.
+# The corners are removed by a flood-fill from the four corners (NOT a global
+# chroma-key) so the disc's own dark center/shadows — which are also near-black —
+# are preserved. We build the .icns ourselves because electron-builder's
+# PNG->ICNS conversion produced CORRUPT 16/32px representations.
 #
-# Small sizes render with a thicker glyph stroke — the 2px line art reads as
-# a faint smudge at 16px otherwise.
-#
-#   brew install librsvg   # provides rsvg-convert
-set -eu
-cd "$(dirname "$0")/.."
+#   brew install imagemagick   # provides magick; iconutil is macOS-only
+set -euo pipefail
 
-SVG=assets/icon.svg
-OUT=packages/desktop/build
-ICONSET=$(mktemp -d)/icon.iconset
-mkdir -p "$ICONSET"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MASTER="$ROOT/assets/icon-master.png"
+[ -f "$MASTER" ] || { echo "missing master: $MASTER" >&2; exit 1; }
+command -v magick >/dev/null || { echo "ImageMagick (magick) required" >&2; exit 1; }
+command -v iconutil >/dev/null || { echo "iconutil (macOS) required" >&2; exit 1; }
 
-# render <pixels> <outfile> — picks a stroke width that reads at that size.
-render() {
-  px=$1
-  out=$2
-  case $px in
-    16) sw=4 ;;
-    32) sw=3 ;;
-    64) sw=2.5 ;;
-    *) sw=2 ;;
-  esac
-  sed "s/stroke-width=\"2\"/stroke-width=\"$sw\"/" "$SVG" |
-    rsvg-convert -w "$px" -h "$px" -o "$out"
-}
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+# Command substitution (not `read`): `magick identify` emits no trailing
+# newline, which makes `read` return non-zero at EOF → `set -e` would abort.
+W="$(magick identify -format "%w" "$MASTER")"
+H="$(magick identify -format "%h" "$MASTER")"
+X=$((W - 1)); Y=$((H - 1))
 
-render 16 "$ICONSET/icon_16x16.png"
-render 32 "$ICONSET/icon_16x16@2x.png"
-render 32 "$ICONSET/icon_32x32.png"
-render 64 "$ICONSET/icon_32x32@2x.png"
-render 128 "$ICONSET/icon_128x128.png"
-render 256 "$ICONSET/icon_128x128@2x.png"
-render 256 "$ICONSET/icon_256x256.png"
-render 512 "$ICONSET/icon_256x256@2x.png"
-render 512 "$ICONSET/icon_512x512.png"
-render 1024 "$ICONSET/icon_512x512@2x.png"
+# Transparent-corner master: flood-fill the connected black corner regions to
+# alpha; the gradient ring stops the flood, so the disc interior is untouched.
+magick "$MASTER" -alpha set -channel RGBA -fuzz 20% -fill none \
+  -draw "alpha 0,0 floodfill" -draw "alpha $X,0 floodfill" \
+  -draw "alpha 0,$Y floodfill" -draw "alpha $X,$Y floodfill" \
+  "$TMP/transparent.png"
 
-iconutil -c icns "$ICONSET" -o "$OUT/icon.icns"
-render 1024 "$OUT/icon.png"
-rm -rf "$(dirname "$ICONSET")"
-echo "wrote $OUT/icon.icns and $OUT/icon.png"
+# --- Desktop (macOS): squircle with transparent corners ---
+magick "$TMP/transparent.png" -resize 1024x1024 "$ROOT/packages/desktop/build/icon.png"
+ICONSET="$TMP/musex.iconset"; mkdir -p "$ICONSET"
+for s in 16 32 128 256 512; do
+  magick "$TMP/transparent.png" -resize "${s}x${s}"        "$ICONSET/icon_${s}x${s}.png"
+  magick "$TMP/transparent.png" -resize "$((s * 2))x$((s * 2))" "$ICONSET/icon_${s}x${s}@2x.png"
+done
+iconutil -c icns "$ICONSET" -o "$ROOT/packages/desktop/build/icon.icns"
+
+# --- Mobile (iOS): full-bleed opaque (fill corners with the gradient) ---
+# Background = the master scaled up + blurred so the gradient covers the frame;
+# composite the transparent-corner squircle over it, then drop the alpha.
+magick "$MASTER" -resize 135% -gravity center -extent "${W}x${H}" -blur 0x70 "$TMP/bg.png"
+magick "$TMP/bg.png" "$TMP/transparent.png" -gravity center -composite \
+  -alpha remove -alpha off -resize 1024x1024 "$ROOT/packages/mobile/assets/icon.png"
+
+echo "icons generated:"
+echo "  desktop: packages/desktop/build/icon.icns + icon.png (transparent squircle)"
+echo "  mobile : packages/mobile/assets/icon.png (full-bleed opaque)"
