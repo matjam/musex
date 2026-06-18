@@ -1,6 +1,16 @@
-import type { Track } from "@musex/core";
+import { buildDownloadLookup, downloadKey, downloadRecordFor, type Track } from "@musex/core";
 import { useRouter } from "expo-router";
-import { Disc3, ListEnd, ListPlus, ListStart, Mic, Radio, Trash2 } from "lucide-react-native";
+import {
+  CircleCheck,
+  Disc3,
+  Download,
+  ListEnd,
+  ListPlus,
+  ListStart,
+  Mic,
+  Radio,
+  Trash2,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { artUrl } from "../logic/art-url";
@@ -24,8 +34,20 @@ export function TrackActionSheet({
   playlistContext?: { playlistId: string; playlistItemId: string };
   onRemovedFromPlaylist?: () => void;
 }) {
-  const { session, gateway, taste, token, artBaseFor, lastfm, getLastfmConfig, startRadio } =
-    useStore();
+  const {
+    session,
+    gateway,
+    taste,
+    token,
+    artBaseFor,
+    lastfm,
+    getLastfmConfig,
+    startRadio,
+    downloadTracks,
+    removeDownload,
+    downloadsList,
+    connectivity,
+  } = useStore();
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(track?.userRating ?? null);
@@ -37,6 +59,9 @@ export function TrackActionSheet({
   if (!track) return null;
   const base = artBaseFor(track.serverId);
   const art = base && token ? artUrl(base, track.thumb, token) : null;
+  const downloadedRecord = downloadRecordFor(buildDownloadLookup(downloadsList()), track);
+  const isDownloaded = !!downloadedRecord;
+  const offline = connectivity === "offline";
 
   async function rate(r: number | null) {
     setRating(r); // optimistic
@@ -66,20 +91,23 @@ export function TrackActionSheet({
     label,
     onPress,
     danger,
+    disabled,
   }: {
     icon: React.ReactNode;
     label: string;
     onPress: () => void;
     danger?: boolean;
+    disabled?: boolean;
   }) => (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
       style={{
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
         paddingHorizontal: 16,
         paddingVertical: 12,
+        opacity: disabled ? 0.4 : 1,
       }}
     >
       {icon}
@@ -158,6 +186,26 @@ export function TrackActionSheet({
             }}
           />
         ) : null}
+        {isDownloaded ? (
+          <Row
+            icon={<CircleCheck color={theme.accent} size={20} />}
+            label="Remove download"
+            onPress={() => {
+              void removeDownload(downloadKey(track.serverId, track.media.partKey));
+              onClose();
+            }}
+          />
+        ) : (
+          <Row
+            icon={<Download color={theme.accent} size={20} />}
+            label="Download"
+            disabled={offline}
+            onPress={() => {
+              void downloadTracks([track]);
+              onClose();
+            }}
+          />
+        )}
         <Row
           icon={<Mic color={theme.text} size={20} />}
           label="Go to artist"
@@ -171,6 +219,7 @@ export function TrackActionSheet({
         <Row
           icon={<Radio color={theme.accent} size={20} />}
           label="Start radio"
+          disabled={offline}
           onPress={() => {
             startRadio({ artist: track.artistName, title: track.title, label: track.title });
             onClose();
