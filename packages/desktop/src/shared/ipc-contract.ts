@@ -3,6 +3,9 @@ import type {
   Artist,
   DownloadRecord,
   DownloadStatus,
+  EntityKind,
+  EntityRef,
+  EntitySource,
   Library,
   LibrarySort,
   Playlist,
@@ -137,6 +140,10 @@ export const IPC = {
   // Storage quality (download transcoding)
   storageGetQuality: "musex:storage:getQuality", // -> StorageQualityDto
   storageSetQuality: "musex:storage:setQuality", // (StorageQualityDto) -> void
+  // Follow (= acquire + monitor for artists; local favorite for album/track)
+  followSet: "musex:follow:set", // (ref: EntityRefDto, value: boolean) -> void
+  followGet: "musex:follow:get", // (ref: EntityRefDto) -> boolean
+  followList: "musex:follow:list", // (kind: EntityKind) -> EntityRefDto[]
 } as const;
 
 export type SignInStartResult = { code: string; authUrl: string };
@@ -418,6 +425,31 @@ export type AvailabilityDto = { plexPath: string; downloaded: boolean; cached: b
  *  StorageQuality, re-exported here so the preload bridge never imports main. */
 export type StorageQualityDto = StorageQuality;
 
+// ── Follow (acquire + monitor) ─────────────────────────────────────────────
+
+/** JSON-safe mirror of core's EntityRef — the currency of follow across IPC.
+ *  Structurally identical (EntityRef is already plain string fields); declared
+ *  explicitly so the wire shape is documented at the boundary and the renderer
+ *  reads it from the contract, not the core barrel. */
+export type EntityRefDto = {
+  kind: EntityKind;
+  source: EntitySource;
+  id?: string;
+  serverId?: string;
+  name: string;
+  artistName?: string;
+  albumTitle?: string;
+  thumb?: string;
+};
+
+/** Compile-time guard: EntityRefDto must stay assignable to/from core EntityRef. */
+type _EntityRefDtoMatches = EntityRefDto extends EntityRef
+  ? EntityRef extends EntityRefDto
+    ? true
+    : never
+  : never;
+const _entityRefDtoMatches: _EntityRefDtoMatches = true;
+
 /** The API exposed on window.musex by the preload bridge. */
 export interface MusexApi {
   /** The platform the main process is running on (e.g. "darwin", "linux",
@@ -615,4 +647,12 @@ export interface MusexApi {
   storageGetQuality(): Promise<StorageQualityDto>;
   /** Set the storage quality for offline downloads. Validated in main; rejects on invalid input. */
   storageSetQuality(q: StorageQualityDto): Promise<void>;
+  /** Follow / unfollow an entity. For artists this routes through the
+   *  acquisition provider (acquire + monitor) plus a local record; for
+   *  album/track it's a local favorite. value=true follows, false unfollows. */
+  followSet(ref: EntityRefDto, value: boolean): Promise<void>;
+  /** Is this entity currently followed? (monitored∪watched for artists, else local). */
+  followGet(ref: EntityRefDto): Promise<boolean>;
+  /** All followed entities of a kind (artists merge the provider's monitored∪watched). */
+  followList(kind: EntityKind): Promise<EntityRefDto[]>;
 }

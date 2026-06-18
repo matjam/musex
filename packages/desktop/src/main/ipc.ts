@@ -1,4 +1,13 @@
-import type { Album, Artist, LibrarySort, Queue, StorageQuality, Track } from "@musex/core";
+import type {
+  Album,
+  Artist,
+  EntityKind,
+  EntityRef,
+  LibrarySort,
+  Queue,
+  StorageQuality,
+  Track,
+} from "@musex/core";
 import {
   createPlaylist,
   discoverMusicLibraries,
@@ -16,6 +25,7 @@ import type {
   AcquirableAlbumDto,
   ArtistInfoDto,
   AvailabilityDto,
+  EntityRefDto,
   ExpansionEntryDto,
   ExpansionStateDto,
   ExternalArtistResultDto,
@@ -109,6 +119,28 @@ function titleArtistPairs(v: unknown): { title: string; artist: string }[] {
     const m = p as Record<string, unknown>;
     return typeof m.title === "string" && typeof m.artist === "string";
   });
+}
+
+/** Validate + coerce an untrusted IPC EntityRefDto into a core EntityRef.
+ *  Throws on a malformed ref (IPC input is untrusted; FollowService keys off
+ *  these fields). Optional string fields are dropped when absent. */
+function toEntityRef(raw: unknown): EntityRef {
+  if (typeof raw !== "object" || raw === null) throw new Error("invalid entity ref");
+  const m = raw as Record<string, unknown>;
+  if (m.kind !== "artist" && m.kind !== "album" && m.kind !== "track") {
+    throw new Error("invalid entity ref kind");
+  }
+  if (m.source !== "plex" && m.source !== "external") {
+    throw new Error("invalid entity ref source");
+  }
+  if (typeof m.name !== "string" || !m.name) throw new Error("invalid entity ref name");
+  const ref: EntityRef = { kind: m.kind, source: m.source, name: m.name };
+  if (typeof m.id === "string") ref.id = m.id;
+  if (typeof m.serverId === "string") ref.serverId = m.serverId;
+  if (typeof m.artistName === "string") ref.artistName = m.artistName;
+  if (typeof m.albumTitle === "string") ref.albumTitle = m.albumTitle;
+  if (typeof m.thumb === "string") ref.thumb = m.thumb;
+  return ref;
 }
 
 /** Suppress repeated toasts for the same mpv-unavailable message (e.g. rapid
@@ -1126,5 +1158,23 @@ export function registerIpc(rt: Runtime): void {
       throw new Error("invalid storage quality");
     }
     persistence.setStorageQuality(q as StorageQuality);
+  });
+
+  // ── Follow (= acquire + monitor for artists; local favorite otherwise) ─────
+  ipcMain.handle(IPC.followSet, async (_e, ref: unknown, value: unknown) => {
+    if (typeof value !== "boolean") throw new Error("invalid follow value");
+    const entity = toEntityRef(ref);
+    if (value) await rt.followService.follow(entity);
+    else await rt.followService.unfollow(entity);
+  });
+  ipcMain.handle(IPC.followGet, (_e, ref: unknown) =>
+    rt.followService.isFollowed(toEntityRef(ref)),
+  );
+  ipcMain.handle(IPC.followList, async (_e, kind: unknown): Promise<EntityRefDto[]> => {
+    if (kind !== "artist" && kind !== "album" && kind !== "track") {
+      throw new Error("invalid follow kind");
+    }
+    // EntityRef is structurally EntityRefDto (compile-time-enforced in the contract).
+    return rt.followService.listFollowed(kind as EntityKind);
   });
 }
