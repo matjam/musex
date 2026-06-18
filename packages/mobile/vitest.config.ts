@@ -8,6 +8,13 @@ export default defineConfig({
     passWithNoTests: true,
     include: ["src/**/*.test.ts"],
     // Smoke tests need a real native runtime/device — opt-in only.
-    exclude: ["**/*.smoke.test.ts", "**/node_modules/**"],
+    // The harness targets the WebView (browser globals + esbuild build-deps),
+    // not Hermes/Node — never run it under vitest.
+    exclude: [
+      "**/*.smoke.test.ts",
+      "**/node_modules/**",
+      "**/harness/harness.ts",
+      "**/harness/build-harness.mjs",
+    ],
   },
 });

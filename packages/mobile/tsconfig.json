@@ -7,5 +7,6 @@
     "moduleResolution": "Bundler",
     "noEmit": true
   },
-  "include": ["index.ts", "src/**/*", "app/**/*", "*.config.ts", "../core/src/globals.d.ts"]
+  "include": ["index.ts", "src/**/*", "app/**/*", "*.config.ts", "../core/src/globals.d.ts"],
+  "exclude": ["src/plugins/harness/harness.ts", "src/plugins/harness/build-harness.mjs"]
 }
