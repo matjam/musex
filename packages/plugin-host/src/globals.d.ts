@@ -44,3 +44,8 @@ declare function setTimeout(handler: () => void, timeout?: number): unknown;
 declare function clearTimeout(handle: unknown): void;
 declare function setInterval(handler: () => void, timeout?: number): unknown;
 declare function clearInterval(handle: unknown): void;
+
+/** Yield a macrotask. Node-native; the WebView/RN harness must polyfill it
+ *  (e.g. `(cb) => setTimeout(cb, 0)`) — the sandbox promise driver uses it to
+ *  interleave guest jobs with the host event loop. */
+declare function setImmediate(handler: () => void): void;

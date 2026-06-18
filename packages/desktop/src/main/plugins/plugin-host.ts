@@ -11,9 +11,11 @@ import type {
   TrackInfo,
 } from "@musex/plugin-api";
 import type { ProviderHub } from "@musex/plugin-host";
+import { loadSandboxedPlugin } from "@musex/plugin-host/sandbox";
 import { validateManifest } from "../../logic/plugin-manifest.js";
 import type { PluginInfo, PluginNotification, PluginSettings } from "../../shared/ipc-contract.js";
 import type { CorePlugin } from "./core-plugins.js";
+import { createNetClient } from "./net-client.js";
 import { buildPluginContext } from "./plugin-context.js";
 import {
   createPluginSecrets,
@@ -21,7 +23,6 @@ import {
   type PluginSecrets,
   type PluginStorage,
 } from "./plugin-store.js";
-import { loadSandboxedPlugin } from "./sandbox/index.js";
 
 export const HOST_API_VERSION = 2;
 
@@ -433,6 +434,22 @@ export class PluginHost {
         manifest: rec.manifest,
         pluginId: rec.manifest.id,
         dir: rec.dir,
+        // Host owns the TLS/transport: build a fetch-shaped client per request
+        // (allowSelfSigned routes through node:http(s) with a buffered Response).
+        netFetch: async (url, init) => {
+          const client = createNetClient({ allowSelfSigned: init?.allowSelfSigned });
+          const res = await client(url, {
+            method: init?.method,
+            headers: init?.headers,
+            body: init?.body,
+          });
+          return {
+            ok: res.ok,
+            status: res.status,
+            headers: Object.fromEntries(res.headers),
+            body: await res.text(),
+          };
+        },
         storage: rec.storage,
         secrets: rec.secrets,
         hub: this.deps.hub,
