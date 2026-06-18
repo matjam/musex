@@ -28,22 +28,28 @@
  */
 
 import singlefileVariant from "@jitl/quickjs-singlefile-browser-release-sync";
-import type { PluginManifest } from "@musex/plugin-api";
-import type { BridgeRegState } from "@musex/plugin-host/sandbox";
+import type {
+  LibrarySearchResult,
+  NetFetchInit,
+  NetFetchResponse,
+  PluginManifest,
+  SettingsActionResult,
+  TrackInfo,
+} from "@musex/plugin-api";
+import type { BridgeDeps, BridgeRegState } from "@musex/plugin-host/sandbox";
 import { installBridge, SandboxContext } from "@musex/plugin-host/sandbox";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 
 // ── setImmediate polyfill (WebKit lacks it; settlePromise depends on it) ─────
 // A 0ms setTimeout is a correct stand-in for yielding to the host event loop.
 declare global {
-  // eslint-disable-next-line no-var
-  var setImmediate: (cb: () => void) => unknown;
   interface Window {
     ReactNativeWebView?: { postMessage(msg: string): void };
   }
 }
-if (typeof globalThis.setImmediate !== "function") {
-  globalThis.setImmediate = (cb: () => void) => setTimeout(cb, 0);
+const g = globalThis as { setImmediate?: (cb: () => void) => unknown };
+if (typeof g.setImmediate !== "function") {
+  g.setImmediate = (cb: () => void) => setTimeout(cb, 0);
 }
 
 type LoadedPlugin = {
@@ -104,17 +110,14 @@ const noopHub = new Proxy(
 ) as never;
 
 // ── Build the bridge deps: every host cap posts outbound to RN ───────────────
-function makeBridgeDeps(pluginId: string, manifest: PluginManifest) {
+// Typed against BridgeDeps so a structural drift vs @musex/plugin-host/sandbox
+// is a compile error (this is the security boundary). See tsconfig.harness.json.
+function makeBridgeDeps(pluginId: string, manifest: PluginManifest): BridgeDeps {
   return {
     manifest,
     pluginId,
-    netFetch: (url: string, init?: unknown) =>
-      postHostCall(pluginId, "netFetch", [url, init]) as Promise<{
-        ok: boolean;
-        status: number;
-        headers: Record<string, string>;
-        body: string;
-      }>,
+    netFetch: (url: string, init?: NetFetchInit) =>
+      postHostCall(pluginId, "netFetch", [url, init]) as Promise<NetFetchResponse>,
     storage: {
       get: <T>(key: string) => postHostCall(pluginId, "storageGet", [key]) as Promise<T | null>,
       set: <T>(key: string, v: T) =>
@@ -126,13 +129,16 @@ function makeBridgeDeps(pluginId: string, manifest: PluginManifest) {
         postHostCall(pluginId, "secretsSet", [key, v]) as Promise<void>,
     },
     library: {
-      search: (query: string) => postHostCall(pluginId, "librarySearch", [query]) as Promise<never>,
+      search: (query: string) =>
+        postHostCall(pluginId, "librarySearch", [query]) as Promise<LibrarySearchResult>,
       recentlyPlayed: (limit?: number) =>
-        postHostCall(pluginId, "libraryRecentlyPlayed", [limit]) as Promise<never>,
+        postHostCall(pluginId, "libraryRecentlyPlayed", [limit]) as Promise<TrackInfo[]>,
       topArtists: (limit?: number) =>
-        postHostCall(pluginId, "libraryTopArtists", [limit]) as Promise<never>,
+        postHostCall(pluginId, "libraryTopArtists", [limit]) as Promise<
+          { name: string; score: number }[]
+        >,
     },
-    notifySink: (payload: unknown) => {
+    notifySink: (payload) => {
       // Fire-and-forget to RN.
       void postHostCall(pluginId, "notify", [payload]);
     },
@@ -140,18 +146,17 @@ function makeBridgeDeps(pluginId: string, manifest: PluginManifest) {
       void postHostCall(pluginId, "openExternal", [url]);
     },
     hub: noopHub,
-    registerSettings: (schema: unknown) => {
+    registerSettings: (schema) => {
       void postHostCall(pluginId, "registerSettings", [schema]);
     },
-    onSettingsAction: (_key: string, _handler: () => Promise<unknown>) => {
+    onSettingsAction: (_key: string, _handler: () => Promise<SettingsActionResult>) => {
       // Settings actions are driven RN-side from regState via invoke(); the
       // WebView does not retain the handler closure.
     },
     trackDisposable: (_d: { dispose(): void }) => {
       // The WebView holds no hub registrations to track.
     },
-    // biome-ignore lint/suspicious/noExplicitAny: structural deps cast for the bridge
-  } as any;
+  };
 }
 
 // ── Inbound handlers ─────────────────────────────────────────────────────────

@@ -63,10 +63,17 @@ class BufferingChannel implements TransportChannel {
 
   setRef(ref: { postMessage(msg: string): void } | null): void {
     this.ref = ref;
+    // Whichever of {ref set, ready} happens last triggers the flush, so a
+    // markReady-before-setRef ordering can't strand queued messages.
+    if (ref && this.ready) this.flush();
   }
 
   markReady(): void {
     this.ready = true;
+    if (this.ref) this.flush();
+  }
+
+  private flush(): void {
     if (!this.ref) return;
     const pending = this.queue;
     this.queue = [];

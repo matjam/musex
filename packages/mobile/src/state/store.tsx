@@ -72,6 +72,7 @@ import { type PluginListItem, PluginManager } from "../plugins/plugin-manager";
 import { PluginFileStore } from "../plugins/plugin-store";
 import { expoFsOps } from "../plugins/plugin-store-fs";
 import { type SandboxController, SandboxHostView } from "../plugins/sandbox-host";
+import { secretStoreKey } from "../plugins/secret-key";
 import { TasteService } from "../taste/taste-service";
 
 /** Map a mobile Track → the plugin-facing TrackInfo (no ids/URLs/tokens). */
@@ -350,8 +351,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   // SecureStore keys allow only [A-Za-z0-9._-]; the namespaced secret keys use
-  // ':' separators, so sanitize before hitting the store.
-  const secretStoreKey = useCallback((k: string) => k.replace(/[^A-Za-z0-9._-]/g, "_"), []);
+  // ':' separators (illegal). Hash the full key (injective — see secret-key.ts)
+  // rather than lossily replacing illegal chars (which collapsed 'x:y' & 'x_y').
+  const storeKeyFor = useCallback((k: string) => secretStoreKey(k, (s) => sha256(s)), []);
 
   // The host-call handler the WebView routes capability calls to. Built once
   // (app-lifetime-stable) so the SandboxHostView's useMemo can hold it forever.
@@ -363,10 +365,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (value === null) await AsyncStorage.removeItem(key);
           else await AsyncStorage.setItem(key, value);
         },
-        secretsGet: (key) => SecureStore.getItemAsync(secretStoreKey(key)),
+        secretsGet: (key) => SecureStore.getItemAsync(storeKeyFor(key)),
         secretsSet: async (key, value) => {
-          if (value === null) await SecureStore.deleteItemAsync(secretStoreKey(key));
-          else await SecureStore.setItemAsync(secretStoreKey(key), value);
+          if (value === null) await SecureStore.deleteItemAsync(storeKeyFor(key));
+          else await SecureStore.setItemAsync(storeKeyFor(key), value);
         },
         netFetch: async (url, init) => {
           const res = await fetch(url, {
@@ -425,7 +427,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Declarative plugin settings UI is not surfaced on mobile yet.
         },
       }),
-    [gateway, taste, secretStoreKey],
+    [gateway, taste, storeKeyFor],
   );
 
   const pluginManager = useMemo(() => {

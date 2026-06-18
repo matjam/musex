@@ -8,7 +8,7 @@
     "ios": "expo run:ios",
     "prebuild": "expo prebuild --platform ios",
     "build:plugin-harness": "node src/plugins/harness/build-harness.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.harness.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

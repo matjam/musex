@@ -34,7 +34,7 @@ export interface PluginManagerDeps {
   trackDisposable?: (id: string, d: { dispose(): void }) => void;
 }
 
-type PluginStatus = "active" | "error" | "disabled";
+type PluginStatus = "active" | "error" | "disabled" | "loading";
 
 interface LoadedState {
   status: PluginStatus;
@@ -99,7 +99,10 @@ export class PluginManager {
         name: p.manifest.name,
         version: p.manifest.version,
         enabled: p.enabled,
-        status: st?.status ?? (p.enabled ? "error" : "disabled"),
+        // No loaded record yet: an enabled plugin is still loading (WASM init /
+        // before loadAll), not errored. "error" only when a load actually failed
+        // (recorded with a record by activate()).
+        status: st?.status ?? (p.enabled ? "loading" : "disabled"),
         ...(st?.error !== undefined ? { error: st.error } : {}),
         registered: st?.regState ?? null,
       };

@@ -223,6 +223,23 @@ describe("PluginManager", () => {
     expect(hub.acquisitionAvailable()).toBe(true);
   });
 
+  it("an enabled plugin with no loaded record reports 'loading' (not 'error')", async () => {
+    const hub = new ProviderHub();
+    const sandbox = fakeSandbox({ regState: ACQ_REG });
+    const mgr = new PluginManager({
+      index: await indexWith(installed("lidarr")),
+      store: fakeStore(),
+      sandbox: sandbox.controller,
+      hub,
+    });
+    // Before loadAll runs, no loaded record exists.
+    expect(mgr.list()[0]?.status).toBe("loading");
+    expect(sandbox.loads).toEqual([]);
+
+    await mgr.loadAll();
+    expect(mgr.list()[0]?.status).toBe("active");
+  });
+
   it("disabled plugins are not loaded", async () => {
     const hub = new ProviderHub();
     const sandbox = fakeSandbox({ regState: ACQ_REG });

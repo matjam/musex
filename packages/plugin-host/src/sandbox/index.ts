@@ -6,7 +6,7 @@
  * shared types only).
  */
 
-export type { BridgeDeps, BridgeResult, PluginNotification } from "./bridge.js";
+export type { BridgeDeps, BridgeRegState, BridgeResult, PluginNotification } from "./bridge.js";
 export { installBridge } from "./bridge.js";
 export type { SandboxDeps } from "./loader.js";
 export { loadSandboxedPlugin } from "./loader.js";

@@ -207,7 +207,7 @@ export default function PluginsSettings() {
                     <Text style={{ color: theme.textDim, fontSize: 12 }}>v{p.version}</Text>
                   </Text>
                   <Text style={{ color: statusColor(p.status), fontSize: 12, marginTop: 2 }}>
-                    {p.status}
+                    {p.status === "loading" ? "loading…" : p.status}
                     {p.status === "active" ? ` — ${registeredSummary(p.registered)}` : ""}
                   </Text>
                   {p.error ? (
