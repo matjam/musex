@@ -21,6 +21,7 @@ export * from "./logic/nav-history";
 export * from "./logic/offline-availability";
 export * from "./logic/play-monitor";
 export * from "./logic/plex-mapping";
+export * from "./logic/radio";
 export * from "./logic/rating";
 export * from "./logic/recently-played";
 export * from "./logic/smart-playlists";
