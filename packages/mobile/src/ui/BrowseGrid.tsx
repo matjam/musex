@@ -1,45 +1,90 @@
-import { type GenreEntry, genreIndex, MOOD_MIXES } from "@musex/core";
+import {
+  type Album,
+  composeMoodMix,
+  type GenreEntry,
+  genreIndex,
+  MOOD_MIXES,
+  sampleThumbs,
+  type Track,
+  tracksForGenre,
+} from "@musex/core";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, useWindowDimensions } from "react-native";
+import { FlatList, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { artUrl } from "../logic/art-url";
 import { useStore } from "../state/store";
-import { Tile } from "./Tile";
+import { Collage } from "./Collage";
+import { theme } from "./theme";
 
 type Cell =
-  | { kind: "mood"; key: string; label: string }
-  | { kind: "genre"; key: string; label: string };
+  | { kind: "mood"; key: string; label: string; thumbs: string[] }
+  | { kind: "genre"; key: string; label: string; thumbs: string[] };
 
 export function BrowseGrid() {
-  const { gateway, token } = useStore();
+  const { gateway, token, artBaseFor, taste } = useStore();
   const library = useStore().state.library;
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const [genres, setGenres] = useState<GenreEntry[]>([]);
+  const [cells, setCells] = useState<Cell[]>([]);
 
-  // Tile width: 2 columns with 6px padding on each tile side = 12px per tile,
-  // plus a 12px outer margin on each side of the list = total gutter per col 24px.
-  // Mirror library/index.tsx: tileSize = (width - 22) / 2 (22 = scrubber gutter there).
-  // Here there is no scrubber so use (width - 12) / 2 (12px = left+right outer padding).
+  // 2-column grid. No scrubber, so use the full width minus outer padding (6px each side).
   const tileSize = (width - 12) / 2;
 
   useEffect(() => {
     if (!library || !token) return;
     let alive = true;
-    gateway
-      .listAllAlbums(library, "title", token)
-      .then((albums) => {
-        if (alive) setGenres(genreIndex(albums));
-      })
-      .catch(() => {});
+    (async () => {
+      let albums: Album[] = [];
+      let allTracks: Track[] = [];
+      try {
+        [albums, allTracks] = await Promise.all([
+          gateway.listAllAlbums(library, "title", token),
+          gateway.listAllTracks(library, "title", token),
+        ]);
+      } catch {
+        // leave empty — cells will have no art
+      }
+
+      if (!alive) return;
+
+      const snap = taste.snapshot();
+      const statsMap = new Map(
+        snap.trackStats.map((s) => [
+          s.key,
+          { plays: s.plays, skips: s.skips, ratingStars: s.ratingStars },
+        ]),
+      );
+      const topArtists = snap.topArtists;
+
+      const serverId = library.serverId;
+      const base = artBaseFor(serverId);
+
+      function bakeUrls(thumbs: string[]): string[] {
+        if (!base || !token) return [];
+        return thumbs.map((t) => artUrl(base, t, token)).filter((u): u is string => u !== null);
+      }
+
+      const moodCells: Cell[] = MOOD_MIXES.map((mix) => {
+        const tracks = composeMoodMix(mix, albums, allTracks, statsMap, topArtists);
+        const rawThumbs = tracks.map((t) => t.thumb).filter((t): t is string => !!t);
+        const sampled = sampleThumbs(rawThumbs, 4, mix.id);
+        return { kind: "mood", key: mix.id, label: mix.title, thumbs: bakeUrls(sampled) };
+      });
+
+      const genres: GenreEntry[] = genreIndex(albums);
+      const genreCells: Cell[] = genres.map((g) => {
+        const tracks = tracksForGenre(g.genre, albums, allTracks);
+        const rawThumbs = tracks.map((t) => t.thumb).filter((t): t is string => !!t);
+        const sampled = sampleThumbs(rawThumbs, 4, g.genre);
+        return { kind: "genre", key: g.genre, label: g.genre, thumbs: bakeUrls(sampled) };
+      });
+
+      if (alive) setCells([...moodCells, ...genreCells]);
+    })();
     return () => {
       alive = false;
     };
-  }, [library, token, gateway]);
-
-  const cells: Cell[] = [
-    ...MOOD_MIXES.map((m) => ({ kind: "mood" as const, key: m.id, label: m.title })),
-    ...genres.map((g) => ({ kind: "genre" as const, key: g.genre, label: g.genre })),
-  ];
+  }, [library, token, gateway, taste, artBaseFor]);
 
   return (
     <FlatList
@@ -49,10 +94,7 @@ export function BrowseGrid() {
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingHorizontal: 6 }}
       renderItem={({ item }) => (
-        <Tile
-          art={null}
-          size={tileSize}
-          label={item.label}
+        <Pressable
           onPress={() =>
             item.kind === "mood"
               ? router.push({
@@ -64,7 +106,21 @@ export function BrowseGrid() {
                   params: { genre: item.key },
                 } as never)
           }
-        />
+          style={{ width: tileSize, padding: 6 }}
+        >
+          <Collage urls={item.thumbs.slice(0, 4)} size={tileSize - 12} />
+          <Text
+            numberOfLines={2}
+            style={{
+              color: theme.text,
+              fontSize: 13,
+              fontWeight: "600",
+              marginTop: 6,
+            }}
+          >
+            {item.label}
+          </Text>
+        </Pressable>
       )}
     />
   );
