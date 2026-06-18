@@ -19,11 +19,11 @@ import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { Tile } from "../../../src/ui/Tile";
 import { theme } from "../../../src/ui/theme";
 
-/** Resolved similar artist: owned = navigate on press, unowned = dimmed. */
+/** Resolved similar artist — always owned (unowned are dropped). */
 interface SimilarArtistItem {
   name: string;
-  artistId: string | null;
-  serverId: string | null;
+  artistId: string;
+  serverId: string;
   thumb: string | null;
 }
 
@@ -66,22 +66,29 @@ export default function ArtistAlbums() {
       setBio(artistBio);
 
       if (similarNames.length > 0 && state.library && state.token) {
-        // Resolve owned status: search the library for each similar name.
+        // Resolve owned status: only keep artists found in the library.
         const resolved: SimilarArtistItem[] = [];
         for (const name of similarNames) {
           try {
             const results = await gateway.search(state.library, name, state.token);
-            const match = results.artists.find((a) => a.name.toLowerCase() === name.toLowerCase());
-            if (alive) {
+            const lc = name.trim().toLowerCase();
+            const match =
+              results.artists.find((a) => a.name.trim().toLowerCase() === lc) ??
+              results.artists.find(
+                (a) =>
+                  a.name.trim().toLowerCase().includes(lc) ||
+                  lc.includes(a.name.trim().toLowerCase()),
+              );
+            if (alive && match) {
               resolved.push({
-                name,
-                artistId: match?.id ?? null,
-                serverId: match?.serverId ?? null,
-                thumb: match?.thumb ?? null,
+                name: match.name,
+                artistId: match.id,
+                serverId: match.serverId,
+                thumb: match.thumb ?? null,
               });
             }
           } catch {
-            if (alive) resolved.push({ name, artistId: null, serverId: null, thumb: null });
+            // Search failure — skip this artist.
           }
         }
         if (alive) setSimilar(resolved);
@@ -187,40 +194,39 @@ export default function ArtistAlbums() {
           contentContainerStyle={{ paddingHorizontal: theme.space(2), gap: 12 }}
         >
           {similar.map((s) => {
-            const sBase = s.serverId ? artBaseFor(s.serverId) : null;
-            const sArt = sBase && token && s.thumb ? artUrl(sBase, s.thumb, token) : null;
-            const content = (
-              <View style={{ alignItems: "center", width: similarTileSize }}>
-                <AlbumArt url={sArt} size={similarTileSize} circular />
-                <Text
-                  style={{
-                    color: s.artistId ? theme.text : theme.textDim,
-                    fontSize: 11,
-                    marginTop: 4,
-                    textAlign: "center",
-                  }}
-                  numberOfLines={2}
-                >
-                  {s.name}
-                </Text>
-              </View>
-            );
-            if (s.artistId) {
-              return (
-                <Pressable
-                  key={s.name}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/(tabs)/library/albums",
-                      params: { artistId: s.artistId! },
-                    })
-                  }
-                >
-                  {content}
-                </Pressable>
-              );
+            let sArt: string | null = null;
+            try {
+              const sBase = artBaseFor(s.serverId);
+              sArt = sBase && token && s.thumb ? artUrl(sBase, s.thumb, token) : null;
+            } catch {
+              // Server not yet connected — fall through to placeholder.
             }
-            return <View key={s.name}>{content}</View>;
+            return (
+              <Pressable
+                key={s.artistId}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/library/albums",
+                    params: { artistId: s.artistId },
+                  })
+                }
+              >
+                <View style={{ alignItems: "center", width: similarTileSize }}>
+                  <AlbumArt url={sArt} size={similarTileSize} circular />
+                  <Text
+                    style={{
+                      color: theme.text,
+                      fontSize: 11,
+                      marginTop: 4,
+                      textAlign: "center",
+                    }}
+                    numberOfLines={2}
+                  >
+                    {s.name}
+                  </Text>
+                </View>
+              </Pressable>
+            );
           })}
         </ScrollView>
       </View>

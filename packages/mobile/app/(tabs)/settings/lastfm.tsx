@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useStore } from "../../../src/state/store";
 import { theme } from "../../../src/ui/theme";
 
@@ -248,17 +258,22 @@ export default function LastfmSettings() {
           />
         </View>
       </View>
-      <Text
-        style={{
-          color: theme.textDim,
-          fontSize: 12,
-          paddingHorizontal: theme.space(2),
-          paddingTop: theme.space(1),
-          paddingBottom: theme.space(3),
-        }}
+      <Pressable
+        onPress={() => void Linking.openURL("https://www.last.fm/api/account/create")}
+        hitSlop={8}
       >
-        Get your API credentials at last.fm/api/account/create
-      </Text>
+        <Text
+          style={{
+            color: theme.accent,
+            fontSize: 12,
+            paddingHorizontal: theme.space(2),
+            paddingTop: theme.space(1),
+            paddingBottom: theme.space(3),
+          }}
+        >
+          Get your API credentials at last.fm/api/account/create
+        </Text>
+      </Pressable>
     </ScrollView>
   );
 }

@@ -179,6 +179,7 @@ export default function NowPlaying() {
               {radio.active ? (
                 <Pressable
                   onPress={stopRadio}
+                  hitSlop={12}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
