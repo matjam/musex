@@ -6,6 +6,7 @@
     "scheme": "musex",
     "version": "0.0.1",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "net.stupendous.musex",
       "supportsTablet": false,
