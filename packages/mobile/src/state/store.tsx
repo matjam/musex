@@ -277,8 +277,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const candidates = await lastfm.recommend({ artist: seed.artist, title: seed.title }, 20);
       const resolved: Track[] = [];
       for (const c of candidates) {
-        const key = radioKey(c.artist, c.title || c.artist);
-        if (radioExcludeRef.current.has(key)) continue;
+        const candKey = radioKey(c.artist, c.title); // c.title is "" for artist-seed — fine, unique per artist
+        if (radioExcludeRef.current.has(candKey)) continue;
+        radioExcludeRef.current.add(candKey); // don't re-resolve this candidate next round
         try {
           const results = await gateway.search(lib, c.title ? c.title : c.artist, tok);
           const match = results.tracks.find(
@@ -293,6 +294,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // search failure → skip
         }
       }
+      if (!radioStateRef.current.active) return; // stopped mid-flight — drop results, finally still resets the in-flight flag
       void session.enqueueEnd(resolved);
       radioStateRef.current = advanceRadio(radioStateRef.current, resolved.length);
       syncRadioSnapshot();
