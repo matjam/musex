@@ -17,7 +17,15 @@ export function ActionBar({
     if (busy) return;
     setBusy(true);
     try {
-      const tracks = await getTracks();
+      // getTracks may be a cached gateway call that rejects with OfflineUnavailable
+      // (e.g. the artist page's listArtistTracks). Treat any failure as "no tracks"
+      // so a play/shuffle/queue button is a graceful no-op rather than an unhandled throw.
+      let tracks: Track[];
+      try {
+        tracks = await getTracks();
+      } catch {
+        tracks = [];
+      }
       if (tracks.length) await action(tracks);
     } finally {
       setBusy(false);

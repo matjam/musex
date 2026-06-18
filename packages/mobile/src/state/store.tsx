@@ -601,7 +601,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (library: Library, albumId: string) => {
       const tok = tokenRef.current;
       if (!tok) return;
-      const tracks = await gateway.listTracks(library, albumId, tok);
+      // listTracks is a cached gateway call: offline + uncached rejects with
+      // OfflineUnavailable. Abort the download gracefully rather than letting it escape.
+      let tracks: Track[];
+      try {
+        tracks = await gateway.listTracks(library, albumId, tok);
+      } catch {
+        return;
+      }
       await downloadManager.enqueue(tracks.map(buildJob));
     },
     [gateway, downloadManager, buildJob],
@@ -611,7 +618,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (library: Library, artistId: string) => {
       const tok = tokenRef.current;
       if (!tok) return;
-      const tracks = await gateway.listArtistTracks(artistId, library, tok);
+      // See downloadAlbum: cached enumeration can throw offline — abort gracefully.
+      let tracks: Track[];
+      try {
+        tracks = await gateway.listArtistTracks(artistId, library, tok);
+      } catch {
+        return;
+      }
       await downloadManager.enqueue(tracks.map(buildJob));
     },
     [gateway, downloadManager, buildJob],

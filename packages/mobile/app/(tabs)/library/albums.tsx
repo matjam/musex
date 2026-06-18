@@ -26,6 +26,7 @@ interface SimilarArtistItem {
   artistId: string;
   serverId: string;
   thumb: string | null;
+  updatedAt?: number; // from the matched owned Plex artist, for real cache validation on drill-down
 }
 
 export default function ArtistAlbums() {
@@ -103,6 +104,7 @@ export default function ArtistAlbums() {
                 artistId: match.id,
                 serverId: match.serverId,
                 thumb: match.thumb ?? null,
+                updatedAt: match.updatedAt,
               });
             }
           } catch {
@@ -242,7 +244,10 @@ export default function ArtistAlbums() {
                 onPress={() =>
                   router.push({
                     pathname: "/(tabs)/library/albums",
-                    params: { artistId: s.artistId },
+                    params: {
+                      artistId: s.artistId,
+                      updatedAt: s.updatedAt != null ? String(s.updatedAt) : "",
+                    },
                   })
                 }
               >
