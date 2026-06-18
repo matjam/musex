@@ -197,20 +197,68 @@ export class PlexGatewayImpl implements PlexGateway {
     const json = await this.getJson(`${base}/playlists/${playlistId}/items`, token);
     return parsePlaylistTracks(json, serverId);
   }
-  createPlaylist(): Promise<never> {
-    throw new Error("playlists not implemented in Phase 1");
+  async createPlaylist(
+    library: Library,
+    title: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<Playlist> {
+    const base = this.requireBase(library.serverId);
+    const uri = `server://${library.serverId}/com.plexapp.plugins.library/library/metadata/${trackIds.join(",")}`;
+    const res = await this.send(
+      `${base}/playlists?type=audio&smart=0&title=${encodeURIComponent(title)}&uri=${encodeURIComponent(uri)}`,
+      "POST",
+      token,
+    );
+    const pl = parsePlaylists(await res.json(), library.serverId)[0];
+    if (!pl) throw new Error("createPlaylist: server returned no playlist");
+    return pl;
   }
-  addToPlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async addToPlaylist(
+    playlistId: string,
+    serverId: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    const uri = `server://${serverId}/com.plexapp.plugins.library/library/metadata/${trackIds.join(",")}`;
+    await this.send(
+      `${base}/playlists/${playlistId}/items?uri=${encodeURIComponent(uri)}`,
+      "PUT",
+      token,
+    );
   }
-  removeFromPlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async removeFromPlaylist(
+    playlistId: string,
+    serverId: string,
+    playlistItemIds: string[],
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    for (const itemId of playlistItemIds) {
+      await this.send(`${base}/playlists/${playlistId}/items/${itemId}`, "DELETE", token);
+    }
   }
-  renamePlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async renamePlaylist(
+    playlistId: string,
+    serverId: string,
+    title: string,
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    await this.send(
+      `${base}/playlists/${playlistId}?title=${encodeURIComponent(title)}`,
+      "PUT",
+      token,
+    );
   }
-  deletePlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async deletePlaylist(playlistId: string, serverId: string, token: string): Promise<void> {
+    const base = this.requireBase(serverId);
+    await this.send(`${base}/playlists/${playlistId}`, "DELETE", token);
   }
   async listAllAlbums(library: Library, sort: LibrarySort, token: string): Promise<Album[]> {
     const base = this.requireBase(library.serverId);

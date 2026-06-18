@@ -256,3 +256,73 @@ describe("getUserRating", () => {
     expect(await gw.getUserRating("srv", "123", "TOK")).toBeNull();
   });
 });
+
+describe("playlist CRUD", () => {
+  const lib = { id: "3", serverId: "srv", serverName: "T", title: "Music", type: "music" as const };
+
+  it("createPlaylist POSTs type=audio with title + track uri and parses the result", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({
+        MediaContainer: { Metadata: [{ ratingKey: "pl1", title: "Sunset", leafCount: 1 }] },
+      }),
+    );
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    const pl = await gw.createPlaylist(lib, "Sunset", ["t1"], "TOK");
+    expect(pl.id).toBe("pl1");
+    const last = fetchFn.mock.calls.at(-1) as unknown as [string, RequestInit];
+    const [url, init] = last;
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/playlists");
+    expect(url).toContain("type=audio");
+    expect(url).toContain("title=Sunset");
+    expect(decodeURIComponent(url)).toContain("library/metadata/t1");
+  });
+
+  it("addToPlaylist PUTs items with the track uri", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({}, 200));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    await gw.addToPlaylist("pl1", "srv", ["t2", "t3"], "TOK");
+    const last = fetchFn.mock.calls.at(-1) as unknown as [string, RequestInit];
+    const [url, init] = last;
+    expect(init.method).toBe("PUT");
+    expect(url).toContain("/playlists/pl1/items");
+    expect(decodeURIComponent(url)).toContain("library/metadata/t2,t3");
+  });
+
+  it("removeFromPlaylist DELETEs each playlist item", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({}, 200));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    await gw.removeFromPlaylist("pl1", "srv", ["i1", "i2"], "TOK");
+    const calls = fetchFn.mock.calls.filter((c) =>
+      String((c as unknown[])[0]).includes("/playlists/pl1/items/"),
+    );
+    expect(calls).toHaveLength(2);
+    expect(((calls[0] as unknown as unknown[])[1] as RequestInit).method).toBe("DELETE");
+  });
+
+  it("renamePlaylist PUTs the new title", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({}, 200));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    await gw.renamePlaylist("pl1", "srv", "New Name", "TOK");
+    const last = fetchFn.mock.calls.at(-1) as unknown as [string, RequestInit];
+    const [url, init] = last;
+    expect(init.method).toBe("PUT");
+    expect(url).toContain("/playlists/pl1");
+    expect(url).toContain("title=New%20Name");
+  });
+
+  it("deletePlaylist DELETEs the playlist", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({}, 200));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    await gw.deletePlaylist("pl1", "srv", "TOK");
+    const last = fetchFn.mock.calls.at(-1) as unknown as [string, RequestInit];
+    const [url, init] = last;
+    expect(init.method).toBe("DELETE");
+    expect(url).toContain("/playlists/pl1");
+  });
+});
