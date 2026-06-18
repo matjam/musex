@@ -10,6 +10,7 @@ export * from "./logic/discography-merge";
 export * from "./logic/download-lookup";
 export * from "./logic/download-plan";
 export * from "./logic/download-state";
+export * from "./logic/entity-ref";
 export * from "./logic/external-url";
 export * from "./logic/for-you";
 export * from "./logic/format";
@@ -34,6 +35,7 @@ export * from "./logic/smart-playlists";
 export * from "./logic/taste-expansion";
 export * from "./logic/taste-profile";
 export * from "./logic/transcode-url";
+export * from "./models/entity-ref";
 export type {
   Album,
   Artist,
