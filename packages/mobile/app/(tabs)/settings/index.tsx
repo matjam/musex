@@ -75,6 +75,11 @@ export default function SettingsIndex() {
         subtitle={lfmCfg.connection}
         onPress={() => router.push("/(tabs)/settings/lastfm")}
       />
+      <Row
+        title="Plugins"
+        subtitle="Install and manage plugins"
+        onPress={() => router.push("/(tabs)/settings/plugins")}
+      />
 
       <Pressable
         onPress={signOut}
