@@ -8,8 +8,8 @@ import type {
   SettingsActionResult,
   TrackInfo,
 } from "@musex/plugin-api";
+import type { ProviderHub } from "@musex/plugin-host";
 import type { PluginNotification } from "../../shared/ipc-contract.js";
-import type { ProviderHub } from "../providers/provider-hub.js";
 import { createNetClient } from "./net-client.js";
 import type { PluginSecrets, PluginStorage } from "./plugin-store.js";
 
@@ -24,8 +24,8 @@ export type {
   RegisteredTrackAction,
   RegisteredTrackDetailProvider,
   RegisteredTrackRecommender,
-} from "../providers/provider-hub.js";
-export { createPluginRegistry } from "../providers/provider-hub.js";
+} from "@musex/plugin-host";
+export { createPluginRegistry } from "@musex/plugin-host";
 
 /** Everything a plugin's context needs from the host, injected so the ctx
  *  builder stays pure and testable (no Electron imports anywhere here). */

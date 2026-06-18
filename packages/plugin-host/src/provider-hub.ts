@@ -98,7 +98,7 @@ const PROVIDER_TIMEOUT_MS = 8_000;
 /** Reject after `ms` (the underlying promise keeps running; we just stop
  *  waiting). The timer is cleared on settle so it never holds the process. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {

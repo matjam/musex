@@ -38,8 +38,8 @@ import type {
   TrackInfo,
   TrackRecommender,
 } from "@musex/plugin-api";
+import type { ProviderHub } from "@musex/plugin-host";
 import type { PluginNotification } from "../../../shared/ipc-contract.js";
-import type { ProviderHub } from "../../providers/provider-hub.js";
 import type { SandboxContext } from "./quickjs-host.js";
 import { fromGuest, toGuest } from "./quickjs-host.js";
 

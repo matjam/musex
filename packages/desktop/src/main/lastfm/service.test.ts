@@ -3,8 +3,8 @@
  * Ported from plugins/lastfm/src/signing.test.ts (signing) plus new service tests.
  */
 import { createHash } from "node:crypto";
+import { ProviderHub } from "@musex/plugin-host";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProviderHub } from "../providers/provider-hub.js";
 import { type LastfmConfig, LastfmService } from "./service.js";
 import { sign } from "./signing.js";
 

@@ -10,9 +10,9 @@ import type {
   SettingsActionResult,
   TrackInfo,
 } from "@musex/plugin-api";
+import type { ProviderHub } from "@musex/plugin-host";
 import { validateManifest } from "../../logic/plugin-manifest.js";
 import type { PluginInfo, PluginNotification, PluginSettings } from "../../shared/ipc-contract.js";
-import type { ProviderHub } from "../providers/provider-hub.js";
 import type { CorePlugin } from "./core-plugins.js";
 import { buildPluginContext } from "./plugin-context.js";
 import {
