@@ -11,6 +11,7 @@ export * from "./logic/for-you";
 export * from "./logic/format";
 export * from "./logic/genres";
 export * from "./logic/group-tracks-by-album";
+export * from "./logic/lastfm-protocol";
 export * from "./logic/library-select";
 export * from "./logic/library-sort";
 export * from "./logic/library-watch";
@@ -44,8 +45,9 @@ export type {
 export type { PlaybackState, PlaybackStatus } from "./playback/playback-session";
 // Playback
 export { PlaybackSession } from "./playback/playback-session";
-export type { PlaybackEngine } from "./ports/playback-engine";
 // Ports
+export type { Hasher } from "./ports/hasher";
+export type { PlaybackEngine } from "./ports/playback-engine";
 export type { Pin, PlexGateway } from "./ports/plex-gateway";
 export { PlexAuthError } from "./ports/plex-gateway";
 export type { StreamKind, StreamRef, StreamResolver } from "./ports/stream-resolver";
