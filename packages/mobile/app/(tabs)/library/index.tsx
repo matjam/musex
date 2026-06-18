@@ -1,5 +1,5 @@
-import type { Album, Artist, DownloadAlbumGroup, Track } from "@musex/core";
-import { buildLetterIndex, groupDownloadsByAlbum } from "@musex/core";
+import type { Album, Artist, Track, TrackAlbumGroup } from "@musex/core";
+import { buildLetterIndex, downloadKey, groupTracksByAlbum } from "@musex/core";
 import { useRouter } from "expo-router";
 import { Trash2 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,8 +46,8 @@ export default function LibraryBrowse() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const listRef = useRef<FlatList<Item>>(null);
-  // Downloaded segment state: album groups + active-strip records
-  const [dlGroups, setDlGroups] = useState<DownloadAlbumGroup[]>([]);
+  // Downloaded segment state: track-grouped albums (re-baked thumbs) + active-strip keys
+  const [dlTrackGroups, setDlTrackGroups] = useState<TrackAlbumGroup[]>([]);
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
   const dlPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -90,11 +90,12 @@ export default function LibraryBrowse() {
   // Refresh the Downloaded segment. Stable via useCallback so the effect dep is safe.
   const refreshDownloads = useCallback(() => {
     const records = downloadsList();
-    setDlGroups(groupDownloadsByAlbum(records));
+    // Group re-baked tracks (from downloadedTracks) for correct tile art.
+    setDlTrackGroups(groupTracksByAlbum(downloadedTracks()));
     const inFlight = records.filter((r) => r.state === "queued" || r.state === "downloading");
     setActiveKeys(inFlight.map((r) => r.key));
     return inFlight.length > 0;
-  }, [downloadsList]);
+  }, [downloadsList, downloadedTracks]);
 
   useEffect(() => {
     if (segment !== "Downloaded") {
@@ -160,7 +161,7 @@ export default function LibraryBrowse() {
       {segment === "Downloaded" ? (
         <FlatList
           key="downloaded"
-          data={dlGroups}
+          data={dlTrackGroups}
           numColumns={2}
           keyExtractor={(g) => g.albumId}
           ListHeaderComponent={
@@ -180,7 +181,7 @@ export default function LibraryBrowse() {
                   </Text>
                 </View>
               ) : null}
-              {dlGroups.length > 0 ? (
+              {dlTrackGroups.length > 0 ? (
                 <ActionBar session={session} getTracks={() => downloadedTracks()} />
               ) : null}
             </View>
@@ -198,10 +199,7 @@ export default function LibraryBrowse() {
               <View style={{ width: tileSize, padding: 6 }}>
                 <Pressable
                   onPress={() => {
-                    const albumTracks = downloadedTracks().filter(
-                      (t) => t.albumId === group.albumId,
-                    );
-                    if (albumTracks.length) void playTracks(albumTracks, 0);
+                    if (group.tracks.length) void playTracks(group.tracks, 0);
                   }}
                 >
                   <AlbumArt url={art} size={tileSize - 12} />
@@ -214,7 +212,9 @@ export default function LibraryBrowse() {
                 </Pressable>
                 <Pressable
                   onPress={() => {
-                    for (const key of group.keys) void removeDownload(key);
+                    for (const t of group.tracks) {
+                      void removeDownload(downloadKey(t.serverId, t.media.partKey));
+                    }
                   }}
                   hitSlop={8}
                   style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}

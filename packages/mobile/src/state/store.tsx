@@ -470,19 +470,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await engine.init();
       await taste.init();
       // Load last.fm config + secret into the in-memory ref before the service is used.
-      const [lfmCfg, storedQuality] = await Promise.all([
-        loadLastfmConfig(),
-        loadSecret().then(() => loadStorageQuality()),
-      ]);
+      const [lfmCfg, storedQuality] = await Promise.all([loadLastfmConfig(), loadStorageQuality()]);
       lastfmConfigRef.current = lfmCfg;
-      // Actually load storage quality separately (above was awkward chaining).
-      storageQualityRef.current = await loadStorageQuality();
+      storageQualityRef.current = storedQuality;
       // Load the download index and reconcile with what's actually on disk.
       await downloadIndex.load();
       await downloadIndex.reconcile(downloadStore.presentNonEmptyKeys());
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
-      void storedQuality; // loaded above into storageQualityRef
       const token = await tokenStore.load();
       if (!alive) return;
       if (!token) {

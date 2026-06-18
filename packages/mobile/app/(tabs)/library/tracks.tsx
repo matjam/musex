@@ -69,7 +69,12 @@ export default function AlbumTracks() {
               ) : null}
               {first ? <Text style={{ color: theme.textDim }}>{first.artistName}</Text> : null}
             </View>
-            <ActionBar session={session} getTracks={() => tracks} />
+            <ActionBar
+              session={session}
+              getTracks={() =>
+                offline ? tracks.filter((t) => !!downloadRecordFor(downloadLookup, t)) : tracks
+              }
+            />
           </View>
         }
         renderItem={({ item, index }) => {
