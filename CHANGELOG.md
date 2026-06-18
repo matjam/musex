@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.13.0](https://github.com/matjam/musex/compare/v0.12.0...v0.13.0) (2026-06-18)
+
+
+### Features
+
+* mobile feature parity phase A — search, ratings, playlists, action sheet, queue ([#53](https://github.com/matjam/musex/issues/53)) ([bfc706d](https://github.com/matjam/musex/commit/bfc706dacfb5ef9d3981211a347d326844ba8b23))
+* mobile parity phase B — last.fm (scrobble, love, similar, bio, radio) ([#55](https://github.com/matjam/musex/issues/55)) ([437dc95](https://github.com/matjam/musex/commit/437dc95207de20ce43e6e95724516ca488a982dc))
+* mobile parity phase C — downloads + offline + AAC storage ([#56](https://github.com/matjam/musex/issues/56)) ([36681dc](https://github.com/matjam/musex/commit/36681dcb3200c36745e439af5ac9408ec5fb4894))
+* musex disc app icon (iOS + desktop) ([#58](https://github.com/matjam/musex/issues/58)) ([4ce0cf9](https://github.com/matjam/musex/commit/4ce0cf96b4219d63266a7a60ad359e0f3d0216b0))
+
 ## [0.12.0](https://github.com/matjam/musex/compare/v0.11.0...v0.12.0) (2026-06-17)
 
 
