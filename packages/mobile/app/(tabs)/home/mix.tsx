@@ -1,5 +1,5 @@
 import type { SmartKind, Track } from "@musex/core";
-import { composeForYou, computeSmartPlaylist, SMART_TITLES } from "@musex/core";
+import { composeForYou, computeSmartPlaylist, listValidator, SMART_TITLES } from "@musex/core";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -20,25 +20,40 @@ export default function MixScreen() {
       if (!state.library || !state.token || !kind) return;
       setLoading(true);
       const snap = taste.snapshot();
-      const allTracks = await gateway.listAllTracks(state.library, "title", state.token);
-      let result: Track[];
-      if (kind === "for-you") {
-        const artists = await gateway.listArtists(state.library, state.token);
-        result = composeForYou(
-          buildForYouInput(snap.topArtists, artists, allTracks, snap.trackStats, snap.nowMs),
+      const validator = listValidator(state.library.updatedAt);
+      try {
+        const allTracks = await gateway.listAllTracks(
+          state.library,
+          "title",
+          state.token,
+          validator,
         );
-      } else {
-        result = computeSmartPlaylist(
-          kind,
-          allTracks,
-          snap.trackStats,
-          snap.topArtists,
-          snap.nowMs,
-        );
-      }
-      if (alive) {
-        setTracks(result);
-        setLoading(false);
+        let result: Track[];
+        if (kind === "for-you") {
+          const artists = await gateway.listArtists(state.library, state.token, validator);
+          result = composeForYou(
+            buildForYouInput(snap.topArtists, artists, allTracks, snap.trackStats, snap.nowMs),
+          );
+        } else {
+          result = computeSmartPlaylist(
+            kind,
+            allTracks,
+            snap.trackStats,
+            snap.topArtists,
+            snap.nowMs,
+          );
+        }
+        if (alive) {
+          setTracks(result);
+          setLoading(false);
+        }
+      } catch {
+        // Offline / not cached (OfflineUnavailable) or any other fetch failure
+        // -> empty mix; the screen tolerates an empty track list.
+        if (alive) {
+          setTracks([]);
+          setLoading(false);
+        }
       }
     })();
     return () => {

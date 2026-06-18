@@ -1,5 +1,11 @@
 import type { Album, Artist, Track, TrackAlbumGroup } from "@musex/core";
-import { buildLetterIndex, downloadKey, groupTracksByAlbum } from "@musex/core";
+import {
+  buildLetterIndex,
+  downloadKey,
+  groupTracksByAlbum,
+  listValidator,
+  OfflineUnavailable,
+} from "@musex/core";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Trash2 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,6 +51,9 @@ export default function LibraryBrowse() {
   const [segment, setSegment] = useState<Segment>("Artists");
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set when an offline fetch found nothing cached (distinct from a generic
+  // error, which keeps the prior items).
+  const [offlineEmpty, setOfflineEmpty] = useState(false);
   const listRef = useRef<FlatList<Item>>(null);
   // Downloaded segment state: track-grouped albums (re-baked thumbs) + active-strip keys
   const [dlTrackGroups, setDlTrackGroups] = useState<TrackAlbumGroup[]>([]);
@@ -66,30 +75,46 @@ export default function LibraryBrowse() {
         if (!state.library || !state.token) return;
         // Show spinner only on first load (no data yet).
         if (items.length === 0) setLoading(true);
-        let next: Item[] = [];
+        const validator = listValidator(state.library.updatedAt);
         try {
+          let next: Item[];
           if (segment === "Artists") {
-            next = (await gateway.listArtists(state.library, state.token)).map((d) => ({
+            next = (await gateway.listArtists(state.library, state.token, validator)).map((d) => ({
               kind: "artist",
               data: d,
             }));
           } else if (segment === "Albums") {
-            next = (await gateway.listAllAlbums(state.library, "title", state.token)).map((d) => ({
+            next = (
+              await gateway.listAllAlbums(state.library, "title", state.token, validator)
+            ).map((d) => ({
               kind: "album",
               data: d,
             }));
           } else {
-            next = (await gateway.listAllTracks(state.library, "title", state.token)).map((d) => ({
+            next = (
+              await gateway.listAllTracks(state.library, "title", state.token, validator)
+            ).map((d) => ({
               kind: "track",
               data: d,
             }));
           }
-        } catch {
-          // Non-fatal: keep the existing items on a background-refresh failure.
-        }
-        if (alive) {
-          setItems(next);
-          setLoading(false);
+          if (alive) {
+            setItems(next);
+            setOfflineEmpty(false);
+            setLoading(false);
+          }
+        } catch (err) {
+          if (err instanceof OfflineUnavailable) {
+            // Offline and this segment was never cached — show the offline state.
+            if (alive) {
+              setItems([]);
+              setOfflineEmpty(true);
+              setLoading(false);
+            }
+          } else {
+            // Non-fatal: keep the existing items on a background-refresh failure.
+            if (alive) setLoading(false);
+          }
         }
       })();
       return () => {
@@ -159,7 +184,17 @@ export default function LibraryBrowse() {
       return items.flatMap((it) => (it.kind === "track" ? [it.data] : []));
     }
     if (!state.library || !state.token) return [];
-    return gateway.listAllTracks(state.library, "title", state.token);
+    try {
+      return await gateway.listAllTracks(
+        state.library,
+        "title",
+        state.token,
+        listValidator(state.library.updatedAt),
+      );
+    } catch {
+      // Offline / not cached — the action bar simply has nothing to play.
+      return [];
+    }
   }
 
   return (
@@ -241,6 +276,12 @@ export default function LibraryBrowse() {
         <View style={{ flex: 1, justifyContent: "center" }}>
           <ActivityIndicator color={theme.accent} />
         </View>
+      ) : offlineEmpty ? (
+        <View style={{ flex: 1, alignItems: "center", paddingTop: theme.space(6) }}>
+          <Text style={{ color: theme.textDim, fontSize: 15, textAlign: "center" }}>
+            Not available offline.{"\n"}Connect to Plex to browse this list.
+          </Text>
+        </View>
       ) : (
         <View style={{ flex: 1 }}>
           <FlatList
@@ -274,7 +315,7 @@ export default function LibraryBrowse() {
                     onPress={() =>
                       router.push({
                         pathname: "/(tabs)/library/albums",
-                        params: { artistId: item.data.id },
+                        params: { artistId: item.data.id, updatedAt: item.data.updatedAt ?? "" },
                       })
                     }
                   />
@@ -289,7 +330,7 @@ export default function LibraryBrowse() {
                     onPress={() =>
                       router.push({
                         pathname: "/(tabs)/library/tracks",
-                        params: { albumId: item.data.id },
+                        params: { albumId: item.data.id, updatedAt: item.data.updatedAt ?? "" },
                       })
                     }
                   />

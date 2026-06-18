@@ -1,5 +1,5 @@
 import type { Track } from "@musex/core";
-import { composeMoodMix, MOOD_MIXES } from "@musex/core";
+import { composeMoodMix, listValidator, MOOD_MIXES } from "@musex/core";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -25,10 +25,22 @@ export default function MixScreen() {
         return;
       }
       const snap = taste.snapshot();
-      const [albums, allTracks] = await Promise.all([
-        gateway.listAllAlbums(library, "title", token),
-        gateway.listAllTracks(library, "title", token),
-      ]);
+      const validator = listValidator(library.updatedAt);
+      let albums: Awaited<ReturnType<typeof gateway.listAllAlbums>>;
+      let allTracks: Track[];
+      try {
+        [albums, allTracks] = await Promise.all([
+          gateway.listAllAlbums(library, "title", token, validator),
+          gateway.listAllTracks(library, "title", token, validator),
+        ]);
+      } catch {
+        // Offline / not cached -> empty mix.
+        if (alive) {
+          setTracks([]);
+          setLoading(false);
+        }
+        return;
+      }
 
       // Build the stat map composeMoodMix expects (keyed by smartTrackKey).
       const stats = new Map(
