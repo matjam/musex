@@ -293,6 +293,7 @@ export function HomeView() {
                 title={a.name}
                 subtitle="Added for you"
                 round
+                entity={entityRefForArtist(a)}
                 onOpen={() =>
                   dispatch({
                     type: "navigate",
@@ -337,6 +338,7 @@ export function HomeView() {
                 thumb={a.thumb}
                 title={a.name}
                 round
+                entity={entityRefForArtist(a)}
                 onOpen={() =>
                   dispatch({
                     type: "navigate",
@@ -360,6 +362,7 @@ export function HomeView() {
                 thumb={a.thumb}
                 title={a.title}
                 subtitle={a.year != null ? String(a.year) : undefined}
+                entity={entityRefForAlbum(a)}
                 onOpen={() =>
                   dispatch({ type: "navigate", view: { name: "album", ref: entityRefForAlbum(a) } })
                 }

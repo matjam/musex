@@ -1,8 +1,13 @@
+import type { EntityRef } from "@musex/core";
+import { entityState, resolveEntity } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
-import { Eye, Play } from "lucide-react";
-import type { KeyboardEvent } from "react";
+import { Eye, ListPlus, MoreHorizontal, Play } from "lucide-react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { useFollow } from "../state/follow";
 import { AlbumArt } from "./AlbumArt";
 import { CardCollage } from "./CardCollage";
+import { EntityBadge } from "./discovery/EntityBadge";
+import { FollowButton } from "./discovery/FollowButton";
 import { StateBadge } from "./discovery/StateBadge";
 import type { AcquisitionBadgeState } from "./discovery/state-badge";
 
@@ -14,11 +19,25 @@ interface Props {
   subtitle?: string;
   /** Round the artwork (artists) vs square (albums). */
   round?: boolean;
+  /** Unified entity ref. When set, the card renders the SP0 entity-state badge
+   *  (non-default states only) + the Follow hover/menu for unowned entities. */
+  entity?: EntityRef;
+  /** Live flags feeding `entityState(resolveEntity(entity), flags)`. */
+  downloaded?: boolean;
+  downloading?: boolean;
+  acquiring?: boolean;
+  /** ⋯ menu: "Get just this album" (albums) → acquire just this album. */
+  onGetAlbum?: () => void;
+  /** ⋯ menu: "Play next" → enqueue this collection next. */
+  onPlayNext?: () => void;
+  // ── Legacy props (used by not-yet-migrated callers: playlists, smart-mix
+  //    tiles, on-device albums; removed when Batch 4 routes those through the
+  //    unified card). Prefer `entity` + flags for entity cards. ──
   /** Small chip over the artwork corner (e.g. "external" on Discover items). */
   badge?: string;
   /** Color variant suffix for the badge: `grid-card-badge--<variant>`. */
   badgeVariant?: string;
-  /** Unified acquisition-state badge — takes precedence over `badge` when set. */
+  /** Legacy acquisition-state badge — takes precedence over `badge` when set. */
   state?: AcquisitionBadgeState;
   /** Download percent for `state="downloading"`. */
   statePercent?: number;
@@ -31,19 +50,28 @@ interface Props {
   /** Click the hover play overlay → play the collection. Omit to hide it. */
   onPlay?: () => void;
   /** Generic hover action overlay (same look as Play, custom icon —
-   *  e.g. Download to acquire an album). Omit to hide it. */
+   *  e.g. Download to acquire an album, or Remove). Omit to hide it. */
   actionIcon?: LucideIcon;
   actionTitle?: string;
   onAction?: () => void;
 }
 
-/** A browse-grid card (album/artist) with a Spotify-style hover Play button. */
+/** A browse-grid card (album/artist/playlist) with a Spotify-style hover Play
+ *  button. When given an `entity`, it speaks the SP0 entity-state vocabulary:
+ *  a badge for non-default states, Play (owned) / Follow (unowned) hover, and a
+ *  ⋯ menu (Follow, Get just this album, Play next). */
 export function GridCard({
   thumb,
   collage,
   title,
   subtitle,
   round = false,
+  entity,
+  downloaded,
+  downloading,
+  acquiring,
+  onGetAlbum,
+  onPlayNext,
   badge,
   badgeVariant,
   state,
@@ -62,6 +90,33 @@ export function GridCard({
       onOpen();
     }
   }
+
+  // Entity-aware derivations (only when an `entity` ref is supplied).
+  const follow = useFollow();
+  const resolved = entity ? resolveEntity(entity) : null;
+  const computedState =
+    entity && resolved
+      ? entityState(resolved, {
+          downloaded,
+          downloading,
+          acquiring,
+          following: follow.isFollowed(entity),
+        })
+      : null;
+  // Owned/in-library is the default — no badge. Everything else renders one.
+  const showEntityBadge = computedState != null && computedState !== "owned";
+  const unowned = entity?.source === "external";
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: div needed — it contains the play <button> (button-in-button is invalid)
@@ -83,7 +138,11 @@ export function GridCard({
             kind={round ? "artist" : "album"}
           />
         )}
-        {state ? (
+        {showEntityBadge && computedState ? (
+          <span className="grid-card-badge grid-card-badge--state">
+            <EntityBadge state={computedState} />
+          </span>
+        ) : state ? (
           <span className="grid-card-badge grid-card-badge--state">
             <StateBadge state={state} percent={statePercent} />
           </span>
@@ -101,7 +160,8 @@ export function GridCard({
             <Eye size={12} />
           </span>
         )}
-        {onPlay && (
+        {/* Hover primary action: Play when owned/playable, Follow when unowned. */}
+        {onPlay ? (
           <button
             type="button"
             className="grid-card-play"
@@ -113,24 +173,30 @@ export function GridCard({
           >
             <Play size={18} />
           </button>
+        ) : entity && unowned ? (
+          // biome-ignore lint/a11y/noStaticElementInteractions: wrapper only stops the card-open click from firing; the inner FollowButton is the real control
+          // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard activates the FollowButton itself, not this wrapper
+          <span className="grid-card-follow" onClick={(e) => e.stopPropagation()}>
+            <FollowButton entity={entity} />
+          </span>
+        ) : (
+          ActionIcon &&
+          onAction && (
+            <button
+              type="button"
+              className="grid-card-play"
+              title={actionTitle}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAction();
+              }}
+            >
+              <ActionIcon size={18} />
+            </button>
+          )
         )}
-        {!onPlay && onAction && ActionIcon && (
-          <button
-            type="button"
-            className="grid-card-play"
-            title={actionTitle}
-            onClick={(e) => {
-              e.stopPropagation();
-              onAction();
-            }}
-          >
-            <ActionIcon size={18} />
-          </button>
-        )}
-        {onPlay && onAction && ActionIcon && (
-          // Secondary corner action alongside the Play overlay (e.g. Remove on a
-          // playable downloaded album) — small, top-left, so it doesn't collide
-          // with the bottom-right Play button or the top-right badge.
+        {/* Secondary corner action (e.g. Remove on a playable downloaded album). */}
+        {onPlay && ActionIcon && onAction && (
           <button
             type="button"
             className="grid-card-action"
@@ -142,6 +208,66 @@ export function GridCard({
           >
             <ActionIcon size={14} />
           </button>
+        )}
+        {/* ⋯ secondary menu for entity cards: Follow / Get just this album / Play next. */}
+        {entity && (
+          <div className="grid-card-menu" ref={menuRef}>
+            <button
+              type="button"
+              className="grid-card-action"
+              title="More actions"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((o) => !o);
+              }}
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            {menuOpen && (
+              <div
+                className="more-dropdown grid-card-dropdown"
+                role="menu"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="ctx-item"
+                  onClick={() => {
+                    void follow.setFollowed(entity, !follow.isFollowed(entity));
+                    setMenuOpen(false);
+                  }}
+                >
+                  {follow.isFollowed(entity) ? "Unfollow" : "Follow"}
+                </button>
+                {entity.kind === "album" && onGetAlbum && (
+                  <button
+                    type="button"
+                    className="ctx-item"
+                    onClick={() => {
+                      onGetAlbum();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Get just this album
+                  </button>
+                )}
+                {onPlayNext && (
+                  <button
+                    type="button"
+                    className="ctx-item ctx-item--icon"
+                    onClick={() => {
+                      onPlayNext();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <ListPlus size={14} />
+                    Play next
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div className="grid-card-title">{title}</div>

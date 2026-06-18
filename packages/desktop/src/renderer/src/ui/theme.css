@@ -2083,6 +2083,35 @@ img.queue-row-art {
   color: var(--green);
 }
 
+/* ⋯ entity menu: a positioned wrapper at the top-left corner; the inner
+ * action button is static within it, and the dropdown anchors below it. */
+.grid-card-menu {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+.grid-card-menu .grid-card-action {
+  position: static;
+}
+.grid-card-dropdown {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  z-index: 30;
+}
+/* Follow pill as the hover action for unowned entity cards (bottom-right). */
+.grid-card-follow {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.grid-card:hover .grid-card-follow,
+.grid-card-follow:focus-within {
+  opacity: 1;
+}
+
 /* Small chip over the artwork corner (Discover "external" items) */
 .grid-card-badge {
   position: absolute;
@@ -3172,3 +3201,18 @@ img.queue-row-art {
 }
 /* small bell corner-marker on monitored artist cards */
 .card-monitored { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.6); border: 1px solid var(--green); color: var(--green); display: grid; place-items: center; }
+
+/* ---- SP0 unified entity-state badge (rendered from core ENTITY_STATE) ---- */
+/* Color comes from the state's `colorToken` (a real `colors` key); chrome
+ * mirrors .state-badge. Non-default states only — owned/in-library shows none. */
+.entity-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  background: rgba(0,0,0,.5); border: 1px solid var(--line); color: var(--text);
+}
+.entity-badge--green { border-color: var(--green); color: var(--green); }
+.entity-badge--yellow { border-color: var(--yellow); color: var(--yellow); }
+.entity-badge--purple { border-color: var(--purple); color: #b9a8ff; }
+.entity-badge--red { border-color: var(--red); color: #ff8a84; }
+.entity-badge--muted { border-color: var(--line); color: var(--muted); }
+.entity-badge--text { border-color: var(--text); color: var(--text); }

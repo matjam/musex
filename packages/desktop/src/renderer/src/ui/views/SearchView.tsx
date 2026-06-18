@@ -5,11 +5,9 @@ import {
   entityRefForArtist,
   externalArtistRef,
 } from "@musex/core";
-import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ExternalArtistResultDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
-import { useFollow } from "../../state/follow";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
 import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
@@ -32,7 +30,6 @@ export function SearchView() {
   const downloadRecords = useDownloadRecords();
   const { state, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
-  const { isFollowed, setFollowed } = useFollow();
   const acquisitionAvailable = useAcquisitionAvailable();
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
@@ -115,14 +112,6 @@ export function SearchView() {
       clearTimeout(handle);
     };
   }, [query, acquisitionAvailable, offline]);
-
-  // Follow an external artist = acquire + watch (the one acquisition action).
-  // Optimistic via the FollowProvider; the plugin itself toasts success/failure.
-  function followArtist(artist: ExternalArtistResultDto) {
-    void setFollowed(externalArtistRef(artist.name), true).catch((err: unknown) => {
-      console.error("[follow] follow artist failed:", err);
-    });
-  }
 
   const playingTrackId =
     state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
@@ -250,28 +239,22 @@ export function SearchView() {
           <h3 className="browse-title">Not in your library</h3>
           <div className="browse-sub">via your acquisition plugin — monitor to download</div>
           <div className="browse-grid">
-            {externalArtists.map((artist) => {
-              const followed = isFollowed(externalArtistRef(artist.name));
-              return (
-                <GridCard
-                  key={`${artist.providerId}:${artist.providerRef}`}
-                  round
-                  thumb={artist.imageUrl}
-                  title={artist.name}
-                  subtitle={artist.disambiguation}
-                  monitored={followed}
-                  onOpen={() =>
-                    dispatch({
-                      type: "navigate",
-                      view: { name: "artist", ref: externalArtistRef(artist.name) },
-                    })
-                  }
-                  actionIcon={followed ? undefined : Download}
-                  actionTitle="Follow — acquire + watch"
-                  onAction={followed ? undefined : () => followArtist(artist)}
-                />
-              );
-            })}
+            {externalArtists.map((artist) => (
+              <GridCard
+                key={`${artist.providerId}:${artist.providerRef}`}
+                round
+                thumb={artist.imageUrl}
+                title={artist.name}
+                subtitle={artist.disambiguation}
+                entity={externalArtistRef(artist.name)}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: externalArtistRef(artist.name) },
+                  })
+                }
+              />
+            ))}
           </div>
         </div>
       )}

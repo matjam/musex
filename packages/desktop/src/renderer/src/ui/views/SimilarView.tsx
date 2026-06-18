@@ -1,4 +1,4 @@
-import { externalArtistRef } from "@musex/core";
+import { entityRefForArtist, externalArtistRef } from "@musex/core";
 import { useEffect, useState } from "react";
 import type { SectionItemDto, SimilarGetArgs } from "../../../../shared/ipc-contract";
 import { usePlayer } from "../../state/player";
@@ -92,6 +92,19 @@ export function SimilarView({ target }: { target: SimilarGetArgs }) {
         <div className="browse-grid">
           {fetch.items.map((item) => {
             const track = item.track;
+            // Artist-kind similar items resolve to an artist ref (owned when the
+            // library matched it, else external) so the card shows the SP0
+            // badge + Follow affordance; track-kind items just play.
+            const entity =
+              target.kind === "artist"
+                ? item.artistId && item.serverId
+                  ? entityRefForArtist({
+                      id: item.artistId,
+                      serverId: item.serverId,
+                      name: item.name,
+                    })
+                  : externalArtistRef(item.name)
+                : undefined;
             return (
               <GridCard
                 key={`${item.name}:${item.artistName ?? ""}`}
@@ -99,7 +112,7 @@ export function SimilarView({ target }: { target: SimilarGetArgs }) {
                 title={item.name}
                 subtitle={target.kind === "track" ? item.artistName : undefined}
                 round={target.kind === "artist"}
-                badge={item.external ? "external" : undefined}
+                entity={entity}
                 onOpen={() => openItem(item)}
                 onPlay={track ? () => playTrackNext(track) : undefined}
               />

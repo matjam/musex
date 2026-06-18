@@ -4,7 +4,6 @@ import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { useFollow } from "../../state/follow";
-import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
@@ -33,13 +32,6 @@ export function ArtistsView() {
   const downloaded = useDownloadedSet("artistId");
   const downloading = useDownloadingSet("artistId");
   const offline = connectivity === "offline";
-
-  // Local download state → card badge. Downloaded wins over in-flight.
-  function cardState(artistId: string): AcquisitionBadgeState | undefined {
-    if (downloaded.has(artistId)) return "downloaded";
-    if (downloading.has(artistId)) return "downloading";
-    return undefined;
-  }
 
   useEffect(() => {
     if (!library) return;
@@ -127,8 +119,9 @@ export function ArtistsView() {
                     thumb={artist.thumb}
                     title={artist.name}
                     round
-                    state={cardState(artist.id)}
-                    monitored={followedArtist(artist)}
+                    entity={entityRefForArtist(artist)}
+                    downloaded={downloaded.has(artist.id)}
+                    downloading={downloading.has(artist.id)}
                     onOpen={() =>
                       dispatch({
                         type: "navigate",
@@ -156,8 +149,9 @@ export function ArtistsView() {
                 thumb={artist.thumb}
                 title={artist.name}
                 round
-                state={cardState(artist.id)}
-                monitored={followedArtist(artist)}
+                entity={entityRefForArtist(artist)}
+                downloaded={downloaded.has(artist.id)}
+                downloading={downloading.has(artist.id)}
                 dim={offline && !downloaded.has(artist.id)}
                 onOpen={() =>
                   dispatch({
