@@ -55,7 +55,9 @@ export type { PlaybackState, PlaybackStatus } from "./playback/playback-session"
 // Playback
 export { PlaybackSession } from "./playback/playback-session";
 // Ports
+export type { FollowRecord, FollowStore } from "./ports/follow-store";
 export type { Hasher } from "./ports/hasher";
+export type { MonitorBackend } from "./ports/monitor-backend";
 export type { ListCache } from "./ports/list-cache";
 export type { PlaybackEngine } from "./ports/playback-engine";
 export type { Pin, PlexGateway } from "./ports/plex-gateway";
