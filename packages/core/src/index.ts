@@ -12,6 +12,7 @@ export * from "./logic/download-plan";
 export * from "./logic/download-state";
 export * from "./logic/entity-ref";
 export * from "./logic/external-url";
+export * from "./logic/follow-service";
 export * from "./logic/for-you";
 export * from "./logic/format";
 export * from "./logic/genres";
