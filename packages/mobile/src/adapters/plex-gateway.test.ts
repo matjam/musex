@@ -93,6 +93,53 @@ describe("PlexGatewayImpl", () => {
     expect(urls.some((u) => u.includes("type=10"))).toBe(true);
   });
 
+  it("getArtist queries /library/metadata/<id> and parses name + genres", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({
+        MediaContainer: {
+          Metadata: [
+            {
+              ratingKey: "1",
+              title: "Boards of Canada",
+              thumb: "/art/boc.jpg",
+              Genre: [{ tag: "Electronic" }, { tag: "Ambient" }],
+            },
+          ],
+        },
+      }),
+    );
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
+    await gw.listMusicLibraries(server, "TOK");
+    const artist = await gw.getArtist(lib, "1", "TOK");
+    expect(artist).not.toBeNull();
+    expect(artist?.name).toBe("Boards of Canada");
+    expect(artist?.genres).toEqual(["Electronic", "Ambient"]);
+    const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
+    expect(urls.some((u) => u.includes("/library/metadata/1"))).toBe(true);
+  });
+
+  it("getArtist returns null when metadata is empty", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ MediaContainer: { Metadata: [] } }));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
+    await gw.listMusicLibraries(server, "TOK");
+    const artist = await gw.getArtist(lib, "99", "TOK");
+    expect(artist).toBeNull();
+  });
+
   it("listArtistTracks queries allLeaves and parses", async () => {
     const fetchFn = vi.fn(async () =>
       jsonResponse({

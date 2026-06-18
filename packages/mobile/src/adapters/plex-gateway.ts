@@ -278,6 +278,15 @@ export class PlexGatewayImpl implements PlexGateway {
     return parseTracks(json, library.serverId);
   }
 
+  /** Fetch a single Artist by its Plex ratingKey. Mobile-only — feeds the
+   *  artist header on the albums screen. Returns null if the item is not found
+   *  or the response is malformed. */
+  async getArtist(library: Library, artistId: string, token: string): Promise<Artist | null> {
+    const base = this.requireBase(library.serverId);
+    const json = await this.getJson(`${base}/library/metadata/${artistId}`, token);
+    return parseArtists(json, library.serverId)[0] ?? null;
+  }
+
   /** All tracks for an artist (Plex allLeaves). Mobile-only — feeds the Artist
    *  action bar; not part of the core PlexGateway port. */
   async listArtistTracks(artistId: string, library: Library, token: string): Promise<Track[]> {
