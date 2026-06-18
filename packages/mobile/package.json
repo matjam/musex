@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@musex/core": "workspace:*",
+    "@musex/plugin-api": "workspace:*",
     "@musex/plugin-host": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",

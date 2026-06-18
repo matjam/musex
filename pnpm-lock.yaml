@@ -93,6 +93,9 @@ importers:
       '@musex/core':
         specifier: workspace:*
         version: link:../core
+      '@musex/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
       '@musex/plugin-host':
         specifier: workspace:*
         version: link:../plugin-host
