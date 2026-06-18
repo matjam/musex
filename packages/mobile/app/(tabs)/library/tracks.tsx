@@ -1,8 +1,8 @@
 import type { Track } from "@musex/core";
 import { buildDownloadLookup, downloadRecordFor } from "@musex/core";
-import { useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { EllipsisVertical } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
@@ -25,20 +25,30 @@ export default function AlbumTracks() {
   const [loading, setLoading] = useState(true);
   const [sheetTrack, setSheetTrack] = useState<Track | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!state.library || !state.token || !albumId) return;
-      const list = await gateway.listTracks(state.library, albumId, state.token);
-      if (alive) {
-        setTracks(list);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [state.library, state.token, albumId, gateway]);
+  // Refetch on focus so newly-added tracks appear when returning to this screen.
+  // Skip the spinner when tracks are already loaded (background refresh, no flicker).
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      (async () => {
+        if (!state.library || !state.token || !albumId) return;
+        if (tracks.length === 0) setLoading(true);
+        try {
+          const list = await gateway.listTracks(state.library, albumId, state.token);
+          if (alive) {
+            setTracks(list);
+            setLoading(false);
+          }
+        } catch {
+          // Non-fatal: keep existing tracks on a background-refresh failure.
+          if (alive) setLoading(false);
+        }
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [state.library, state.token, albumId, gateway, tracks.length]),
+  );
 
   if (loading) {
     return (

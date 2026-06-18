@@ -1,6 +1,6 @@
 import type { Album, Artist, Track, TrackAlbumGroup } from "@musex/core";
 import { buildLetterIndex, downloadKey, groupTracksByAlbum } from "@musex/core";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Trash2 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -55,37 +55,48 @@ export default function LibraryBrowse() {
   const numCols = segment === "Tracks" ? 1 : 2;
   const tileSize = (width - 22) / 2; // 22 = scrubber gutter
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!state.library || !state.token) return;
-      setLoading(true);
-      let next: Item[] = [];
-      if (segment === "Artists") {
-        next = (await gateway.listArtists(state.library, state.token)).map((d) => ({
-          kind: "artist",
-          data: d,
-        }));
-      } else if (segment === "Albums") {
-        next = (await gateway.listAllAlbums(state.library, "title", state.token)).map((d) => ({
-          kind: "album",
-          data: d,
-        }));
-      } else {
-        next = (await gateway.listAllTracks(state.library, "title", state.token)).map((d) => ({
-          kind: "track",
-          data: d,
-        }));
-      }
-      if (alive) {
-        setItems(next);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [segment, state.library, state.token, gateway]);
+  // Refetch whenever the Library tab gains focus so newly-added Plex tracks
+  // appear without an app restart. On a focus-triggered refresh when items are
+  // already loaded, skip the spinner (background refresh, no flicker).
+  useFocusEffect(
+    useCallback(() => {
+      if (segment === "Downloaded") return;
+      let alive = true;
+      (async () => {
+        if (!state.library || !state.token) return;
+        // Show spinner only on first load (no data yet).
+        if (items.length === 0) setLoading(true);
+        let next: Item[] = [];
+        try {
+          if (segment === "Artists") {
+            next = (await gateway.listArtists(state.library, state.token)).map((d) => ({
+              kind: "artist",
+              data: d,
+            }));
+          } else if (segment === "Albums") {
+            next = (await gateway.listAllAlbums(state.library, "title", state.token)).map((d) => ({
+              kind: "album",
+              data: d,
+            }));
+          } else {
+            next = (await gateway.listAllTracks(state.library, "title", state.token)).map((d) => ({
+              kind: "track",
+              data: d,
+            }));
+          }
+        } catch {
+          // Non-fatal: keep the existing items on a background-refresh failure.
+        }
+        if (alive) {
+          setItems(next);
+          setLoading(false);
+        }
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [segment, state.library, state.token, gateway, items.length]),
+  );
 
   // Refresh the Downloaded segment. Stable via useCallback so the effect dep is safe.
   const refreshDownloads = useCallback(() => {
