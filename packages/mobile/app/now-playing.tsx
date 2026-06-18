@@ -10,11 +10,12 @@ import {
   SkipBack,
   SkipForward,
 } from "lucide-react-native";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../src/logic/art-url";
 import { useStore } from "../src/state/store";
 import { AlbumArt } from "../src/ui/AlbumArt";
+import { StarRating } from "../src/ui/StarRating";
 import { theme } from "../src/ui/theme";
 
 function fmt(s: number): string {
@@ -64,7 +65,7 @@ const QueueRow = memo(function QueueRow({
 });
 
 export default function NowPlaying() {
-  const { state, session, artBaseFor, token } = useStore();
+  const { state, session, gateway, taste, artBaseFor, token } = useStore();
   const router = useRouter();
   const pb = state.playback;
   const queue = pb?.queue ?? null;
@@ -74,6 +75,23 @@ export default function NowPlaying() {
   // change), so the FlatList `data` reference doesn't churn 4x/sec.
   const upNext = useMemo(() => (queue ? queue.tracks.slice(queue.index + 1) : []), [queue]);
   const baseIndex = queue ? queue.index : 0;
+
+  // Rating state — optimistically updated, synced when track changes.
+  const [rating, setRating] = useState<number | null>(current?.userRating ?? null);
+  useEffect(() => {
+    setRating(current?.userRating ?? null);
+  }, [current]);
+
+  async function rate(r: number | null) {
+    if (!current) return;
+    setRating(r); // optimistic
+    try {
+      await gateway.rateItem(current.serverId, current.id, r, token ?? "");
+      taste.recordTrackRating({ title: current.title, artistName: current.artistName }, r);
+    } catch {
+      setRating(current.userRating ?? null); // revert on failure
+    }
+  }
 
   if (!pb || !queue || !current) {
     return (
@@ -119,6 +137,9 @@ export default function NowPlaying() {
             <Text style={{ color: theme.textDim, fontSize: 15 }} numberOfLines={1}>
               {current.artistName}
             </Text>
+            <View style={{ marginTop: 10 }}>
+              <StarRating rating10={rating} onRate={(r) => void rate(r)} size={22} />
+            </View>
 
             <Slider
               style={{ width: "100%", marginTop: 18 }}

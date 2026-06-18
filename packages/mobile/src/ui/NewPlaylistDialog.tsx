@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, TextInput, View } from "react-native";
 import { theme } from "./theme";
 
@@ -6,18 +6,34 @@ export function NewPlaylistDialog({
   visible,
   onCancel,
   onCreate,
+  initialName = "",
+  title = "New playlist",
+  submitLabel = "Create",
 }: {
   visible: boolean;
   onCancel: () => void;
   onCreate: (name: string) => void;
+  /** Pre-fill the name field (e.g. when renaming). Default: "". */
+  initialName?: string;
+  /** Dialog heading. Default: "New playlist". */
+  title?: string;
+  /** Submit button label. Default: "Create". */
+  submitLabel?: string;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
+
+  // Sync whenever initialName changes so reopening with a different value works
+  // (Modal stays mounted across visibility toggles).
+  useEffect(() => {
+    setName(initialName);
+  }, [initialName]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={{ flex: 1, backgroundColor: "#000a", justifyContent: "center", padding: 24 }}>
         <View style={{ backgroundColor: theme.surface, borderRadius: 12, padding: 16 }}>
           <Text style={{ color: theme.text, fontWeight: "700", fontSize: 15, marginBottom: 10 }}>
-            New playlist
+            {title}
           </Text>
           <TextInput
             value={name}
@@ -54,7 +70,7 @@ export function NewPlaylistDialog({
                 opacity: name.trim() ? 1 : 0.4,
               }}
             >
-              <Text style={{ color: "#000", fontWeight: "700" }}>Create</Text>
+              <Text style={{ color: "#000", fontWeight: "700" }}>{submitLabel}</Text>
             </Pressable>
           </View>
         </View>
