@@ -37,16 +37,14 @@ export function TrackActionSheet({
   const {
     session,
     gateway,
-    taste,
     token,
     artBaseFor,
-    lastfm,
-    getLastfmConfig,
     startRadio,
     downloadTracks,
     removeDownload,
     downloadsList,
     connectivity,
+    rateTrack,
   } = useStore();
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
@@ -64,20 +62,12 @@ export function TrackActionSheet({
   const offline = connectivity === "offline";
 
   async function rate(r: number | null) {
+    if (!track) return;
     setRating(r); // optimistic
     try {
-      await gateway.rateItem(track!.serverId, track!.id, r, token ?? "");
-      taste.recordTrackRating({ title: track!.title, artistName: track!.artistName }, r);
-      if (getLastfmConfig().loveOnRating) {
-        const t = { artistName: track!.artistName, title: track!.title };
-        if (r !== null && r >= 8) {
-          void lastfm.love(t);
-        } else {
-          void lastfm.unlove(t);
-        }
-      }
+      await rateTrack(track, r);
     } catch {
-      setRating(track!.userRating ?? null); // revert on failure
+      setRating(track.userRating ?? null); // revert on failure
     }
   }
 

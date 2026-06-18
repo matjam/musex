@@ -81,18 +81,7 @@ const QueueRow = memo(function QueueRow({
 });
 
 export default function NowPlaying() {
-  const {
-    state,
-    session,
-    gateway,
-    taste,
-    artBaseFor,
-    token,
-    lastfm,
-    getLastfmConfig,
-    radio,
-    stopRadio,
-  } = useStore();
+  const { state, session, artBaseFor, token, radio, stopRadio, rateTrack } = useStore();
   const router = useRouter();
   const pb = state.playback;
   const queue = pb?.queue ?? null;
@@ -113,16 +102,7 @@ export default function NowPlaying() {
     if (!current) return;
     setRating(r); // optimistic
     try {
-      await gateway.rateItem(current.serverId, current.id, r, token ?? "");
-      taste.recordTrackRating({ title: current.title, artistName: current.artistName }, r);
-      if (getLastfmConfig().loveOnRating) {
-        const t = { artistName: current.artistName, title: current.title };
-        if (r !== null && r >= 8) {
-          void lastfm.love(t);
-        } else {
-          void lastfm.unlove(t);
-        }
-      }
+      await rateTrack(current, r);
     } catch {
       setRating(current.userRating ?? null); // revert on failure
     }

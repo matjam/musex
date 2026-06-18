@@ -14,13 +14,21 @@ import {
   pickDefaultServer,
   type RadioState,
   radioKey,
+  recentlyPlayedTracks,
   recordsToTracks,
   type StorageQuality,
   shouldTopUp,
 } from "@musex/core";
+import type { TrackInfo } from "@musex/plugin-api";
+import { ProviderHub } from "@musex/plugin-host";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
+import { sha256 } from "js-sha256";
 import {
   createContext,
+  createElement,
+  Fragment,
   type ReactNode,
   useCallback,
   useContext,
@@ -30,6 +38,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Alert, Linking } from "react-native";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
 import {
   clearSession,
@@ -56,7 +65,25 @@ import { DownloadStore } from "../downloads/download-store";
 import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-config";
 import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
+import { makeHostCallHandler } from "../plugins/host-capabilities";
+import { PluginIndex } from "../plugins/plugin-index";
+import { type FetchManifestResult, MobilePluginInstaller } from "../plugins/plugin-installer";
+import { type PluginListItem, PluginManager } from "../plugins/plugin-manager";
+import { PluginFileStore } from "../plugins/plugin-store";
+import { expoFsOps } from "../plugins/plugin-store-fs";
+import { type SandboxController, SandboxHostView } from "../plugins/sandbox-host";
 import { TasteService } from "../taste/taste-service";
+
+/** Map a mobile Track → the plugin-facing TrackInfo (no ids/URLs/tokens). */
+function toTrackInfo(t: Track): TrackInfo {
+  return {
+    title: t.title,
+    artistName: t.artistName,
+    durationMs: t.durationMs,
+    ...(t.albumTitle !== undefined ? { albumTitle: t.albumTitle } : {}),
+    ...(t.trackNumber !== undefined ? { trackNumber: t.trackNumber } : {}),
+  };
+}
 
 function safeBaseUrl(gateway: PlexGatewayImpl, serverId: string): string | null {
   try {
@@ -180,6 +207,18 @@ interface Store {
   setStorageQuality: (q: StorageQuality) => Promise<void>;
   totalDownloadBytes: () => number;
   connectivity: Connectivity;
+  /** Rate a track (Plex + taste + last.fm love + plugin trackRated event). */
+  rateTrack: (track: Track, rating10: number | null) => Promise<void>;
+  // --- plugins ---
+  hub: ProviderHub;
+  plugins: {
+    list: () => PluginListItem[];
+    install: (repoUrl: string, id: string) => Promise<void>;
+    fetchManifest: (repoUrl: string) => Promise<FetchManifestResult>;
+    uninstall: (id: string) => Promise<void>;
+    setEnabled: (id: string, v: boolean) => Promise<void>;
+    reload: () => Promise<void>;
+  };
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -280,6 +319,170 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         clearSession,
       }),
     [],
+  );
+
+  // --- plugin system ---
+  // The ProviderHub (registry + fan-out) lives RN-side; the WebView harness
+  // runs each plugin in its own QuickJS context. Built once and stable for the
+  // app lifetime.
+  const hub = useMemo(() => new ProviderHub(), []);
+  const pluginIndex = useMemo(() => new PluginIndex(), []);
+  const pluginStore = useMemo(() => new PluginFileStore(expoFsOps), []);
+  // The SandboxController arrives asynchronously once the WebView harness has
+  // booted (WASM init). Held in a ref; loadAll is gated on it AND the index.
+  const sandboxControllerRef = useRef<SandboxController | null>(null);
+  const sandboxReadyRef = useRef(false);
+  const pluginIndexLoadedRef = useRef(false);
+  const pluginManagerRef = useRef<PluginManager | null>(null);
+
+  const pluginInstaller = useMemo(
+    () =>
+      new MobilePluginInstaller({
+        fetch,
+        store: pluginStore,
+        index: pluginIndex,
+        sha256: (b) => sha256(b),
+        reload: async () => {
+          await pluginManagerRef.current?.reloadAll();
+        },
+      }),
+    [pluginStore, pluginIndex],
+  );
+
+  // SecureStore keys allow only [A-Za-z0-9._-]; the namespaced secret keys use
+  // ':' separators, so sanitize before hitting the store.
+  const secretStoreKey = useCallback((k: string) => k.replace(/[^A-Za-z0-9._-]/g, "_"), []);
+
+  // The host-call handler the WebView routes capability calls to. Built once
+  // (app-lifetime-stable) so the SandboxHostView's useMemo can hold it forever.
+  const hostCallHandler = useMemo(
+    () =>
+      makeHostCallHandler({
+        storageGet: (key) => AsyncStorage.getItem(key),
+        storageSet: async (key, value) => {
+          if (value === null) await AsyncStorage.removeItem(key);
+          else await AsyncStorage.setItem(key, value);
+        },
+        secretsGet: (key) => SecureStore.getItemAsync(secretStoreKey(key)),
+        secretsSet: async (key, value) => {
+          if (value === null) await SecureStore.deleteItemAsync(secretStoreKey(key));
+          else await SecureStore.setItemAsync(secretStoreKey(key), value);
+        },
+        netFetch: async (url, init) => {
+          const res = await fetch(url, {
+            ...(init?.method ? { method: init.method } : {}),
+            ...(init?.headers ? { headers: init.headers } : {}),
+            ...(init?.body !== undefined ? { body: init.body } : {}),
+          });
+          const headers: Record<string, string> = {};
+          res.headers.forEach((v, k) => {
+            headers[k] = v;
+          });
+          return { ok: res.ok, status: res.status, headers, body: await res.text() };
+        },
+        library: {
+          search: async (query) => {
+            const lib = libraryRef.current;
+            const tok = tokenRef.current;
+            if (!lib || !tok) return { artists: [], albums: [], tracks: [] };
+            const r = await gateway.search(lib, query, tok);
+            return {
+              artists: r.artists.map((a) => ({ id: a.id, name: a.name })),
+              albums: r.albums.map((a) => ({
+                id: a.id,
+                title: a.title,
+                // The mobile Album model carries artistId, not artist name.
+                artistName: "",
+              })),
+              tracks: r.tracks.map(toTrackInfo),
+            };
+          },
+          recentlyPlayed: async (limit) => {
+            const lib = libraryRef.current;
+            const tok = tokenRef.current;
+            if (!lib || !tok) return [];
+            const all = await gateway.listAllTracks(lib, "artist", tok);
+            const stats = taste
+              .snapshot()
+              .trackStats.map((s) => ({ key: s.key, lastPlayedMs: s.lastPlayedMs }));
+            return recentlyPlayedTracks(stats, all, limit ?? 20).map(toTrackInfo);
+          },
+          topArtists: async (limit) => {
+            const top = taste.snapshot().topArtists;
+            return limit ? top.slice(0, limit) : top;
+          },
+        },
+        notify: (payload) => {
+          Alert.alert(payload.pluginId, payload.message);
+        },
+        openExternal: (url) => {
+          void Linking.openURL(url);
+        },
+        log: (pluginId, message, args) => {
+          console.log(`[plugin ${pluginId}]`, message, ...args);
+        },
+        registerSettings: () => {
+          // Declarative plugin settings UI is not surfaced on mobile yet.
+        },
+      }),
+    [gateway, taste, secretStoreKey],
+  );
+
+  const pluginManager = useMemo(() => {
+    const mgr = new PluginManager({
+      index: pluginIndex,
+      store: pluginStore,
+      // A lazy proxy: the real controller arrives via onController. The manager
+      // is only driven (loadAll) after the controller exists, so these forward.
+      sandbox: {
+        load: (id, manifest, code) => {
+          const c = sandboxControllerRef.current;
+          if (!c) throw new Error("plugin sandbox not ready");
+          return c.load(id, manifest, code);
+        },
+        invoke: (id, path, method, args) => {
+          const c = sandboxControllerRef.current;
+          if (!c) return Promise.reject(new Error("plugin sandbox not ready"));
+          return c.invoke(id, path, method, args);
+        },
+        emit: (id, event, payload) => sandboxControllerRef.current?.emit(id, event, payload),
+        dispose: (id) => sandboxControllerRef.current?.dispose(id),
+        ready: Promise.resolve(),
+      },
+      hub,
+    });
+    pluginManagerRef.current = mgr;
+    return mgr;
+  }, [pluginIndex, pluginStore, hub]);
+
+  // Gate plugin activation on BOTH the WebView harness being ready AND the
+  // installed index being loaded. Either side may complete first.
+  const maybeLoadPlugins = useCallback(() => {
+    if (sandboxReadyRef.current && pluginIndexLoadedRef.current) {
+      void pluginManager.loadAll();
+    }
+  }, [pluginManager]);
+
+  const onSandboxController = useCallback((c: SandboxController) => {
+    sandboxControllerRef.current = c;
+  }, []);
+  const onSandboxReady = useCallback(() => {
+    sandboxReadyRef.current = true;
+    maybeLoadPlugins();
+  }, [maybeLoadPlugins]);
+
+  // The plugins facade exposed on the Store (delegates to manager + installer).
+  const plugins = useMemo(
+    () => ({
+      list: (): PluginListItem[] => pluginManager.list(),
+      install: (repoUrl: string, id: string): Promise<void> => pluginInstaller.install(repoUrl, id),
+      fetchManifest: (repoUrl: string): Promise<FetchManifestResult> =>
+        pluginInstaller.fetchManifest(repoUrl),
+      uninstall: (id: string): Promise<void> => pluginInstaller.uninstall(id),
+      setEnabled: (id: string, v: boolean): Promise<void> => pluginManager.setEnabled(id, v),
+      reload: (): Promise<void> => pluginManager.reloadAll(),
+    }),
+    [pluginManager, pluginInstaller],
   );
 
   // Finish sign-in / restore: discover servers, auto-select the owned server's
@@ -405,6 +608,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const lastTrackId = useRef<string | null>(null);
   // Ref for scrobble timing: when the current track started.
   const startedAtRef = useRef<number>(Date.now());
+  // Plugin-event derivation: previous status (for paused/resumed), the last
+  // observed position of the current track (for trackEnded.playedSec), and the
+  // Track whose play-through is in progress (for trackEnded.durationMs — the
+  // CompletedPlay from PlayMonitor carries only title/artist, and it fires for
+  // the OLD track within the same onState call that swaps to the new one, so
+  // this ref still holds the just-ended track at that point).
+  const prevStatusRef = useRef<PlaybackState["status"]>("idle");
+  const lastPositionRef = useRef<number>(0);
+  const currentTrackRef = useRef<Track | null>(null);
   useEffect(
     () =>
       session.subscribe((s) => {
@@ -414,18 +626,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             { title: completed.title, artistName: completed.artistName },
             completed.kind,
           );
+          // Plugin trackEnded for the track that just finished, with the last
+          // observed playback position as playedSec; scrobble fires the curated
+          // event when the gate passed (kind === "full"), matching desktop.
+          // durationMs comes from the just-ended track (currentTrackRef, not yet
+          // swapped this tick) when the title matches, else 0.
+          const ended = currentTrackRef.current;
+          const endedInfo: TrackInfo = {
+            title: completed.title,
+            artistName: completed.artistName,
+            durationMs: ended && ended.title === completed.title ? ended.durationMs : 0,
+          };
+          pluginManager.emitEvent("trackEnded", {
+            track: endedInfo,
+            playedSec: lastPositionRef.current,
+          });
           if (completed.kind === "full") {
+            const startedAtEpochSec = Math.floor(startedAtRef.current / 1000);
             void lastfm.scrobble(
               { artistName: completed.artistName, title: completed.title },
               startedAtRef.current,
             );
+            pluginManager.emitEvent("scrobble", { track: endedInfo, startedAtEpochSec });
           }
         }
         dispatch({ type: "playback", state: s });
+        // Track current position so trackEnded carries an accurate playedSec.
+        if (s.status === "playing" || s.status === "paused") {
+          lastPositionRef.current = s.positionSec;
+        }
         const cur = s.queue ? s.queue.tracks[s.queue.index] : undefined;
+        // paused/resumed transitions for the current track (no track change).
+        if (cur && s.status !== prevStatusRef.current) {
+          if (s.status === "paused" && prevStatusRef.current === "playing") {
+            pluginManager.emitEvent("paused", { track: toTrackInfo(cur) });
+          } else if (s.status === "playing" && prevStatusRef.current === "paused") {
+            pluginManager.emitEvent("resumed", { track: toTrackInfo(cur) });
+          }
+        }
+        prevStatusRef.current = s.status;
         if (cur && cur.id !== lastTrackId.current) {
           lastTrackId.current = cur.id;
+          currentTrackRef.current = cur;
           startedAtRef.current = Date.now();
+          lastPositionRef.current = 0;
+          pluginManager.emitEvent("trackStarted", {
+            track: toTrackInfo(cur),
+            startedAtEpochSec: Math.floor(Date.now() / 1000),
+          });
           const tok = tokenRef.current;
           const base = tok ? safeBaseUrl(gateway, cur.serverId) : null;
           engine.setNowPlaying({
@@ -449,7 +697,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
       }),
-    [session, engine, gateway, taste, monitor, lastfm, doTopUp],
+    [session, engine, gateway, taste, monitor, lastfm, doTopUp, pluginManager],
   );
 
   // Lock-screen / Control-Center next & previous -> queue navigation.
@@ -476,6 +724,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Load the download index and reconcile with what's actually on disk.
       await downloadIndex.load();
       await downloadIndex.reconcile(downloadStore.presentNonEmptyKeys());
+      // Load the installed-plugin index; activation is gated on the WebView
+      // harness also being ready (maybeLoadPlugins fires when both are true).
+      await pluginIndex.load();
+      pluginIndexLoadedRef.current = true;
+      maybeLoadPlugins();
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
       const token = await tokenStore.load();
@@ -499,6 +752,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     downloadIndex,
     downloadStore,
     connectivityMonitor,
+    pluginIndex,
+    maybeLoadPlugins,
   ]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
@@ -538,6 +793,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return libraries;
     },
     [gateway],
+  );
+
+  // Rate a track: persist to Plex, record into the taste profile, apply
+  // love-on-rating, and fire the plugin `trackRated` event. Centralized here so
+  // the rating side-effects (incl. the plugin event) live in one place.
+  const rateTrack = useCallback(
+    async (track: Track, rating10: number | null): Promise<void> => {
+      await gateway.rateItem(track.serverId, track.id, rating10, tokenRef.current ?? "");
+      taste.recordTrackRating({ title: track.title, artistName: track.artistName }, rating10);
+      if (lastfmConfigRef.current.loveOnRating) {
+        const t = { artistName: track.artistName, title: track.title };
+        if (rating10 !== null && rating10 >= 8) void lastfm.love(t);
+        else void lastfm.unlove(t);
+      }
+      pluginManager.emitEvent("trackRated", { track: toTrackInfo(track), rating10 });
+    },
+    [gateway, taste, lastfm, pluginManager],
   );
 
   // --- download helpers ---
@@ -672,6 +944,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setStorageQuality,
     totalDownloadBytes,
     connectivity: state.connectivity,
+    rateTrack,
+    hub,
+    plugins,
   };
-  return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
+  return createElement(
+    Fragment,
+    null,
+    createElement(StoreCtx.Provider, { value }, children),
+    // Hidden WebView host that runs plugins in their QuickJS sandbox. It posts
+    // host-capability calls back through hostCallHandler and surfaces the
+    // controller (load/invoke/emit/dispose) once the harness has booted.
+    createElement(SandboxHostView, {
+      hostCallHandler,
+      onController: onSandboxController,
+      onReady: onSandboxReady,
+    }),
+  );
 }
