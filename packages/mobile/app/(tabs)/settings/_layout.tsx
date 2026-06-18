@@ -12,6 +12,7 @@ export default function SettingsLayout() {
     >
       <Stack.Screen name="index" options={{ title: "Settings" }} />
       <Stack.Screen name="library" options={{ title: "Library" }} />
+      <Stack.Screen name="lastfm" options={{ title: "Last.fm" }} />
     </Stack>
   );
 }

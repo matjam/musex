@@ -9,8 +9,9 @@ import { theme } from "../../../src/ui/theme";
 const APP_VERSION = Constants.expoConfig?.version ?? "0.0.1";
 
 export default function SettingsIndex() {
-  const { state, tokenStore, dispatch } = useStore();
+  const { state, tokenStore, dispatch, getLastfmConfig } = useStore();
   const router = useRouter();
+  const lfmCfg = getLastfmConfig();
 
   async function signOut() {
     await tokenStore.clear();
@@ -37,6 +38,24 @@ export default function SettingsIndex() {
         title={state.library?.title ?? "—"}
         subtitle={state.library?.serverName ?? "Tap to choose"}
         onPress={() => router.push("/(tabs)/settings/library")}
+      />
+
+      <Text
+        style={{
+          color: theme.textDim,
+          fontSize: 12,
+          textTransform: "uppercase",
+          paddingHorizontal: theme.space(2),
+          paddingTop: theme.space(2),
+          paddingBottom: 6,
+        }}
+      >
+        Integrations
+      </Text>
+      <Row
+        title="Last.fm"
+        subtitle={lfmCfg.connection}
+        onPress={() => router.push("/(tabs)/settings/lastfm")}
       />
 
       <Pressable
