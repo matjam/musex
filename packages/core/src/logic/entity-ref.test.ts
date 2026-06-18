@@ -6,7 +6,7 @@ import {
   externalAlbumRef,
   externalArtistRef,
 } from "../models/entity-ref.js";
-import { followKey } from "./entity-ref.js";
+import { followKey, resolveEntity } from "./entity-ref.js";
 
 const ownedArtist: Artist = { id: "a1", serverId: "srv-1", name: "Radiohead" };
 const ownedAlbum: Album = {
@@ -69,5 +69,43 @@ describe("followKey", () => {
     expect(followKey(externalAlbumRef("OK Computer", "Radiohead"))).toBe(
       "album:external:radiohead␟ok computer",
     );
+  });
+});
+
+describe("resolveEntity", () => {
+  it("owned artist → playable, followable, info, not acquirable; nav to artist", () => {
+    const r = resolveEntity(entityRefForArtist(ownedArtist));
+    expect(r.nav.kind).toBe("artist");
+    expect(r.affordances).toEqual({
+      playable: true,
+      followable: true,
+      acquirable: false,
+      hasExternalInfo: true,
+    });
+  });
+
+  it("external artist → not playable, followable, acquirable, info", () => {
+    const r = resolveEntity(externalArtistRef("Radiohead"));
+    expect(r.affordances).toEqual({
+      playable: false,
+      followable: true,
+      acquirable: true,
+      hasExternalInfo: true,
+    });
+  });
+
+  it("owned album → playable, not acquirable; external album → acquirable", () => {
+    expect(resolveEntity(entityRefForAlbum(ownedAlbum)).affordances).toMatchObject({
+      playable: true,
+      acquirable: false,
+    });
+    expect(
+      resolveEntity(externalAlbumRef("OK Computer", "Radiohead")).affordances,
+    ).toMatchObject({ playable: false, acquirable: true });
+  });
+
+  it("external track → not acquirable (Lidarr is album-level)", () => {
+    const r = resolveEntity({ kind: "track", source: "external", name: "Karma Police" });
+    expect(r.affordances).toMatchObject({ acquirable: false, hasExternalInfo: false });
   });
 });
