@@ -1,4 +1,5 @@
 import type { Album, Artist } from "@musex/core";
+import { listValidator, OfflineUnavailable } from "@musex/core";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Radio } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -25,10 +26,11 @@ interface SimilarArtistItem {
   artistId: string;
   serverId: string;
   thumb: string | null;
+  updatedAt?: number; // from the matched owned Plex artist, for real cache validation on drill-down
 }
 
 export default function ArtistAlbums() {
-  const { artistId } = useLocalSearchParams<{ artistId: string }>();
+  const { artistId, updatedAt } = useLocalSearchParams<{ artistId: string; updatedAt?: string }>();
   const { state, gateway, session, artBaseFor, token, taste, lastfm, startRadio } = useStore();
   const router = useRouter();
   const navigation = useNavigation();
@@ -36,6 +38,7 @@ export default function ArtistAlbums() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [artist, setArtist] = useState<Artist | null>(null);
   const [loading, setLoading] = useState(true);
+  const [offlineEmpty, setOfflineEmpty] = useState(false);
   const [similar, setSimilar] = useState<SimilarArtistItem[]>([]);
   const [bio, setBio] = useState<ArtistInfo | null>(null);
   const [bioExpanded, setBioExpanded] = useState(false);
@@ -46,13 +49,29 @@ export default function ArtistAlbums() {
     let alive = true;
     (async () => {
       if (!state.library || !state.token || !artistId) return;
-      const [albumList, artistInfo] = await Promise.all([
-        gateway.listAlbums(state.library, artistId, state.token),
-        gateway.getArtist(state.library, artistId, state.token),
-      ]);
+      const validator = listValidator(Number(updatedAt) || undefined);
+      let albumList: Album[];
+      let artistInfo: Artist | null;
+      try {
+        [albumList, artistInfo] = await Promise.all([
+          gateway.listAlbums(state.library, artistId, state.token, validator),
+          gateway.getArtist(state.library, artistId, state.token, validator),
+        ]);
+      } catch (err) {
+        if (!alive) return;
+        if (err instanceof OfflineUnavailable) {
+          setOfflineEmpty(true);
+          setLoading(false);
+        } else {
+          // Non-fatal: keep whatever's shown.
+          setLoading(false);
+        }
+        return;
+      }
       if (!alive) return;
       setAlbums(albumList);
       setArtist(artistInfo);
+      setOfflineEmpty(false);
       setLoading(false);
 
       if (!artistInfo) return;
@@ -85,6 +104,7 @@ export default function ArtistAlbums() {
                 artistId: match.id,
                 serverId: match.serverId,
                 thumb: match.thumb ?? null,
+                updatedAt: match.updatedAt,
               });
             }
           } catch {
@@ -97,7 +117,7 @@ export default function ArtistAlbums() {
     return () => {
       alive = false;
     };
-  }, [state.library, state.token, artistId, gateway, lastfm]);
+  }, [state.library, state.token, artistId, updatedAt, gateway, lastfm]);
 
   // Update the screen title once we know the artist name.
   useEffect(() => {
@@ -110,6 +130,23 @@ export default function ArtistAlbums() {
     return (
       <View style={{ flex: 1, justifyContent: "center", backgroundColor: theme.bg }}>
         <ActivityIndicator color={theme.accent} />
+      </View>
+    );
+  }
+
+  if (offlineEmpty) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          paddingTop: theme.space(6),
+          backgroundColor: theme.bg,
+        }}
+      >
+        <Text style={{ color: theme.textDim, fontSize: 15, textAlign: "center" }}>
+          Not available offline.{"\n"}Connect to Plex to view this artist.
+        </Text>
       </View>
     );
   }
@@ -207,7 +244,10 @@ export default function ArtistAlbums() {
                 onPress={() =>
                   router.push({
                     pathname: "/(tabs)/library/albums",
-                    params: { artistId: s.artistId },
+                    params: {
+                      artistId: s.artistId,
+                      updatedAt: s.updatedAt != null ? String(s.updatedAt) : "",
+                    },
                   })
                 }
               >
@@ -270,7 +310,12 @@ export default function ArtistAlbums() {
             session={session}
             getTracks={() =>
               state.library && state.token && artistId
-                ? gateway.listArtistTracks(artistId, state.library, state.token)
+                ? gateway.listArtistTracks(
+                    artistId,
+                    state.library,
+                    state.token,
+                    listValidator(Number(updatedAt) || undefined),
+                  )
                 : []
             }
           />
@@ -288,7 +333,10 @@ export default function ArtistAlbums() {
             label={item.title}
             sublabel={item.year ? String(item.year) : undefined}
             onPress={() =>
-              router.push({ pathname: "/(tabs)/library/tracks", params: { albumId: item.id } })
+              router.push({
+                pathname: "/(tabs)/library/tracks",
+                params: { albumId: item.id, updatedAt: item.updatedAt ?? "" },
+              })
             }
           />
         );

@@ -1,5 +1,11 @@
 import type { Playlist, SmartKind, Track } from "@musex/core";
-import { recentlyPlayedTracks, SMART_TITLES, smartMixEmpty, smartMixThumbs } from "@musex/core";
+import {
+  listValidator,
+  recentlyPlayedTracks,
+  SMART_TITLES,
+  smartMixEmpty,
+  smartMixThumbs,
+} from "@musex/core";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
@@ -27,7 +33,7 @@ export default function HomeScreen() {
   const fetchPlaylists = useCallback(async () => {
     if (!state.library || !state.token) return;
     const pls = await gateway
-      .listPlaylists(state.library, state.token)
+      .listPlaylists(state.library, state.token, listValidator(state.library.updatedAt))
       .catch(() => [] as Playlist[]);
     setPlaylists(pls);
   }, [state.library, state.token, gateway]);
@@ -39,9 +45,12 @@ export default function HomeScreen() {
         if (!state.library || !state.token) return;
         setLoading(true);
         try {
+          const validator = listValidator(state.library.updatedAt);
           const [allTracks, pls] = await Promise.all([
-            gateway.listAllTracks(state.library, "title", state.token),
-            gateway.listPlaylists(state.library, state.token).catch(() => [] as Playlist[]),
+            gateway.listAllTracks(state.library, "title", state.token, validator),
+            gateway
+              .listPlaylists(state.library, state.token, validator)
+              .catch(() => [] as Playlist[]),
           ]);
           const snap = taste.snapshot();
           const builtMixes = MIX_KINDS.filter(
@@ -116,7 +125,12 @@ export default function HomeScreen() {
                 onPress={() =>
                   router.push({
                     pathname: "/(tabs)/home/playlist",
-                    params: { id: p.id, serverId: p.serverId },
+                    params: {
+                      id: p.id,
+                      serverId: p.serverId,
+                      updatedAt: p.updatedAt ?? "",
+                      trackCount: p.trackCount ?? "",
+                    },
                   })
                 }
                 onLongPress={() => setAction({ pl: p, kind: "menu" })}

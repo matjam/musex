@@ -3,6 +3,7 @@ import {
   composeMoodMix,
   type GenreEntry,
   genreIndex,
+  listValidator,
   MOOD_MIXES,
   sampleThumbs,
   type Track,
@@ -37,12 +38,13 @@ export function BrowseGrid() {
       let albums: Album[] = [];
       let allTracks: Track[] = [];
       try {
+        const validator = listValidator(library.updatedAt);
         [albums, allTracks] = await Promise.all([
-          gateway.listAllAlbums(library, "title", token),
-          gateway.listAllTracks(library, "title", token),
+          gateway.listAllAlbums(library, "title", token, validator),
+          gateway.listAllTracks(library, "title", token, validator),
         ]);
       } catch {
-        // leave empty — cells will have no art
+        // leave empty — cells will have no art (also the offline path)
       }
 
       if (!alive) return;

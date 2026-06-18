@@ -9,13 +9,14 @@ import { theme } from "../../../src/ui/theme";
 const APP_VERSION = Constants.expoConfig?.version ?? "0.0.1";
 
 export default function SettingsIndex() {
-  const { state, tokenStore, dispatch, getLastfmConfig } = useStore();
+  const { state, tokenStore, dispatch, getLastfmConfig, clearListCache } = useStore();
   const router = useRouter();
   const lfmCfg = getLastfmConfig();
 
   async function signOut() {
     await tokenStore.clear();
     await clearSelectedLibrary();
+    await clearListCache();
     dispatch({ type: "signed-out" });
     router.replace("/sign-in");
   }

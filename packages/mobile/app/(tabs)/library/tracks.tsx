@@ -1,5 +1,10 @@
 import type { Track } from "@musex/core";
-import { buildDownloadLookup, downloadRecordFor } from "@musex/core";
+import {
+  buildDownloadLookup,
+  downloadRecordFor,
+  listValidator,
+  OfflineUnavailable,
+} from "@musex/core";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { EllipsisVertical } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
@@ -12,7 +17,7 @@ import { TrackActionSheet } from "../../../src/ui/TrackActionSheet";
 import { theme } from "../../../src/ui/theme";
 
 export default function AlbumTracks() {
-  const { albumId } = useLocalSearchParams<{ albumId: string }>();
+  const { albumId, updatedAt } = useLocalSearchParams<{ albumId: string; updatedAt?: string }>();
   const { state, gateway, session, playTracks, artBaseFor, token, downloadsList, connectivity } =
     useStore();
   const offline = connectivity === "offline";
@@ -23,6 +28,7 @@ export default function AlbumTracks() {
   );
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offlineEmpty, setOfflineEmpty] = useState(false);
   const [sheetTrack, setSheetTrack] = useState<Track | null>(null);
 
   // Refetch on focus so newly-added tracks appear when returning to this screen.
@@ -34,26 +40,57 @@ export default function AlbumTracks() {
         if (!state.library || !state.token || !albumId) return;
         if (tracks.length === 0) setLoading(true);
         try {
-          const list = await gateway.listTracks(state.library, albumId, state.token);
+          const list = await gateway.listTracks(
+            state.library,
+            albumId,
+            state.token,
+            listValidator(Number(updatedAt) || undefined),
+          );
           if (alive) {
             setTracks(list);
+            setOfflineEmpty(false);
             setLoading(false);
           }
-        } catch {
-          // Non-fatal: keep existing tracks on a background-refresh failure.
-          if (alive) setLoading(false);
+        } catch (err) {
+          if (err instanceof OfflineUnavailable) {
+            // Offline and this album was never cached.
+            if (alive) {
+              setOfflineEmpty(true);
+              setLoading(false);
+            }
+          } else {
+            // Non-fatal: keep existing tracks on a background-refresh failure.
+            if (alive) setLoading(false);
+          }
         }
       })();
       return () => {
         alive = false;
       };
-    }, [state.library, state.token, albumId, gateway, tracks.length]),
+    }, [state.library, state.token, albumId, updatedAt, gateway, tracks.length]),
   );
 
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", backgroundColor: theme.bg }}>
         <ActivityIndicator color={theme.accent} />
+      </View>
+    );
+  }
+
+  if (offlineEmpty) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          paddingTop: theme.space(6),
+          backgroundColor: theme.bg,
+        }}
+      >
+        <Text style={{ color: theme.textDim, fontSize: 15, textAlign: "center" }}>
+          Not available offline.{"\n"}Connect to Plex to view this album.
+        </Text>
       </View>
     );
   }

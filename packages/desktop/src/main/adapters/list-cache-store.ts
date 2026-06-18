@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { ListCache } from "@musex/core";
 
 interface Entry<T> {
   validator: string;
@@ -10,7 +11,7 @@ interface Entry<T> {
 
 /** Disk-persisted JSON cache for list results, validator-keyed. All file ops are
  *  confined to `dir`. A small in-memory layer fronts disk for same-session hits. */
-export class ListCacheStore {
+export class ListCacheStore implements ListCache {
   private readonly mem = new Map<string, Entry<unknown>>();
   /** Maps SHA-256 hex (filename stem) → original key, for mem eviction. */
   private readonly hashToKey = new Map<string, string>();
@@ -50,6 +51,27 @@ export class ListCacheStore {
     this.mem.set(key, entry);
     this.hashToKey.set(this.hash(key), key);
     return entry.validator === validator ? entry.data : null;
+  }
+
+  /** Cached data ignoring the validator (offline-serve); null if absent/corrupt. */
+  async getStale<T>(key: string): Promise<T | null> {
+    const cached = this.mem.get(key);
+    if (cached) return cached.data as T;
+    let raw: string;
+    try {
+      raw = await readFile(this.file(key), "utf8");
+    } catch {
+      return null; // not on disk
+    }
+    let entry: Entry<T>;
+    try {
+      entry = JSON.parse(raw) as Entry<T>;
+    } catch {
+      return null; // corrupt entry — treat as miss
+    }
+    this.mem.set(key, entry);
+    this.hashToKey.set(this.hash(key), key);
+    return entry.data;
   }
 
   async set<T>(key: string, validator: string, data: T): Promise<void> {

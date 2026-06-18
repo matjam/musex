@@ -1,4 +1,7 @@
-// Models
+// Adapters
+
+export type { CachingGatewayOpts } from "./adapters/caching-plex-gateway";
+export { CachingPlexGateway } from "./adapters/caching-plex-gateway";
 
 // Logic
 export * from "./logic/az-index";
@@ -16,6 +19,7 @@ export * from "./logic/lastfm-protocol";
 export * from "./logic/library-select";
 export * from "./logic/library-sort";
 export * from "./logic/library-watch";
+export * from "./logic/list-cache-keys";
 export * from "./logic/list-validator";
 export * from "./logic/mood-mixes";
 export * from "./logic/nav-history";
@@ -50,9 +54,10 @@ export type { PlaybackState, PlaybackStatus } from "./playback/playback-session"
 export { PlaybackSession } from "./playback/playback-session";
 // Ports
 export type { Hasher } from "./ports/hasher";
+export type { ListCache } from "./ports/list-cache";
 export type { PlaybackEngine } from "./ports/playback-engine";
 export type { Pin, PlexGateway } from "./ports/plex-gateway";
-export { PlexAuthError } from "./ports/plex-gateway";
+export { OfflineUnavailable, PlexAuthError } from "./ports/plex-gateway";
 export type { StreamKind, StreamRef, StreamResolver } from "./ports/stream-resolver";
 export type { TokenStore } from "./ports/token-store";
 export { buildQueue, carryRepeat } from "./usecases/build-queue";

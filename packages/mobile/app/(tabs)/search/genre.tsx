@@ -1,5 +1,5 @@
 import type { Track } from "@musex/core";
-import { tracksForGenre } from "@musex/core";
+import { listValidator, tracksForGenre } from "@musex/core";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -19,14 +19,23 @@ export default function GenreScreen() {
     (async () => {
       if (!library || !token || !genre) return;
       setLoading(true);
-      const [albums, allTracks] = await Promise.all([
-        gateway.listAllAlbums(library, "title", token),
-        gateway.listAllTracks(library, "title", token),
-      ]);
-      const result = tracksForGenre(genre, albums, allTracks);
-      if (alive) {
-        setTracks(result);
-        setLoading(false);
+      const validator = listValidator(library.updatedAt);
+      try {
+        const [albums, allTracks] = await Promise.all([
+          gateway.listAllAlbums(library, "title", token, validator),
+          gateway.listAllTracks(library, "title", token, validator),
+        ]);
+        const result = tracksForGenre(genre, albums, allTracks);
+        if (alive) {
+          setTracks(result);
+          setLoading(false);
+        }
+      } catch {
+        // Offline / not cached -> empty genre list.
+        if (alive) {
+          setTracks([]);
+          setLoading(false);
+        }
       }
     })();
     return () => {

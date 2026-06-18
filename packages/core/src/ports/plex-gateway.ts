@@ -74,3 +74,12 @@ export class PlexAuthError extends Error {
     this.name = "PlexAuthError";
   }
 }
+
+/** Thrown when offline and the requested list is not cached, so it cannot be
+ *  served from the local cache. Callers surface an "offline — not cached" state. */
+export class OfflineUnavailable extends Error {
+  constructor(message = "offline: not cached") {
+    super(message);
+    this.name = "OfflineUnavailable";
+  }
+}

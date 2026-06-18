@@ -8,7 +8,7 @@ import { app, shell } from "electron";
 import { buildAf, replaygainMode } from "../logic/audio-filters.js";
 import { cacheKey } from "../logic/cache.js";
 import type { PluginNotification } from "../shared/ipc-contract.js";
-import { CachingPlexGateway } from "./adapters/caching-plex-gateway.js";
+import { DesktopCachingGateway } from "./adapters/caching-plex-gateway.js";
 import { ConnectivityMonitor } from "./adapters/connectivity-monitor.js";
 import { DownloadIndex } from "./adapters/download-index.js";
 import { DownloadStore } from "./adapters/download-store.js";
@@ -55,7 +55,7 @@ export class Runtime {
     delete: (id) => persistence.deleteServerUrl(id),
   });
   readonly listCache = new ListCacheStore(path.join(app.getPath("userData"), "list-cache"));
-  readonly gateway = new CachingPlexGateway(this.realGateway, this.listCache);
+  readonly gateway = new DesktopCachingGateway(this.realGateway, this.listCache);
   readonly tokenStore = new SafeStorageTokenStore();
   /** Debounced reachability state machine. Gateway calls feed it success/
    *  failure; a periodic probe (started in init()) recovers it automatically.
