@@ -141,6 +141,21 @@ app.whenReady().then(async () => {
     if (menu && win) menu.popup({ window: win, x: Math.round(x), y: Math.round(y) });
   });
   wireEngineEvents(firstWindow);
+
+  // Re-check the library on window focus so newly-added Plex tracks show up
+  // promptly on returning to the app (instead of waiting up to 15 minutes for
+  // the next poll or relying on the websocket being connected).
+  // Debounce: ignore focus events that fire within 10 s of the last check so
+  // rapid focus toggles don't spam Plex.
+  const FOCUS_CHECK_DEBOUNCE_MS = 10_000;
+  let lastFocusCheck = 0;
+  firstWindow.on("focus", () => {
+    const now = Date.now();
+    if (now - lastFocusCheck < FOCUS_CHECK_DEBOUNCE_MS) return;
+    lastFocusCheck = now;
+    runtime.checkLibraryNow();
+  });
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) wireEngineEvents(createWindow());
   });
