@@ -197,6 +197,46 @@ describe("rateItem", () => {
   });
 });
 
+describe("search", () => {
+  it("queries artists/albums/tracks and assembles SearchResults", async () => {
+    const fetchFn = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const u = String(args[0]);
+      if (u.includes("type=8"))
+        return jsonResponse({ MediaContainer: { Metadata: [{ ratingKey: "a1", title: "M83" }] } });
+      if (u.includes("type=9"))
+        return jsonResponse({
+          MediaContainer: { Metadata: [{ ratingKey: "al1", title: "Junk" }] },
+        });
+      if (u.includes("type=10"))
+        return jsonResponse({
+          MediaContainer: {
+            Metadata: [
+              { ratingKey: "t1", title: "Wait", Media: [{ Part: [{ id: "1", key: "/p/1" }] }] },
+            ],
+          },
+        });
+      return jsonResponse({ MediaContainer: {} });
+    });
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    const lib = {
+      id: "3",
+      serverId: "srv",
+      serverName: "T",
+      title: "Music",
+      type: "music" as const,
+    };
+    await gw.listMusicLibraries(server, "TOK");
+    const res = await gw.search(lib, "m83", "TOK");
+    expect(res.artists[0]?.name).toBe("M83");
+    expect(res.albums[0]?.title).toBe("Junk");
+    expect(res.tracks[0]?.title).toBe("Wait");
+    const urls = fetchFn.mock.calls.map((c) => String((c as unknown[])[0]));
+    expect(
+      urls.some((u) => u.includes("/library/sections/3/search") && u.includes("query=m83")),
+    ).toBe(true);
+  });
+});
+
 describe("getUserRating", () => {
   it("reads userRating off the item metadata", async () => {
     const fetchFn = vi.fn(async () =>

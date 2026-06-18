@@ -170,8 +170,17 @@ export class PlexGatewayImpl implements PlexGateway {
 
   // --- not implemented in Phase 1 (search/playlists/ratings are later phases) ---
 
-  search(): Promise<SearchResults> {
-    throw new Error("search not implemented in Phase 1");
+  async search(library: Library, query: string, token: string): Promise<SearchResults> {
+    const base = this.requireBase(library.serverId);
+    const q = encodeURIComponent(query);
+    const hit = (type: number) =>
+      this.getJson(`${base}/library/sections/${library.id}/search?type=${type}&query=${q}`, token);
+    const [a, al, t] = await Promise.all([hit(8), hit(9), hit(10)]);
+    return {
+      artists: parseArtists(a, library.serverId),
+      albums: parseAlbums(al, library.serverId),
+      tracks: parseTracks(t, library.serverId),
+    };
   }
   async listPlaylists(library: Library, token: string): Promise<Playlist[]> {
     const base = this.requireBase(library.serverId);
