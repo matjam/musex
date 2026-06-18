@@ -312,6 +312,20 @@ export class PlexGatewayImpl implements PlexGateway {
     );
   }
 
+  /** Cheap liveness probe: GET the server root and throw PlexAuthError on 401,
+   *  else resolve. Used by ConnectivityMonitor to distinguish "server offline"
+   *  from "bad token" (auth errors are not treated as connectivity failures). */
+  async probe(serverId: string, token: string): Promise<void> {
+    const base = this.requireBase(serverId);
+    const res = await this.fetchFn(`${base}/identity`, {
+      headers: plexHeaders(this.clientId, { "X-Plex-Token": token }),
+    });
+    if (res.status === 401) throw new PlexAuthError();
+    // any other status (including non-OK) counts as reachable-but-unhappy,
+    // which is not an auth failure; only a network error (fetch throws) or 401
+    // propagates as a probe failure.
+  }
+
   async getUserRating(serverId: string, itemId: string, token: string): Promise<number | null> {
     const base = this.requireBase(serverId);
     const json = await this.getJson(`${base}/library/metadata/${itemId}`, token);
