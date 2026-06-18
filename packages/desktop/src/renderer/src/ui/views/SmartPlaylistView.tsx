@@ -2,6 +2,7 @@ import type { Library, Track } from "@musex/core";
 import {
   composeForYou,
   computeSmartPlaylist,
+  downloadRecordFor,
   type ForYouInput,
   listValidator,
   SMART_TITLES,
@@ -11,7 +12,6 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
-import { downloadRecordFor } from "../../util/downloaded-records";
 import { ActionBar } from "../discovery/ActionBar";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";

@@ -1,12 +1,11 @@
 import type { Playlist } from "@musex/core";
-import { listValidator } from "@musex/core";
+import { downloadRecordFor, listValidator } from "@musex/core";
 import { MoreHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { usePlaylists } from "../../state/playlists";
 import { useSelection } from "../../state/selection";
-import { downloadRecordFor } from "../../util/downloaded-records";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";

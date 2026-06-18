@@ -1,10 +1,9 @@
 import type { LibrarySort, Track } from "@musex/core";
-import { listValidator } from "@musex/core";
+import { downloadRecordFor, listValidator } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
-import { downloadRecordFor } from "../../util/downloaded-records";
 import { ActionBar } from "../discovery/ActionBar";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";

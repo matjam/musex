@@ -1,6 +1,6 @@
+import { buildDownloadLookup } from "@musex/core";
 import { useEffect, useState } from "react";
 import type { DownloadDto } from "../../../../shared/ipc-contract";
-import { buildDownloadLookup } from "../../util/downloaded-records";
 
 /** Live lookup of fully-downloaded records keyed by `serverId␟plexPath` (see
  *  `downloadKey`). Lets a track row decide Download vs Remove and recover the

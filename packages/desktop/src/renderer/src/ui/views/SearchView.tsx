@@ -1,4 +1,5 @@
 import type { SearchResults } from "@musex/core";
+import { downloadRecordFor } from "@musex/core";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ExternalArtistResultDto } from "../../../../shared/ipc-contract";
@@ -6,7 +7,6 @@ import { useApp } from "../../state/app";
 import { useMonitoring } from "../../state/monitoring";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
-import { downloadRecordFor } from "../../util/downloaded-records";
 import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { GridCard } from "../GridCard";

@@ -1,6 +1,6 @@
+import { downloadedContainerIds, downloadingContainerIds } from "@musex/core";
 import { useEffect, useState } from "react";
 import type { DownloadDto } from "../../../../shared/ipc-contract";
-import { downloadedContainerIds, downloadingContainerIds } from "../../util/downloaded-set";
 
 type ContainerKey = "albumId" | "artistId";
 
