@@ -3,15 +3,19 @@ import Slider from "@react-native-community/slider";
 import { useRouter } from "expo-router";
 import {
   ChevronDown,
+  GripVertical,
   Pause,
   Play,
   Repeat,
   Shuffle,
   SkipBack,
   SkipForward,
+  Trash2,
 } from "lucide-react-native";
 import { memo, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import DraggableFlatList, { type RenderItemParams } from "react-native-draggable-flatlist";
+import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
 import { artUrl } from "../src/logic/art-url";
 import { useStore } from "../src/state/store";
 import { AlbumArt } from "../src/ui/AlbumArt";
@@ -34,11 +38,15 @@ const QueueRow = memo(function QueueRow({
   art,
   abs,
   session,
+  onDrag,
+  active,
 }: {
   track: Track;
   art: string | null;
   abs: number;
   session: PlaybackSession;
+  onDrag?: () => void;
+  active?: boolean;
 }) {
   return (
     <Pressable
@@ -49,6 +57,7 @@ const QueueRow = memo(function QueueRow({
         gap: 10,
         paddingVertical: 8,
         paddingHorizontal: theme.space(3),
+        backgroundColor: active ? theme.surface : "transparent",
       }}
     >
       <AlbumArt url={art} size={36} />
@@ -60,6 +69,11 @@ const QueueRow = memo(function QueueRow({
           {track.artistName}
         </Text>
       </View>
+      {onDrag ? (
+        <Pressable onLongPress={onDrag} hitSlop={8} style={{ padding: 4 }}>
+          <GripVertical color={theme.textDim} size={18} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 });
@@ -72,7 +86,7 @@ export default function NowPlaying() {
   const current = queue ? queue.tracks[queue.index] : undefined;
 
   // Stable across position ticks (queue ref only changes on a real queue/index
-  // change), so the FlatList `data` reference doesn't churn 4x/sec.
+  // change), so the DraggableFlatList `data` reference doesn't churn 4x/sec.
   const upNext = useMemo(() => (queue ? queue.tracks.slice(queue.index + 1) : []), [queue]);
   const baseIndex = queue ? queue.index : 0;
 
@@ -95,16 +109,18 @@ export default function NowPlaying() {
 
   if (!pb || !queue || !current) {
     return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: theme.bg,
-        }}
-      >
-        <Text style={{ color: theme.textDim }}>Nothing playing</Text>
-      </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: theme.bg,
+          }}
+        >
+          <Text style={{ color: theme.textDim }}>Nothing playing</Text>
+        </View>
+      </GestureHandlerRootView>
     );
   }
 
@@ -114,93 +130,130 @@ export default function NowPlaying() {
   const dur = pb.durationSec || current.durationMs / 1000;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <Pressable
-        onPress={() => router.back()}
-        style={{ padding: theme.space(1.5), alignSelf: "flex-start" }}
-      >
-        <ChevronDown color={theme.text} size={28} />
-      </Pressable>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+        <Pressable
+          onPress={() => router.back()}
+          style={{ padding: theme.space(1.5), alignSelf: "flex-start" }}
+        >
+          <ChevronDown color={theme.text} size={28} />
+        </Pressable>
 
-      <FlatList
-        data={upNext}
-        keyExtractor={(t, i) => `${t.id}-${i}`}
-        ListHeaderComponent={
-          <View style={{ alignItems: "center", paddingHorizontal: theme.space(3) }}>
-            <AlbumArt url={artUri} size={240} />
-            <Text
-              style={{ color: theme.text, fontSize: 20, fontWeight: "700", marginTop: 18 }}
-              numberOfLines={1}
-            >
-              {current.title}
-            </Text>
-            <Text style={{ color: theme.textDim, fontSize: 15 }} numberOfLines={1}>
-              {current.artistName}
-            </Text>
-            <View style={{ marginTop: 10 }}>
-              <StarRating rating10={rating} onRate={(r) => void rate(r)} size={22} />
-            </View>
-
-            <Slider
-              style={{ width: "100%", marginTop: 18 }}
-              minimumValue={0}
-              maximumValue={dur}
-              value={pb.positionSec}
-              minimumTrackTintColor={theme.accent}
-              maximumTrackTintColor={theme.border}
-              thumbTintColor={theme.text}
-              onSlidingComplete={(v) => session.seek(v)}
-            />
-            <View style={{ flexDirection: "row", justifyContent: "space-between", width: "100%" }}>
-              <Text style={{ color: theme.textDim, fontSize: 12 }}>{fmt(pb.positionSec)}</Text>
-              <Text style={{ color: theme.textDim, fontSize: 12 }}>{fmt(dur)}</Text>
-            </View>
-
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 28, marginVertical: 18 }}
-            >
-              <Pressable onPress={() => session.setShuffle(!queue.shuffle)} hitSlop={10}>
-                <Shuffle color={queue.shuffle ? theme.accent : theme.textDim} size={22} />
-              </Pressable>
-              <Pressable onPress={() => void session.previous()} hitSlop={10}>
-                <SkipBack color={theme.text} size={30} />
-              </Pressable>
-              <Pressable onPress={() => (playing ? session.pause() : session.play())} hitSlop={10}>
-                {playing ? (
-                  <Pause color={theme.accent} size={44} />
-                ) : (
-                  <Play color={theme.accent} size={44} />
-                )}
-              </Pressable>
-              <Pressable onPress={() => void session.next()} hitSlop={10}>
-                <SkipForward color={theme.text} size={30} />
-              </Pressable>
-              <Pressable onPress={() => session.cycleRepeat()} hitSlop={10}>
-                <Repeat color={queue.repeat === "none" ? theme.textDim : theme.accent} size={22} />
-              </Pressable>
-            </View>
-
-            {upNext.length > 0 ? (
+        <DraggableFlatList
+          data={upNext}
+          keyExtractor={(t, i) => `${t.id}-${i}`}
+          onDragEnd={({ from, to }) => void session.move(baseIndex + 1 + from, baseIndex + 1 + to)}
+          ListHeaderComponent={
+            <View style={{ alignItems: "center", paddingHorizontal: theme.space(3) }}>
+              <AlbumArt url={artUri} size={240} />
               <Text
-                style={{
-                  color: theme.textDim,
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  alignSelf: "flex-start",
-                  marginBottom: 6,
-                }}
+                style={{ color: theme.text, fontSize: 20, fontWeight: "700", marginTop: 18 }}
+                numberOfLines={1}
               >
-                Up Next
+                {current.title}
               </Text>
-            ) : null}
-          </View>
-        }
-        renderItem={({ item, index }) => {
-          const b = artBaseFor(item.serverId);
-          const u = b && token ? artUrl(b, item.thumb, token) : null;
-          return <QueueRow track={item} art={u} abs={baseIndex + 1 + index} session={session} />;
-        }}
-      />
-    </View>
+              <Text style={{ color: theme.textDim, fontSize: 15 }} numberOfLines={1}>
+                {current.artistName}
+              </Text>
+              <View style={{ marginTop: 10 }}>
+                <StarRating rating10={rating} onRate={(r) => void rate(r)} size={22} />
+              </View>
+
+              <Slider
+                style={{ width: "100%", marginTop: 18 }}
+                minimumValue={0}
+                maximumValue={dur}
+                value={pb.positionSec}
+                minimumTrackTintColor={theme.accent}
+                maximumTrackTintColor={theme.border}
+                thumbTintColor={theme.text}
+                onSlidingComplete={(v) => session.seek(v)}
+              />
+              <View
+                style={{ flexDirection: "row", justifyContent: "space-between", width: "100%" }}
+              >
+                <Text style={{ color: theme.textDim, fontSize: 12 }}>{fmt(pb.positionSec)}</Text>
+                <Text style={{ color: theme.textDim, fontSize: 12 }}>{fmt(dur)}</Text>
+              </View>
+
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 28, marginVertical: 18 }}
+              >
+                <Pressable onPress={() => session.setShuffle(!queue.shuffle)} hitSlop={10}>
+                  <Shuffle color={queue.shuffle ? theme.accent : theme.textDim} size={22} />
+                </Pressable>
+                <Pressable onPress={() => void session.previous()} hitSlop={10}>
+                  <SkipBack color={theme.text} size={30} />
+                </Pressable>
+                <Pressable
+                  onPress={() => (playing ? session.pause() : session.play())}
+                  hitSlop={10}
+                >
+                  {playing ? (
+                    <Pause color={theme.accent} size={44} />
+                  ) : (
+                    <Play color={theme.accent} size={44} />
+                  )}
+                </Pressable>
+                <Pressable onPress={() => void session.next()} hitSlop={10}>
+                  <SkipForward color={theme.text} size={30} />
+                </Pressable>
+                <Pressable onPress={() => session.cycleRepeat()} hitSlop={10}>
+                  <Repeat
+                    color={queue.repeat === "none" ? theme.textDim : theme.accent}
+                    size={22}
+                  />
+                </Pressable>
+              </View>
+
+              {upNext.length > 0 ? (
+                <Text
+                  style={{
+                    color: theme.textDim,
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    alignSelf: "flex-start",
+                    marginBottom: 6,
+                  }}
+                >
+                  Up Next
+                </Text>
+              ) : null}
+            </View>
+          }
+          renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<Track>) => {
+            const pos = getIndex() ?? 0;
+            const abs = baseIndex + 1 + pos;
+            const b = artBaseFor(item.serverId);
+            const u = b && token ? artUrl(b, item.thumb, token) : null;
+            return (
+              <Swipeable
+                renderRightActions={() => (
+                  <Pressable
+                    onPress={() => void session.removeAt(abs)}
+                    style={{
+                      backgroundColor: "#c0392b",
+                      justifyContent: "center",
+                      paddingHorizontal: 20,
+                    }}
+                  >
+                    <Trash2 color="#fff" size={20} />
+                  </Pressable>
+                )}
+              >
+                <QueueRow
+                  track={item}
+                  art={u}
+                  abs={abs}
+                  session={session}
+                  onDrag={drag}
+                  active={isActive}
+                />
+              </Swipeable>
+            );
+          }}
+        />
+      </View>
+    </GestureHandlerRootView>
   );
 }
