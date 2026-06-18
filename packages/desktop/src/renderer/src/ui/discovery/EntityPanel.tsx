@@ -21,7 +21,7 @@ import { AlbumArt } from "../AlbumArt";
 import { StarRating } from "../StarRating";
 import { ActionBar } from "./ActionBar";
 import { EntityLink } from "./EntityLink";
-import { useMonitorAction } from "./MonitorButton";
+import { useFollowAction } from "./FollowButton";
 
 /** Unified right-hand panel for an artist / album / song. Replaces the separate
  *  TrackDetailPanel + ArtistInfoPanel — switches on payload.kind, preserving each
@@ -395,7 +395,11 @@ function ArtistPanel({
   const { dispatch, connectivity } = useApp();
   const offline = connectivity === "offline";
   const { closePanel } = usePanel();
-  const monitor = useMonitorAction(artistName);
+  const artistRef =
+    artistId && serverId
+      ? entityRefForArtist({ id: artistId, serverId, name: artistName, thumb })
+      : externalArtistRef(artistName);
+  const follow = useFollowAction(artistRef);
   const [fetch, setFetch] = useState<ArtistFetch>({ status: "loading" });
 
   useEffect(() => {
@@ -441,17 +445,13 @@ function ArtistPanel({
             view: { name: "similar", target: { kind: "artist", name: artistName } },
           })
         }
-        monitor={
-          monitor.supported
-            ? {
-                on: monitor.on,
-                busy: monitor.busy,
-                disabled: offline,
-                title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
-                onToggle: monitor.onToggle,
-              }
-            : undefined
-        }
+        follow={{
+          on: follow.on,
+          busy: follow.busy,
+          disabled: offline,
+          title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
+          onToggle: () => void follow.onToggle(),
+        }}
       />
 
       {fetch.status === "loading" && (

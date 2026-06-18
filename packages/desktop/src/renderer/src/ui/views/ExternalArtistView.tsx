@@ -1,13 +1,13 @@
 import type { EntityRef } from "@musex/core";
 import { entityRefForAlbum } from "@musex/core";
-import { Bell, BellRing, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
-import { useMonitoring } from "../../state/monitoring";
-import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
+import { useFollow } from "../../state/follow";
+import { OFFLINE_ACTION_TOOLTIP, OFFLINE_VIEW_MESSAGE } from "../../util/offline";
 import { ActionBar } from "../discovery/ActionBar";
-import { useMonitorAction, useWatchAction } from "../discovery/MonitorButton";
+import { useFollowAction } from "../discovery/FollowButton";
 import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
 import { GridCard } from "../GridCard";
 
@@ -24,10 +24,9 @@ export function ExternalArtistView({ entity }: { entity: EntityRef }) {
   const artistName = entity.name;
   const { dispatch, connectivity } = useApp();
   const offline = connectivity === "offline";
-  const monitoring = useMonitoring();
-  // "Monitor entire artist" (one-way acquire) + "Watch new releases" (toggle).
-  const monitor = useMonitorAction(artistName);
-  const watch = useWatchAction(artistName);
+  const { isFollowed } = useFollow();
+  // Follow = acquire the discography + watch for new releases (one action).
+  const follow = useFollowAction(entity);
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {
@@ -122,37 +121,18 @@ export function ExternalArtistView({ entity }: { entity: EntityRef }) {
     <div className="browse-section external-artist-view">
       <div className="artist-header">
         <h3 className="browse-title">{artistName}</h3>
-        {/* Monitoring the entire artist is ONE-WAY: there's no un-monitor IPC,
-         *  so once on, the pill is shown lit + disabled (can't be undone here). */}
+        {/* Follow = acquire the full discography + watch for new releases. */}
         <ActionBar
-          monitor={
-            monitor.supported
-              ? {
-                  on: monitor.on,
-                  busy: monitor.busy || monitor.on,
-                  onToggle: monitor.on ? () => {} : monitor.onToggle,
-                }
-              : undefined
-          }
-        >
-          {watch.supported && (
-            <button
-              type="button"
-              className="action-icon"
-              disabled={watch.busy}
-              title={
-                watch.on
-                  ? "Watching for new releases — click to stop"
-                  : "Fetch new releases by this artist automatically"
-              }
-              onClick={() => void watch.onToggle()}
-            >
-              {watch.on ? <BellRing size={16} /> : <Bell size={16} />}
-            </button>
-          )}
-        </ActionBar>
+          follow={{
+            on: follow.on,
+            busy: follow.busy,
+            disabled: offline,
+            title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
+            onToggle: () => void follow.onToggle(),
+          }}
+        />
       </div>
-      <MonitorStatusLine watching={monitoring.isWatched(artistName)} downloading={0} />
+      <MonitorStatusLine watching={isFollowed(entity)} downloading={0} />
       <div className="browse-sub">
         Discography via last.fm + your download manager — albums you own open in your library;
         dimmed ones aren't available to fetch.

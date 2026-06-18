@@ -1,4 +1,4 @@
-import { Info, Play, Shuffle, Sparkles } from "lucide-react";
+import { Heart, Info, Play, Shuffle, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 
 export interface ActionBarProps {
@@ -7,9 +7,10 @@ export interface ActionBarProps {
   onSimilar?: () => void; // labeled "Similar" pill
   /** Open the entity info/detail side panel for this entity. Omit to hide. */
   onInfo?: () => void;
-  /** Monitor pill: omit to hide. `on` lights it green and flips the label.
-   *  `disabled` (e.g. offline) blocks the toggle and shows `title` as a tooltip. */
-  monitor?: {
+  /** Follow pill: omit to hide. `on` lights it green and flips the label
+   *  ("Follow" / "Following"). `disabled` (e.g. offline) blocks the toggle and
+   *  shows `title` as a tooltip. */
+  follow?: {
     on: boolean;
     busy?: boolean;
     disabled?: boolean;
@@ -27,7 +28,7 @@ export function ActionBar({
   onShuffle,
   onSimilar,
   onInfo,
-  monitor,
+  follow,
   overflow,
   children,
 }: ActionBarProps) {
@@ -71,15 +72,16 @@ export function ActionBar({
           <Info size={16} />
         </button>
       )}
-      {monitor && (
+      {follow && (
         <button
           type="button"
-          className={`action-pill${monitor.on ? " action-pill--on" : ""}`}
-          disabled={monitor.busy || monitor.disabled}
-          title={monitor.title}
-          onClick={monitor.onToggle}
+          className={`action-pill${follow.on ? " action-pill--on" : ""}`}
+          disabled={follow.busy || follow.disabled}
+          title={follow.title}
+          onClick={follow.onToggle}
         >
-          {monitor.on ? "Monitoring" : "Monitor"}
+          <Heart size={15} />
+          {follow.on ? "Following" : "Follow"}
         </button>
       )}
       {children}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppProvider, useApp } from "./state/app";
-import { MonitoringProvider } from "./state/monitoring";
+import { FollowProvider } from "./state/follow";
 import { PanelProvider, usePanel } from "./state/panel";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
@@ -69,7 +69,7 @@ function Inner() {
   }
   if (auth === "signed-in") {
     return (
-      <MonitoringProvider>
+      <FollowProvider>
         <PlaylistsProvider>
           <SelectionProvider>
             <RatingsProvider>
@@ -89,7 +89,7 @@ function Inner() {
             </RatingsProvider>
           </SelectionProvider>
         </PlaylistsProvider>
-      </MonitoringProvider>
+      </FollowProvider>
     );
   }
   return (

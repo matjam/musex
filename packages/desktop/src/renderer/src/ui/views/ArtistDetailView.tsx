@@ -3,14 +3,14 @@ import { entityRefForAlbum, listValidator } from "@musex/core";
 import { Download, ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
-import { useMonitoring } from "../../state/monitoring";
+import { useFollow } from "../../state/follow";
 import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
-import { useWatchAction } from "../discovery/MonitorButton";
+import { useFollowAction } from "../discovery/FollowButton";
 import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
 import { MissingAlbumsSection } from "../MissingAlbumsSection";
 import { StarRating } from "../StarRating";
@@ -40,10 +40,10 @@ export function ArtistDetailView({ entity }: Props) {
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
     usePlayer();
   const { ratingFor, rate, seed } = useRatings();
-  // Owned artist: the pill toggles "watch new releases" (the toggleable
-  // ongoing relationship). "Acquire entire artist" is for unowned artists.
-  const monitor = useWatchAction(artist.name);
-  const { isWatched } = useMonitoring();
+  // Follow toggles the acquire+watch relationship for this artist (one action,
+  // via the FollowProvider). The headline pill + the status line read it.
+  const follow = useFollowAction(entity);
+  const { isFollowed } = useFollow();
   const { openEntity } = usePanel();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [moreOpen, setMoreOpen] = useState(false);
@@ -200,17 +200,13 @@ export function ArtistDetailView({ entity }: Props) {
               thumb: artist.thumb,
             })
           }
-          monitor={
-            monitor.supported
-              ? {
-                  on: monitor.on,
-                  busy: monitor.busy,
-                  disabled: offline,
-                  title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
-                  onToggle: monitor.onToggle,
-                }
-              : undefined
-          }
+          follow={{
+            on: follow.on,
+            busy: follow.busy,
+            disabled: offline,
+            title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
+            onToggle: () => void follow.onToggle(),
+          }}
           overflow={
             fetch.status === "ok" && fetch.albums.length > 0 ? (
               <button
@@ -226,7 +222,7 @@ export function ArtistDetailView({ entity }: Props) {
           }
         />
         {/* TODO: real download count (Phase F) */}
-        <MonitorStatusLine watching={isWatched(artist.name)} downloading={0} />
+        <MonitorStatusLine watching={isFollowed(entity)} downloading={0} />
       </div>
 
       {fetch.status === "loading" && <div className="content-placeholder">Loading albums…</div>}

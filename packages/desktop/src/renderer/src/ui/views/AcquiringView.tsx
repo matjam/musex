@@ -2,7 +2,7 @@ import { externalArtistRef } from "@musex/core";
 import { BellRing, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { AcquisitionStatusDto, ExpansionStateDto } from "../../../../shared/ipc-contract";
-import { useMonitoring } from "../../state/monitoring";
+import { useFollow } from "../../state/follow";
 import { EntityLink } from "../discovery/EntityLink";
 import { StateBadge } from "../discovery/StateBadge";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
@@ -103,11 +103,11 @@ function ExpansionsFeed({
  *  taste-expansion feed, and the artists watched for new releases.
  *  Auto-refreshes while open. */
 export function AcquiringView() {
-  const monitoring = useMonitoring();
+  const { isFollowed, setFollowed } = useFollow();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [expansion, setExpansion] = useState<ExpansionStateDto | null>(null);
   // Names (original casing) for the watched list; visibility is gated live by
-  // the monitoring store so the X button updates optimistically.
+  // the follow store so the X button (unfollow) updates optimistically.
   const [watchedNames, setWatchedNames] = useState<string[]>([]);
 
   const refresh = useCallback(() => {
@@ -151,14 +151,14 @@ export function AcquiringView() {
   }
 
   function unwatch(artistName: string) {
-    void monitoring
-      .setWatched(artistName, false)
-      .catch((err: unknown) => console.error("[watch] unwatch failed:", err));
+    void setFollowed(externalArtistRef(artistName), false).catch((err: unknown) =>
+      console.error("[follow] unfollow failed:", err),
+    );
   }
 
-  // Live view: hide names the store no longer considers watched (optimistic
-  // unwatch), so the list updates without waiting for the next refresh.
-  const watched = watchedNames.filter((name) => monitoring.isWatched(name));
+  // Live view: hide names the store no longer considers followed (optimistic
+  // unfollow), so the list updates without waiting for the next refresh.
+  const watched = watchedNames.filter((name) => isFollowed(externalArtistRef(name)));
 
   return (
     <div className="browse-section downloads-view">

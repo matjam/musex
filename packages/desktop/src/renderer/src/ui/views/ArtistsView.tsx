@@ -3,7 +3,7 @@ import { entityRefForArtist, listValidator } from "@musex/core";
 import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
-import { useMonitoring } from "../../state/monitoring";
+import { useFollow } from "../../state/follow";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
@@ -18,8 +18,11 @@ type FetchState =
 export function ArtistsView() {
   const { library, connectivity, dispatch } = useApp();
   const { playArtist } = useCollectionPlay();
-  const { isWatched } = useMonitoring();
+  const { isFollowed } = useFollow();
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
+  // An artist is "followed" (was: watched for new releases) when followed via
+  // the FollowProvider. Cards mark followed artists; the filter narrows to them.
+  const followedArtist = (a: Artist) => isFollowed(entityRefForArtist(a));
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   // Artist cards reflect LOCAL download state only: a downloaded artist (≥1
   // track on disk for the artistId) → "downloaded"; else an in-flight (queued/
@@ -83,7 +86,7 @@ export function ArtistsView() {
     filter === "downloaded"
       ? artists.filter((a) => downloaded.has(a.id))
       : filter === "watching"
-        ? artists.filter((a) => isWatched(a.name))
+        ? artists.filter(followedArtist)
         : artists;
 
   return (
@@ -125,7 +128,7 @@ export function ArtistsView() {
                     title={artist.name}
                     round
                     state={cardState(artist.id)}
-                    monitored={isWatched(artist.name)}
+                    monitored={followedArtist(artist)}
                     onOpen={() =>
                       dispatch({
                         type: "navigate",
@@ -154,7 +157,7 @@ export function ArtistsView() {
                 title={artist.name}
                 round
                 state={cardState(artist.id)}
-                monitored={isWatched(artist.name)}
+                monitored={followedArtist(artist)}
                 dim={offline && !downloaded.has(artist.id)}
                 onOpen={() =>
                   dispatch({
