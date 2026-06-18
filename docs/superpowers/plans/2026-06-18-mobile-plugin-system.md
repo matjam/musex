@@ -1,5 +1,7 @@
 # Mobile Plugin System (Phase D1) Implementation Plan
 
+> **⚠️ PARTIALLY SHELVED (2026-06-18).** Mobile targets the App Store → Guideline 2.5.2 forbids downloading third-party feature code → Batches 2–5 (the mobile WebView sandbox, transport, host caps, install, Plugins UI) were built, reviewed green, then **shelved** (preserved at git tag `shelved/mobile-plugin-sandbox`). **Only Batch 1 shipped** — the `@musex/plugin-host` extraction + `plugin-source`→core promotion (a desktop-serving refactor). Mobile plugins go first-party/compiled-in (last.fm already is, from Phase B). See the spec's Status note.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship the production iOS plugin system on the spike-validated WebView+`quickjs-emscripten` architecture, by extracting a shared `@musex/plugin-host` package (consumed by desktop + the mobile WebView harness) and building the mobile sandbox host, transport, host capabilities, GitHub install flow, and Settings → Plugins UI.
