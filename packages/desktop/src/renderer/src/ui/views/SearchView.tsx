@@ -1,5 +1,10 @@
 import type { SearchResults } from "@musex/core";
-import { downloadRecordFor } from "@musex/core";
+import {
+  downloadRecordFor,
+  entityRefForAlbum,
+  entityRefForArtist,
+  externalArtistRef,
+} from "@musex/core";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ExternalArtistResultDto } from "../../../../shared/ipc-contract";
@@ -154,7 +159,12 @@ export function SearchView() {
                 type="button"
                 key={artist.id}
                 className="grid-card"
-                onClick={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                onClick={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: entityRefForArtist(artist) },
+                  })
+                }
               >
                 <AlbumArt
                   thumb={artist.thumb}
@@ -178,7 +188,12 @@ export function SearchView() {
                 type="button"
                 key={album.id}
                 className="grid-card"
-                onClick={() => dispatch({ type: "navigate", view: { name: "album", album } })}
+                onClick={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "album", ref: entityRefForAlbum(album) },
+                  })
+                }
               >
                 <AlbumArt
                   thumb={album.thumb}
@@ -251,7 +266,7 @@ export function SearchView() {
                   onOpen={() =>
                     dispatch({
                       type: "navigate",
-                      view: { name: "external-artist", artistName: artist.name },
+                      view: { name: "artist", ref: externalArtistRef(artist.name) },
                     })
                   }
                   actionIcon={monitored ? undefined : Download}

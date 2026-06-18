@@ -1,5 +1,14 @@
 import type { Album, Track } from "@musex/core";
-import { formatDuration, listValidator, relativeTime, smartTrackKey } from "@musex/core";
+import {
+  entityRefForAlbum,
+  entityRefForArtist,
+  externalAlbumRef,
+  externalArtistRef,
+  formatDuration,
+  listValidator,
+  relativeTime,
+  smartTrackKey,
+} from "@musex/core";
 import { AudioLines, ExternalLink, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ArtistInfoDto, TrackDetailDto, TrackStatDto } from "../../../../shared/ipc-contract";
@@ -121,12 +130,15 @@ function SongPanel({ track }: { track: Track }) {
       {/* Hierarchy crumb: Artist › Album › Track (navigable via EntityLink). */}
       <div className="breadcrumb detail-crumb">
         <EntityLink
-          entity={{
-            kind: "artist",
-            name: track.artistName,
-            artistId: track.artistId || undefined,
-            serverId: track.serverId,
-          }}
+          entity={
+            track.artistId
+              ? entityRefForArtist({
+                  id: track.artistId,
+                  serverId: track.serverId,
+                  name: track.artistName,
+                })
+              : externalArtistRef(track.artistName)
+          }
         >
           {track.artistName}
         </EntityLink>
@@ -134,14 +146,17 @@ function SongPanel({ track }: { track: Track }) {
           <>
             {" › "}
             <EntityLink
-              entity={{
-                kind: "album",
-                albumId: track.albumId || undefined,
-                serverId: track.serverId,
-                artistId: track.artistId || undefined,
-                title: track.albumTitle,
-                thumb: track.thumb,
-              }}
+              entity={
+                track.albumId
+                  ? entityRefForAlbum({
+                      id: track.albumId,
+                      serverId: track.serverId,
+                      artistId: track.artistId,
+                      title: track.albumTitle,
+                      thumb: track.thumb,
+                    })
+                  : externalAlbumRef(track.albumTitle, track.artistName)
+              }
             >
               {track.albumTitle}
             </EntityLink>
@@ -287,12 +302,15 @@ function AlbumPanel({ album }: { album: Album }) {
       <div className="breadcrumb detail-crumb">
         {artistName && (
           <EntityLink
-            entity={{
-              kind: "artist",
-              name: artistName,
-              artistId: album.artistId || undefined,
-              serverId: album.serverId,
-            }}
+            entity={
+              album.artistId
+                ? entityRefForArtist({
+                    id: album.artistId,
+                    serverId: album.serverId,
+                    name: artistName,
+                  })
+                : externalArtistRef(artistName)
+            }
           >
             {artistName}
           </EntityLink>
@@ -402,7 +420,7 @@ function ArtistPanel({
 
   function browseAlbums() {
     closePanel();
-    dispatch({ type: "navigate", view: { name: "external-artist", artistName } });
+    dispatch({ type: "navigate", view: { name: "artist", ref: externalArtistRef(artistName) } });
   }
 
   return (
@@ -483,7 +501,10 @@ function ArtistPanel({
               closePanel();
               dispatch({
                 type: "navigate",
-                view: { name: "artist", artist: { id: artistId, serverId, name: artistName } },
+                view: {
+                  name: "artist",
+                  ref: entityRefForArtist({ id: artistId, serverId, name: artistName }),
+                },
               });
             }}
           >

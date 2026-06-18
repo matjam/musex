@@ -1,6 +1,8 @@
 import type { Album, Artist } from "@musex/core";
 import {
   albumsForMix,
+  entityRefForAlbum,
+  entityRefForArtist,
   listValidator,
   MOOD_MIXES,
   SMART_DESCRIPTIONS,
@@ -291,7 +293,12 @@ export function HomeView() {
                 title={a.name}
                 subtitle="Added for you"
                 round
-                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist: a } })}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: entityRefForArtist(a) },
+                  })
+                }
                 onPlay={() => void playArtist(a)}
               />
             ))}
@@ -330,7 +337,12 @@ export function HomeView() {
                 thumb={a.thumb}
                 title={a.name}
                 round
-                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist: a } })}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: entityRefForArtist(a) },
+                  })
+                }
                 onPlay={() => void playArtist(a)}
               />
             ))}
@@ -348,7 +360,9 @@ export function HomeView() {
                 thumb={a.thumb}
                 title={a.title}
                 subtitle={a.year != null ? String(a.year) : undefined}
-                onOpen={() => dispatch({ type: "navigate", view: { name: "album", album: a } })}
+                onOpen={() =>
+                  dispatch({ type: "navigate", view: { name: "album", ref: entityRefForAlbum(a) } })
+                }
                 onPlay={() => void playAlbum(a)}
               />
             ))}

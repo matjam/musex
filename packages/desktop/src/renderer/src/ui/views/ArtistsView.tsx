@@ -1,5 +1,5 @@
 import type { Artist } from "@musex/core";
-import { listValidator } from "@musex/core";
+import { entityRefForArtist, listValidator } from "@musex/core";
 import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
@@ -103,7 +103,7 @@ export function ArtistsView() {
           <button
             type="button"
             className="acquiring-activity-link"
-            onClick={() => dispatch({ type: "navigate", view: { name: "acquiring" } })}
+            onClick={() => dispatch({ type: "navigate", view: { name: "activity" } })}
           >
             <ListChecks size={14} />
             View acquisition activity
@@ -126,7 +126,12 @@ export function ArtistsView() {
                     round
                     state={cardState(artist.id)}
                     monitored={isWatched(artist.name)}
-                    onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                    onOpen={() =>
+                      dispatch({
+                        type: "navigate",
+                        view: { name: "artist", ref: entityRefForArtist(artist) },
+                      })
+                    }
                     onPlay={() => void playArtist(artist)}
                   />
                 ))}
@@ -151,7 +156,12 @@ export function ArtistsView() {
                 state={cardState(artist.id)}
                 monitored={isWatched(artist.name)}
                 dim={offline && !downloaded.has(artist.id)}
-                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: entityRefForArtist(artist) },
+                  })
+                }
                 onPlay={() => void playArtist(artist)}
               />
             ))}

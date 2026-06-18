@@ -1,20 +1,22 @@
+import type { EntityRef } from "@musex/core";
+import { entityRefForAlbum, entityRefForArtist } from "@musex/core";
 import { useApp } from "../../state/app";
+import { viewForEntity } from "../discovery/entity-target";
 
-/** Navigate to an artist/album page from the minimal fields a Track carries.
- *  Each returns undefined when the id is missing (caller renders plain text /
- *  disabled instead). */
+/** Navigate to an entity's page via core `resolveEntity`. `goRef` takes a core
+ *  `EntityRef`; `goArtist`/`goAlbum` are convenience wrappers building an owned
+ *  Plex ref from the minimal fields a Track carries (each is a no-op when the
+ *  required id is missing — caller renders plain text / disabled instead). */
 export function useEntityNav() {
   const { dispatch } = useApp();
 
+  function goRef(ref: EntityRef): void {
+    dispatch({ type: "navigate", view: viewForEntity(ref) });
+  }
+
   function goArtist(t: { artistId: string; serverId: string; artistName: string }): void {
     if (!t.artistId) return;
-    dispatch({
-      type: "navigate",
-      view: {
-        name: "artist",
-        artist: { id: t.artistId, serverId: t.serverId, name: t.artistName },
-      },
-    });
+    goRef(entityRefForArtist({ id: t.artistId, serverId: t.serverId, name: t.artistName }));
   }
 
   function goAlbum(t: {
@@ -25,20 +27,16 @@ export function useEntityNav() {
     thumb?: string;
   }): void {
     if (!t.albumId) return;
-    dispatch({
-      type: "navigate",
-      view: {
-        name: "album",
-        album: {
-          id: t.albumId,
-          serverId: t.serverId,
-          artistId: t.artistId,
-          title: t.albumTitle ?? "",
-          thumb: t.thumb,
-        },
-      },
-    });
+    goRef(
+      entityRefForAlbum({
+        id: t.albumId,
+        serverId: t.serverId,
+        artistId: t.artistId,
+        title: t.albumTitle ?? "",
+        thumb: t.thumb,
+      }),
+    );
   }
 
-  return { goArtist, goAlbum };
+  return { goRef, goArtist, goAlbum };
 }

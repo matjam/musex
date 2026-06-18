@@ -1,3 +1,4 @@
+import { entityRefForArtist } from "@musex/core";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { SectionDto, SectionItemDto } from "../../../shared/ipc-contract";
@@ -39,7 +40,7 @@ export function PluginSections({ sections }: { sections: SectionDto[] }) {
         type: "navigate",
         view: {
           name: "artist",
-          artist: { id: item.artistId, serverId: item.serverId, name: item.name },
+          ref: entityRefForArtist({ id: item.artistId, serverId: item.serverId, name: item.name }),
         },
       });
     } else if (acquisitionAvailable) {

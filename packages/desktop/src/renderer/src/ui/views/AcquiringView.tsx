@@ -1,3 +1,4 @@
+import { externalArtistRef } from "@musex/core";
 import { BellRing, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { AcquisitionStatusDto, ExpansionStateDto } from "../../../../shared/ipc-contract";
@@ -68,9 +69,7 @@ function ExpansionsFeed({
                   {e.albumTitle}
                   <span className="dl-row-artist">
                     {" — "}
-                    <EntityLink entity={{ kind: "artist", name: e.artistName, hasProvider: true }}>
-                      {e.artistName}
-                    </EntityLink>
+                    <EntityLink entity={externalArtistRef(e.artistName)}>{e.artistName}</EntityLink>
                   </span>
                   {e.deepening && <span className="expansion-deepening"> · deepening</span>}
                 </div>
@@ -189,9 +188,7 @@ export function AcquiringView() {
                   {row.title}
                   <span className="dl-row-artist">
                     {" — "}
-                    <EntityLink
-                      entity={{ kind: "artist", name: row.artistName, hasProvider: true }}
-                    >
+                    <EntityLink entity={externalArtistRef(row.artistName)}>
                       {row.artistName}
                     </EntityLink>
                   </span>

@@ -1,4 +1,5 @@
-import type { Album, Artist, Track } from "@musex/core";
+import type { Track } from "@musex/core";
+import { entityRefForAlbum, entityRefForArtist } from "@musex/core";
 import { describe, expect, it } from "vitest";
 import type { View } from "../../state/app";
 import { derivePanelFocus } from "./panel-focus";
@@ -14,11 +15,21 @@ const track = (id: string): Track => ({
   media: { container: "flac", audioCodec: "flac", partId: "p", partKey: "/k" },
 });
 
-const artist: Artist = { id: "ar1", serverId: "s1", name: "The Artist", thumb: "/art.jpg" };
-const album: Album = { id: "al1", serverId: "s1", artistId: "ar1", title: "The Album" };
+const artistRef = entityRefForArtist({
+  id: "ar1",
+  serverId: "s1",
+  name: "The Artist",
+  thumb: "/art.jpg",
+});
+const albumRef = entityRefForAlbum({
+  id: "al1",
+  serverId: "s1",
+  artistId: "ar1",
+  title: "The Album",
+});
 const homeView: View = { name: "home" };
-const artistView: View = { name: "artist", artist };
-const albumView: View = { name: "album", album };
+const artistView: View = { name: "artist", ref: artistRef };
+const albumView: View = { name: "album", ref: albumRef };
 
 describe("derivePanelFocus", () => {
   it("override wins over everything else", () => {
@@ -62,7 +73,7 @@ describe("derivePanelFocus", () => {
     });
   });
 
-  it("album view → album payload", () => {
+  it("album view → album payload (derived from the ref)", () => {
     expect(
       derivePanelFocus({
         override: null,
@@ -70,7 +81,10 @@ describe("derivePanelFocus", () => {
         view: albumView,
         nowPlaying: track("np"),
       }),
-    ).toEqual({ kind: "album", album });
+    ).toEqual({
+      kind: "album",
+      album: { id: "al1", serverId: "s1", artistId: "", title: "The Album", thumb: undefined },
+    });
   });
 
   it("falls back to now-playing when view is neither artist nor album", () => {

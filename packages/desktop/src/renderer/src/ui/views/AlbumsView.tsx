@@ -1,5 +1,5 @@
 import type { Album, LibrarySort } from "@musex/core";
-import { listValidator } from "@musex/core";
+import { entityRefForAlbum, listValidator } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
@@ -105,7 +105,12 @@ export function AlbumsView() {
                 subtitle={album.year != null ? String(album.year) : undefined}
                 state={cardState(album.id)}
                 dim={offline && !downloaded.has(album.id)}
-                onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "album", ref: entityRefForAlbum(album) },
+                  })
+                }
                 onPlay={() => void playAlbum(album)}
               />
             ))}

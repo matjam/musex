@@ -21,12 +21,22 @@ export function derivePanelFocus(args: {
   if (view.name === "artist")
     return {
       kind: "artist",
-      artistName: view.artist.name,
-      artistId: view.artist.id,
-      serverId: view.artist.serverId,
-      thumb: view.artist.thumb,
+      artistName: view.ref.name,
+      artistId: view.ref.id,
+      serverId: view.ref.serverId,
+      thumb: view.ref.thumb,
     };
-  if (view.name === "album") return { kind: "album", album: view.album };
+  if (view.name === "album")
+    return {
+      kind: "album",
+      album: {
+        id: view.ref.id ?? "",
+        serverId: view.ref.serverId ?? "",
+        artistId: "",
+        title: view.ref.albumTitle ?? view.ref.name,
+        thumb: view.ref.thumb,
+      },
+    };
   if (nowPlaying) return { kind: "song", track: nowPlaying };
   return null;
 }

@@ -1,3 +1,5 @@
+import type { EntityRef } from "@musex/core";
+import { entityRefForAlbum } from "@musex/core";
 import { Bell, BellRing, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
@@ -18,7 +20,8 @@ type FetchState =
  *  providers and similar providers (last.fm). Owned albums navigate
  *  into the library; available ones get a hover Add (acquire) action;
  *  last.fm-only titles are shown dimmed as unavailable. */
-export function ExternalArtistView({ artistName }: { artistName: string }) {
+export function ExternalArtistView({ entity }: { entity: EntityRef }) {
+  const artistName = entity.name;
   const { dispatch, connectivity } = useApp();
   const offline = connectivity === "offline";
   const monitoring = useMonitoring();
@@ -58,13 +61,12 @@ export function ExternalArtistView({ artistName }: { artistName: string }) {
       type: "navigate",
       view: {
         name: "album",
-        album: {
+        ref: entityRefForAlbum({
           id: album.albumId,
           serverId: album.serverId,
           artistId: album.artistId ?? "",
           title: album.title,
-          thumb: undefined,
-        },
+        }),
       },
     });
   }

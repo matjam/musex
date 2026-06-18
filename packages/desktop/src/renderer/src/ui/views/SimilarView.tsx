@@ -1,6 +1,6 @@
+import { externalArtistRef } from "@musex/core";
 import { useEffect, useState } from "react";
 import type { SectionItemDto, SimilarGetArgs } from "../../../../shared/ipc-contract";
-import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
@@ -16,9 +16,8 @@ type FetchState =
  *  or play; unowned show an external badge and link out (or open the in-app
  *  external-artist discography when an acquisition provider is registered). */
 export function SimilarView({ target }: { target: SimilarGetArgs }) {
-  const { dispatch } = useApp();
   const { playTrackNext } = usePlayer();
-  const { goArtist, goAlbum } = useEntityNav();
+  const { goRef, goArtist, goAlbum } = useEntityNav();
   const acquisitionAvailable = useAcquisitionAvailable();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
@@ -56,8 +55,9 @@ export function SimilarView({ target }: { target: SimilarGetArgs }) {
       return;
     }
     if (target.kind === "artist" && acquisitionAvailable) {
-      // External artist + acquisition provider registered → in-app discography.
-      dispatch({ type: "navigate", view: { name: "external-artist", artistName: item.name } });
+      // External artist + acquisition provider registered → the unified artist
+      // page (external ref). Batch 3 merges owned/external into one ArtistView.
+      goRef(externalArtistRef(item.name));
       return;
     }
     if (item.externalUrl) void window.musex.openExternal(item.externalUrl);

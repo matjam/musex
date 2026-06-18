@@ -1,5 +1,11 @@
-import type { Album, LocalPresence, Track } from "@musex/core";
-import { downloadRecordFor, listValidator, trackAvailability } from "@musex/core";
+import type { Album, EntityRef, LocalPresence, Track } from "@musex/core";
+import {
+  downloadRecordFor,
+  entityRefForArtist,
+  externalArtistRef,
+  listValidator,
+  trackAvailability,
+} from "@musex/core";
 import { Download, ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
@@ -25,10 +31,21 @@ type FetchState =
   | { status: "ok"; tracks: Track[] };
 
 interface Props {
-  album: Album;
+  /** Owned (Plex) entity ref for the album. Batch-2 prop-adapter: the view
+   *  keeps its existing internals by deriving the old `Album` object from the
+   *  ref (owned refs carry id/serverId/title/thumb; artistId/year come from the
+   *  fetched tracks). Batch 3 extends this into the unified AlbumView. */
+  entity: EntityRef;
 }
 
-export function AlbumDetailView({ album }: Props) {
+export function AlbumDetailView({ entity }: Props) {
+  const album: Album = {
+    id: entity.id ?? "",
+    serverId: entity.serverId ?? "",
+    artistId: "",
+    title: entity.albumTitle ?? entity.name,
+    thumb: entity.thumb,
+  };
   const { library, connectivity, dispatch } = useApp();
   const { state, playTracks, playTracksShuffled, playTrackNext, enqueueNext, enqueueEnd } =
     usePlayer();
@@ -142,7 +159,7 @@ export function AlbumDetailView({ album }: Props) {
         type: "navigate",
         view: {
           name: "artist",
-          artist: { id: t.artistId, serverId: t.serverId, name: t.artistName },
+          ref: entityRefForArtist({ id: t.artistId, serverId: t.serverId, name: t.artistName }),
         },
       });
     } else {
@@ -176,12 +193,15 @@ export function AlbumDetailView({ album }: Props) {
                 {tracks[0] && tracks[0].artistName !== "" && (
                   <>
                     <EntityLink
-                      entity={{
-                        kind: "artist",
-                        name: tracks[0].artistName,
-                        artistId: album.artistId || undefined,
-                        serverId: album.serverId,
-                      }}
+                      entity={
+                        tracks[0].artistId
+                          ? entityRefForArtist({
+                              id: tracks[0].artistId,
+                              serverId: tracks[0].serverId,
+                              name: tracks[0].artistName,
+                            })
+                          : externalArtistRef(tracks[0].artistName)
+                      }
                     >
                       {tracks[0].artistName}
                     </EntityLink>

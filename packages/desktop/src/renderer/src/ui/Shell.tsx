@@ -102,9 +102,16 @@ export function Shell() {
       case "artists":
         return <ArtistsView />;
       case "artist":
-        return <ArtistDetailView artist={view.artist} />;
+        // Temporary Batch-2 prop-adapter: route external refs to the existing
+        // ExternalArtistView, owned refs to ArtistDetailView. Batch 3 merges
+        // these into one unified ArtistView keyed on the ref.
+        return view.ref.source === "external" ? (
+          <ExternalArtistView entity={view.ref} />
+        ) : (
+          <ArtistDetailView entity={view.ref} />
+        );
       case "album":
-        return <AlbumDetailView album={view.album} />;
+        return <AlbumDetailView entity={view.ref} />;
       case "albums":
         return <AlbumsView />;
       case "search":
@@ -121,16 +128,15 @@ export function Shell() {
         return <PlaylistView playlist={view.playlist} />;
       case "smart":
         return <SmartPlaylistView kind={view.kind} />;
-      case "external-artist":
-        return <ExternalArtistView artistName={view.artistName} />;
       case "similar":
         return <SimilarView target={view.target} />;
       case "on-device":
         return <OnDeviceView />;
-      case "acquiring":
-        // The acquisition activity feed — reachable via the "Acquiring" filter
-        // in Albums/Artists (the "View acquisition activity" link), not a
-        // sidebar slot.
+      case "activity":
+        // The acquisition activity feed — reachable via the "Watching" filter
+        // in Artists (the "View acquisition activity" link), not a sidebar slot.
+        // (Renamed view: external-artist folded into the unified artist view;
+        // acquiring → activity. The AcquiringView component rename is Batch 4.)
         return <AcquiringView />;
     }
   }

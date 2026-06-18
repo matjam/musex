@@ -1,5 +1,5 @@
-import type { Album, Artist, Track } from "@musex/core";
-import { listValidator } from "@musex/core";
+import type { Album, Artist, EntityRef, Track } from "@musex/core";
+import { entityRefForAlbum, listValidator } from "@musex/core";
 import { Download, ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
@@ -21,10 +21,20 @@ type FetchState =
   | { status: "ok"; albums: Album[] };
 
 interface Props {
-  artist: Artist;
+  /** Owned (Plex) entity ref for the artist. Batch-2 prop-adapter: the view
+   *  keeps its existing internals by deriving the old `Artist` object from the
+   *  ref (owned refs carry id/serverId/name/thumb). Batch 3 merges this with
+   *  ExternalArtistView into one unified ArtistView. */
+  entity: EntityRef;
 }
 
-export function ArtistDetailView({ artist }: Props) {
+export function ArtistDetailView({ entity }: Props) {
+  const artist: Artist = {
+    id: entity.id ?? "",
+    serverId: entity.serverId ?? "",
+    name: entity.name,
+    thumb: entity.thumb,
+  };
   const { library, dispatch, connectivity } = useApp();
   const offline = connectivity === "offline";
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
@@ -240,7 +250,12 @@ export function ArtistDetailView({ artist }: Props) {
                 type="button"
                 key={album.id}
                 className="grid-card"
-                onClick={() => dispatch({ type: "navigate", view: { name: "album", album } })}
+                onClick={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "album", ref: entityRefForAlbum(album) },
+                  })
+                }
               >
                 <AlbumArt
                   thumb={album.thumb}
