@@ -26,6 +26,11 @@ export class TasteService {
     this.scheduleSave();
   }
 
+  recordTrackRating(t: { title: string; artistName: string }, rating10: number | null): void {
+    this.profile.recordTrackRating(t, rating10);
+    this.scheduleSave();
+  }
+
   snapshot(): TasteSnapshot {
     return {
       topArtists: this.profile.topArtists(),

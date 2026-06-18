@@ -152,6 +152,17 @@ export class PlexGatewayImpl implements PlexGateway {
     return res.json();
   }
 
+  /** A non-GET authenticated Plex request. Returns the Response (callers that
+   *  need a body call res.json()); most mutations ignore it. */
+  private async send(url: string, method: string, token: string): Promise<Response> {
+    const res = await this.fetchFn(url, {
+      method,
+      headers: plexHeaders(this.clientId, { "X-Plex-Token": token }),
+    });
+    this.assertOk(res);
+    return res;
+  }
+
   private assertOk(res: Response): void {
     if (res.status === 401) throw new PlexAuthError();
     if (!res.ok) throw new Error(`Plex request failed: ${res.status}`);
@@ -159,8 +170,17 @@ export class PlexGatewayImpl implements PlexGateway {
 
   // --- not implemented in Phase 1 (search/playlists/ratings are later phases) ---
 
-  search(): Promise<SearchResults> {
-    throw new Error("search not implemented in Phase 1");
+  async search(library: Library, query: string, token: string): Promise<SearchResults> {
+    const base = this.requireBase(library.serverId);
+    const q = encodeURIComponent(query);
+    const hit = (type: number) =>
+      this.getJson(`${base}/library/sections/${library.id}/search?type=${type}&query=${q}`, token);
+    const [a, al, t] = await Promise.all([hit(8), hit(9), hit(10)]);
+    return {
+      artists: parseArtists(a, library.serverId),
+      albums: parseAlbums(al, library.serverId),
+      tracks: parseTracks(t, library.serverId),
+    };
   }
   async listPlaylists(library: Library, token: string): Promise<Playlist[]> {
     const base = this.requireBase(library.serverId);
@@ -177,20 +197,68 @@ export class PlexGatewayImpl implements PlexGateway {
     const json = await this.getJson(`${base}/playlists/${playlistId}/items`, token);
     return parsePlaylistTracks(json, serverId);
   }
-  createPlaylist(): Promise<never> {
-    throw new Error("playlists not implemented in Phase 1");
+  async createPlaylist(
+    library: Library,
+    title: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<Playlist> {
+    const base = this.requireBase(library.serverId);
+    const uri = `server://${library.serverId}/com.plexapp.plugins.library/library/metadata/${trackIds.join(",")}`;
+    const res = await this.send(
+      `${base}/playlists?type=audio&smart=0&title=${encodeURIComponent(title)}&uri=${encodeURIComponent(uri)}`,
+      "POST",
+      token,
+    );
+    const pl = parsePlaylists(await res.json(), library.serverId)[0];
+    if (!pl) throw new Error("createPlaylist: server returned no playlist");
+    return pl;
   }
-  addToPlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async addToPlaylist(
+    playlistId: string,
+    serverId: string,
+    trackIds: string[],
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    const uri = `server://${serverId}/com.plexapp.plugins.library/library/metadata/${trackIds.join(",")}`;
+    await this.send(
+      `${base}/playlists/${playlistId}/items?uri=${encodeURIComponent(uri)}`,
+      "PUT",
+      token,
+    );
   }
-  removeFromPlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async removeFromPlaylist(
+    playlistId: string,
+    serverId: string,
+    playlistItemIds: string[],
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    for (const itemId of playlistItemIds) {
+      await this.send(`${base}/playlists/${playlistId}/items/${itemId}`, "DELETE", token);
+    }
   }
-  renamePlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async renamePlaylist(
+    playlistId: string,
+    serverId: string,
+    title: string,
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    await this.send(
+      `${base}/playlists/${playlistId}?title=${encodeURIComponent(title)}`,
+      "PUT",
+      token,
+    );
   }
-  deletePlaylist(): Promise<void> {
-    throw new Error("playlists not implemented in Phase 1");
+
+  async deletePlaylist(playlistId: string, serverId: string, token: string): Promise<void> {
+    const base = this.requireBase(serverId);
+    await this.send(`${base}/playlists/${playlistId}`, "DELETE", token);
   }
   async listAllAlbums(library: Library, sort: LibrarySort, token: string): Promise<Album[]> {
     const base = this.requireBase(library.serverId);
@@ -210,6 +278,15 @@ export class PlexGatewayImpl implements PlexGateway {
     return parseTracks(json, library.serverId);
   }
 
+  /** Fetch a single Artist by its Plex ratingKey. Mobile-only — feeds the
+   *  artist header on the albums screen. Returns null if the item is not found
+   *  or the response is malformed. */
+  async getArtist(library: Library, artistId: string, token: string): Promise<Artist | null> {
+    const base = this.requireBase(library.serverId);
+    const json = await this.getJson(`${base}/library/metadata/${artistId}`, token);
+    return parseArtists(json, library.serverId)[0] ?? null;
+  }
+
   /** All tracks for an artist (Plex allLeaves). Mobile-only — feeds the Artist
    *  action bar; not part of the core PlexGateway port. */
   async listArtistTracks(artistId: string, library: Library, token: string): Promise<Track[]> {
@@ -220,11 +297,32 @@ export class PlexGatewayImpl implements PlexGateway {
   listAllTracksPage(): Promise<{ items: Track[]; total: number }> {
     throw new Error("listAllTracksPage not implemented in Phase 1");
   }
-  rateItem(): Promise<void> {
-    throw new Error("rateItem not implemented in Phase 1");
+  async rateItem(
+    serverId: string,
+    itemId: string,
+    rating: number | null,
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    const r = rating ?? -1; // Plex unsets a rating with -1
+    await this.send(
+      `${base}/:/rate?key=${encodeURIComponent(itemId)}&identifier=com.plexapp.plugins.library&rating=${r}`,
+      "PUT",
+      token,
+    );
   }
-  getUserRating(): Promise<number | null> {
-    throw new Error("getUserRating not implemented in Phase 1");
+
+  async getUserRating(serverId: string, itemId: string, token: string): Promise<number | null> {
+    const base = this.requireBase(serverId);
+    const json = await this.getJson(`${base}/library/metadata/${itemId}`, token);
+    const container =
+      ((json as Record<string, unknown>)?.MediaContainer as Record<string, unknown>) ?? {};
+    const meta = (Array.isArray(container.Metadata) ? container.Metadata[0] : null) as Record<
+      string,
+      unknown
+    > | null;
+    const rating = typeof meta?.userRating === "number" ? meta.userRating : null;
+    return rating;
   }
 }
 
