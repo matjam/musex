@@ -1,7 +1,7 @@
 import type { Track } from "@musex/core";
 import { useRouter } from "expo-router";
 import { Disc3, ListEnd, ListPlus, ListStart, Mic, Trash2 } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { artUrl } from "../logic/art-url";
 import { useStore } from "../state/store";
@@ -28,6 +28,10 @@ export function TrackActionSheet({
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(track?.userRating ?? null);
+
+  useEffect(() => {
+    setRating(track?.userRating ?? null);
+  }, [track]);
 
   if (!track) return null;
   const base = artBaseFor(track.serverId);

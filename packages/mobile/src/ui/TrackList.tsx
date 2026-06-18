@@ -14,14 +14,40 @@ export function TrackList({
   session,
   artBaseFor,
   token,
+  playlistId,
+  playlistItemIds,
+  onTracksChanged,
 }: {
   title: string;
   tracks: Track[];
   session: PlaybackSession;
   artBaseFor: (serverId: string) => string | null;
   token: string | null;
+  /** Present when rendering a playlist — enables "Remove from this playlist". */
+  playlistId?: string;
+  /** Parallel to `tracks`: `playlistItemIds[i]` is the Plex playlistItemID for row `i`. */
+  playlistItemIds?: string[];
+  /** Called after a successful track removal so the parent can refetch. */
+  onTracksChanged?: () => void;
 }) {
   const [sheetTrack, setSheetTrack] = useState<Track | null>(null);
+  const [sheetIndex, setSheetIndex] = useState<number | null>(null);
+
+  const openSheet = (item: Track, index: number) => {
+    setSheetTrack(item);
+    setSheetIndex(index);
+  };
+
+  const closeSheet = () => {
+    setSheetTrack(null);
+    setSheetIndex(null);
+  };
+
+  const playlistItemId =
+    sheetIndex !== null ? (playlistItemIds?.[sheetIndex] ?? undefined) : undefined;
+  const resolvedPlaylistContext =
+    playlistId && playlistItemId ? { playlistId, playlistItemId } : undefined;
+
   return (
     <>
       <FlatList
@@ -52,7 +78,7 @@ export function TrackList({
           return (
             <Pressable
               onPress={() => void session.loadQueue(buildQueue(tracks, index))}
-              onLongPress={() => setSheetTrack(item)}
+              onLongPress={() => openSheet(item, index)}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -74,7 +100,7 @@ export function TrackList({
                   </Text>
                 ) : null}
               </View>
-              <Pressable hitSlop={8} onPress={() => setSheetTrack(item)} style={{ padding: 6 }}>
+              <Pressable hitSlop={8} onPress={() => openSheet(item, index)} style={{ padding: 6 }}>
                 <EllipsisVertical color={theme.textDim} size={20} />
               </Pressable>
             </Pressable>
@@ -84,7 +110,9 @@ export function TrackList({
       <TrackActionSheet
         track={sheetTrack}
         visible={sheetTrack !== null}
-        onClose={() => setSheetTrack(null)}
+        onClose={closeSheet}
+        playlistContext={resolvedPlaylistContext}
+        onRemovedFromPlaylist={resolvedPlaylistContext ? onTracksChanged : undefined}
       />
     </>
   );
