@@ -1,4 +1,4 @@
-import type { LastfmError, LastfmFetch } from "@musex/core";
+import type { LastfmFetch } from "@musex/core";
 import { LastfmClient } from "@musex/core";
 import type { LastfmConfig } from "../adapters/lastfm-store";
 import { md5Hasher } from "./md5";
@@ -201,5 +201,3 @@ export class LastfmService {
     }
   }
 }
-
-export type { LastfmError };

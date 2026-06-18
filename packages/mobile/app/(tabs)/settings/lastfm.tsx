@@ -12,6 +12,12 @@ export default function LastfmSettings() {
   const [apiKey, setApiKey] = useState(cfg.apiKey);
   const [secret, setSecret] = useState("");
   const [connecting, setConnecting] = useState(false);
+  // Mirror of the displayed connection status/username — updated after connect/disconnect
+  // so the row reflects the new state without waiting for a re-render from the store.
+  const [connectionStatus, setConnectionStatus] = useState({
+    connection: cfg.connection,
+    username: cfg.username,
+  });
 
   // Sync local apiKey state if cfg changes (e.g. on first load).
   useEffect(() => {
@@ -33,6 +39,8 @@ export default function LastfmSettings() {
       await setLastfmConfig({ ...cfg, apiKey: apiKey.trim() });
       await setLastfmSecret(secret.trim());
       const result = await connectLastfm();
+      const fresh = getLastfmConfig();
+      setConnectionStatus({ connection: fresh.connection, username: fresh.username });
       Alert.alert("Last.fm", result.message);
     } finally {
       setConnecting(false);
@@ -41,9 +49,11 @@ export default function LastfmSettings() {
 
   async function handleDisconnect() {
     await disconnectLastfm();
+    const fresh = getLastfmConfig();
+    setConnectionStatus({ connection: fresh.connection, username: fresh.username });
   }
 
-  const isConnected = Boolean(cfg.username);
+  const isConnected = Boolean(connectionStatus.username);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -71,10 +81,10 @@ export default function LastfmSettings() {
           borderColor: theme.border,
         }}
       >
-        <Text style={{ color: theme.text, fontSize: 15 }}>{cfg.connection}</Text>
-        {cfg.username ? (
+        <Text style={{ color: theme.text, fontSize: 15 }}>{connectionStatus.connection}</Text>
+        {connectionStatus.username ? (
           <Text style={{ color: theme.textDim, fontSize: 13, marginTop: 2 }}>
-            Signed in as {cfg.username}
+            Signed in as {connectionStatus.username}
           </Text>
         ) : null}
       </View>

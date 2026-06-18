@@ -324,8 +324,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Mirror session state into the reducer + push lock-screen metadata on track change.
   const lastTrackId = useRef<string | null>(null);
-  // Refs for scrobble timing: prev track + when the current track started.
-  const prevTrackRef = useRef<Track | undefined>(undefined);
+  // Ref for scrobble timing: when the current track started.
   const startedAtRef = useRef<number>(Date.now());
   useEffect(
     () =>
@@ -348,7 +347,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (cur && cur.id !== lastTrackId.current) {
           lastTrackId.current = cur.id;
           startedAtRef.current = Date.now();
-          prevTrackRef.current = cur;
           const tok = tokenRef.current;
           const base = tok ? safeBaseUrl(gateway, cur.serverId) : null;
           engine.setNowPlaying({
