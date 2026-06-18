@@ -28,11 +28,7 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@25.9.2)(vite@7.3.5(@types/node@25.9.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
 
-  packages/core:
-    devDependencies:
-      '@types/node':
-        specifier: ^25.9.2
-        version: 25.9.2
+  packages/core: {}
 
   packages/desktop:
     dependencies:

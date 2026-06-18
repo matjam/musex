@@ -4,6 +4,5 @@
     "rootDir": "./src",
     "lib": ["ES2022"]
   },
-  "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src/**/*"]
 }
