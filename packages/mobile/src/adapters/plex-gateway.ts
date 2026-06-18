@@ -152,6 +152,17 @@ export class PlexGatewayImpl implements PlexGateway {
     return res.json();
   }
 
+  /** A non-GET authenticated Plex request. Returns the Response (callers that
+   *  need a body call res.json()); most mutations ignore it. */
+  private async send(url: string, method: string, token: string): Promise<Response> {
+    const res = await this.fetchFn(url, {
+      method,
+      headers: plexHeaders(this.clientId, { "X-Plex-Token": token }),
+    });
+    this.assertOk(res);
+    return res;
+  }
+
   private assertOk(res: Response): void {
     if (res.status === 401) throw new PlexAuthError();
     if (!res.ok) throw new Error(`Plex request failed: ${res.status}`);
@@ -220,11 +231,32 @@ export class PlexGatewayImpl implements PlexGateway {
   listAllTracksPage(): Promise<{ items: Track[]; total: number }> {
     throw new Error("listAllTracksPage not implemented in Phase 1");
   }
-  rateItem(): Promise<void> {
-    throw new Error("rateItem not implemented in Phase 1");
+  async rateItem(
+    serverId: string,
+    itemId: string,
+    rating: number | null,
+    token: string,
+  ): Promise<void> {
+    const base = this.requireBase(serverId);
+    const r = rating ?? -1; // Plex unsets a rating with -1
+    await this.send(
+      `${base}/:/rate?key=${encodeURIComponent(itemId)}&identifier=com.plexapp.plugins.library&rating=${r}`,
+      "PUT",
+      token,
+    );
   }
-  getUserRating(): Promise<number | null> {
-    throw new Error("getUserRating not implemented in Phase 1");
+
+  async getUserRating(serverId: string, itemId: string, token: string): Promise<number | null> {
+    const base = this.requireBase(serverId);
+    const json = await this.getJson(`${base}/library/metadata/${itemId}`, token);
+    const container =
+      ((json as Record<string, unknown>)?.MediaContainer as Record<string, unknown>) ?? {};
+    const meta = (Array.isArray(container.Metadata) ? container.Metadata[0] : null) as Record<
+      string,
+      unknown
+    > | null;
+    const rating = typeof meta?.userRating === "number" ? meta.userRating : null;
+    return rating;
   }
 }
 

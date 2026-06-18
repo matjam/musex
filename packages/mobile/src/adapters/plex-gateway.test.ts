@@ -171,3 +171,48 @@ describe("PlexGatewayImpl", () => {
     expect(urls.some((u) => u.includes("/playlists/55/items"))).toBe(true);
   });
 });
+
+describe("rateItem", () => {
+  it("PUTs /:/rate with key + rating", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({}, 200));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    await gw.rateItem("srv", "123", 8, "TOK");
+    const last = fetchFn.mock.calls.at(-1) as unknown as [string, RequestInit];
+    const [url, init] = last;
+    expect(init.method).toBe("PUT");
+    expect(url).toContain("/:/rate");
+    expect(url).toContain("key=123");
+    expect(url).toContain("rating=8");
+    expect(url).toContain("identifier=com.plexapp.plugins.library");
+  });
+
+  it("sends rating=-1 to clear (null)", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({}, 200));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    await gw.rateItem("srv", "123", null, "TOK");
+    const lastUrl = String((fetchFn.mock.calls.at(-1) as unknown as unknown[])[0]);
+    expect(lastUrl).toContain("rating=-1");
+  });
+});
+
+describe("getUserRating", () => {
+  it("reads userRating off the item metadata", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ MediaContainer: { Metadata: [{ ratingKey: "123", userRating: 8 }] } }),
+    );
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    expect(await gw.getUserRating("srv", "123", "TOK")).toBe(8);
+  });
+
+  it("returns null when unrated", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ MediaContainer: { Metadata: [{ ratingKey: "123" }] } }),
+    );
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(server, "TOK");
+    expect(await gw.getUserRating("srv", "123", "TOK")).toBeNull();
+  });
+});
