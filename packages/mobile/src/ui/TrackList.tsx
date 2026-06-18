@@ -54,6 +54,7 @@ export function TrackList({
         style={{ flex: 1, backgroundColor: theme.bg }}
         data={tracks}
         keyExtractor={(t, i) => `${t.id}-${i}`}
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
             <Text

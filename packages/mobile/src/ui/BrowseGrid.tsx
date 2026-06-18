@@ -46,6 +46,7 @@ export function BrowseGrid() {
       data={cells}
       numColumns={2}
       keyExtractor={(c) => `${c.kind}:${c.key}`}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingHorizontal: 6 }}
       renderItem={({ item }) => (
         <Tile

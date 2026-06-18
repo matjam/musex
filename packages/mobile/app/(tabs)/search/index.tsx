@@ -65,6 +65,7 @@ export default function SearchScreen() {
         <FlatList
           data={res.tracks}
           keyExtractor={(t, i) => `${t.id}-${i}`}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View>
               {res.artists.length > 0 ? <Text style={hdr}>Artists</Text> : null}
