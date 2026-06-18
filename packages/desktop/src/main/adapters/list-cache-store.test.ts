@@ -46,4 +46,15 @@ describe("ListCacheStore", () => {
     await store.evictKey("k");
     expect(await store.get("k", "v")).toBeNull();
   });
+  it("getStale returns data regardless of the validator", async () => {
+    await store.set("k", "v1", [{ id: "a" }]);
+    expect(await store.getStale("k")).toEqual([{ id: "a" }]);
+    // also from disk (no in-memory tier)
+    const fresh = new ListCacheStore(dir, 3);
+    await fresh.init();
+    expect(await fresh.getStale("k")).toEqual([{ id: "a" }]);
+  });
+  it("getStale returns null when absent", async () => {
+    expect(await store.getStale("missing")).toBeNull();
+  });
 });
