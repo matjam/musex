@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { unzipSync } from "fflate";
 import {
   isSafeEntryName,
   isSafePluginId,
@@ -10,7 +9,8 @@ import {
   parseRepoUrl,
   parseSha256File,
   releaseAssetUrl,
-} from "../../logic/plugin-source.js";
+} from "@musex/core";
+import { unzipSync } from "fflate";
 import { HOST_API_VERSION } from "./plugin-host.js";
 
 export interface AvailablePlugin {

@@ -13,7 +13,7 @@ import type {
   Section,
   SimilarItem,
 } from "@musex/plugin-api";
-import type { ProviderHub } from "../providers/provider-hub.js";
+import type { ProviderHub } from "@musex/plugin-host";
 import { isLastfmError, LastfmClient } from "./client.js";
 
 const AUTH_URL = "https://www.last.fm/api/auth/";

@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { ProviderHub } from "../../providers/provider-hub.js";
+import type { ProviderHub } from "../provider-hub.js";
 import { type BridgeResult, installBridge } from "./bridge.js";
 import { SandboxContext } from "./quickjs-host.js";
 
@@ -303,7 +303,7 @@ describe("bridge", () => {
   it("events: hub dispatchEvent → guest event handler fires", async () => {
     const sc = await SandboxContext.create();
     // Use a real hub with real dispatchEvent for event tests
-    const { ProviderHub } = await import("../../providers/provider-hub.js");
+    const { ProviderHub } = await import("../provider-hub.js");
     const realHub = new ProviderHub();
     const deps = makeDeps(realHub);
     try {

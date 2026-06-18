@@ -13,7 +13,12 @@
  *     or explicit `.dispose()` calls; one leaked handle aborts on teardown.
  */
 
-import type { QuickJSContext, QuickJSHandle, QuickJSRuntime } from "quickjs-emscripten";
+import type {
+  QuickJSContext,
+  QuickJSHandle,
+  QuickJSRuntime,
+  QuickJSWASMModule,
+} from "quickjs-emscripten";
 import { getQuickJS, isFail } from "quickjs-emscripten";
 
 /**
@@ -51,8 +56,17 @@ export class SandboxContext {
 
   private constructor() {}
 
-  static async create(): Promise<SandboxContext> {
-    const QuickJS = await getQuickJS();
+  /**
+   * Create a sandbox context.
+   *
+   * @param mod  Optional QuickJS WASM module. Desktop omits it and gets the
+   *   default `getQuickJS()` (Node/Electron). Mobile passes a pre-instantiated
+   *   singlefile module (`newQuickJSWASMModuleFromVariant(...)`) so the WASM is
+   *   inlined for the WebView harness. Back-compatible: existing no-arg callers
+   *   are unchanged.
+   */
+  static async create(mod?: QuickJSWASMModule): Promise<SandboxContext> {
+    const QuickJS = mod ?? (await getQuickJS());
     const sc = new SandboxContext();
     sc.runtime = QuickJS.newRuntime();
     sc.ctx = sc.runtime.newContext();

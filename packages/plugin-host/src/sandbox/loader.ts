@@ -1,5 +1,11 @@
+/// <reference types="node" />
 /**
  * loadSandboxedPlugin — loads and activates a user plugin in a QuickJS sandbox.
+ *
+ * Node-coupled (reads the bundle from disk): this is the DESKTOP loader. Mobile
+ * loads plugin code through the WebView harness, not this module — hence the
+ * `node` types reference is scoped to this `/sandbox` file only (the package
+ * keeps `types: []` so the root export stays runtime-agnostic).
  *
  * Steps:
  *   1. Read the bundle source from <dir>/<manifest.entry>
@@ -14,29 +20,22 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PluginManifest } from "@musex/plugin-api";
-import type { PluginHostDeps } from "../plugin-host.js";
-import type { PluginSecrets, PluginStorage } from "../plugin-store.js";
-import { type BridgeResult, installBridge } from "./bridge.js";
+import { type BridgeDeps, type BridgeResult, installBridge } from "./bridge.js";
 import { SandboxContext } from "./quickjs-host.js";
 
-export interface SandboxDeps {
-  manifest: PluginManifest;
-  pluginId: string;
+/**
+ * Dependencies for the desktop (Node) sandbox loader. It reuses BridgeDeps'
+ * structural capability types (storage/secrets/library/hub/notifySink/...) so
+ * the loader stays decoupled from any desktop module — including `netFetch`,
+ * which the CALLER injects (desktop builds it from createNetClient). `dir` is
+ * the on-disk plugin directory whose `manifest.entry` bundle is read with Node
+ * fs. Mobile does NOT use this loader (it loads code through the WebView
+ * harness), so the Node imports here are desktop-only.
+ */
+export type SandboxDeps = BridgeDeps & {
+  /** On-disk directory containing the plugin bundle (`<dir>/<manifest.entry>`). */
   dir: string;
-  storage: PluginStorage;
-  secrets: PluginSecrets;
-  hub: PluginHostDeps["hub"];
-  notifySink: PluginHostDeps["notifySink"];
-  openExternal: PluginHostDeps["openExternal"];
-  library: PluginHostDeps["library"];
-  registerSettings: (schema: import("@musex/plugin-api").SettingField[]) => void;
-  onSettingsAction: (
-    key: string,
-    handler: () => Promise<import("@musex/plugin-api").SettingsActionResult>,
-  ) => void;
-  trackDisposable: (d: { dispose(): void }) => void;
-}
+};
 
 /**
  * Load and activate a user plugin in a QuickJS sandbox.
@@ -56,25 +55,12 @@ export async function loadSandboxedPlugin(deps: SandboxDeps): Promise<{ dispose(
     // 3. Install preamble
     sc.installPreamble();
 
-    // 4. Install bridge
+    // 4. Install bridge (netFetch is injected by the caller — the loader owns
+    //    no host transport).
     bridge = installBridge(sc, {
       manifest: deps.manifest,
       pluginId: deps.pluginId,
-      netFetch: async (url, init) => {
-        const { createNetClient } = await import("../net-client.js");
-        const client = createNetClient({ allowSelfSigned: init?.allowSelfSigned });
-        const res = await client(url, {
-          method: init?.method,
-          headers: init?.headers,
-          body: init?.body,
-        });
-        return {
-          ok: res.ok,
-          status: res.status,
-          headers: Object.fromEntries(res.headers),
-          body: await res.text(),
-        };
-      },
+      netFetch: deps.netFetch,
       storage: deps.storage,
       secrets: deps.secrets,
       library: deps.library,

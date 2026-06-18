@@ -15,33 +15,28 @@
  */
 
 import type {
-  AcquirableAlbum,
-  AcquisitionProvider,
-  AcquisitionStatusItem,
-  ExternalArtistResult,
   LibrarySearchResult,
   NetFetchInit,
   NetFetchResponse,
-  PluginEvents,
   PluginManifest,
-  RecommendContext,
-  RecommendedTrack,
-  Section,
-  SectionContext,
-  SectionProvider,
   SettingField,
   SettingsActionResult,
-  SimilarItem,
-  SimilarProvider,
-  TrackAction,
-  TrackDetailProvider,
   TrackInfo,
-  TrackRecommender,
 } from "@musex/plugin-api";
-import type { PluginNotification } from "../../../shared/ipc-contract.js";
-import type { ProviderHub } from "../../providers/provider-hub.js";
+import type { ProviderHub } from "../provider-hub.js";
+import { registerHubProxies } from "../register-proxies.js";
+import type { BridgeRegState } from "../types.js";
 import type { SandboxContext } from "./quickjs-host.js";
 import { fromGuest, toGuest } from "./quickjs-host.js";
+
+/** Structural shape of the host toast payload (mirrors desktop's
+ *  ipc-contract PluginNotification; inlined so the package stays free of any
+ *  desktop import). */
+export interface PluginNotification {
+  pluginId: string;
+  message: string;
+  level: "info" | "error";
+}
 
 export interface BridgeDeps {
   manifest: PluginManifest;
@@ -79,19 +74,7 @@ export interface BridgeResult {
   regState(): BridgeRegState;
 }
 
-export interface BridgeRegState {
-  acquisition: boolean;
-  /** Optional methods defined on the acquisition provider (e.g. "acquireArtist", "searchArtists"). */
-  acquisitionMethods: string[];
-  recommender: boolean;
-  settingsActions: string[];
-  similar: string[];
-  /** Map from section provider id → target ("discover" | "home") */
-  sections: Record<string, string>;
-  trackActions: string[];
-  trackDetail: string[];
-  eventHandlers: string[];
-}
+export type { BridgeRegState } from "../types.js";
 
 /**
  * installBridge sets up the guest-visible `ctx` object and the __invoke /
@@ -316,6 +299,11 @@ export function installBridge(sc: SandboxContext, deps: BridgeDeps): BridgeResul
           obj = __registry.settingsActions;
           const call = obj?.[method]?.();
           return Promise.resolve(call).then((r) => JSON.stringify(r === undefined ? null : r));
+        } else if (path === "__emit") {
+          // Reserved path: host->guest event dispatch routed through callGuest.
+          // method = event name; args[0] = the (already-parsed) payload.
+          globalThis.__emit(method, JSON.stringify(args[0]));
+          return Promise.resolve(JSON.stringify(null));
         }
         if (!obj) return Promise.resolve(JSON.stringify(null));
         const method_fn = obj[method];
@@ -354,18 +342,16 @@ export function installBridge(sc: SandboxContext, deps: BridgeDeps): BridgeResul
             Object.entries(__registry.sections).map(([id, v]) => [id, v.target])
           ),
           trackActions: Object.keys(__registry.trackActions),
+          trackActionMeta: Object.fromEntries(
+            Object.entries(__registry.trackActions).map(([id, a]) => {
+              const meta = { label: a.label };
+              if (a.icon !== undefined) meta.icon = a.icon;
+              return [id, meta];
+            })
+          ),
           trackDetail: Object.keys(__registry.trackDetail),
           eventHandlers: Object.keys(__registry.eventHandlers),
         });
-      };
-
-      // Read a track action's metadata (label + optional icon) for the hub proxy.
-      globalThis.__getTrackActionMeta = (id) => {
-        const a = __registry.trackActions[id];
-        if (!a) return JSON.stringify({ label: id });
-        const meta = { label: a.label };
-        if (a.icon !== undefined) meta.icon = a.icon;
-        return JSON.stringify(meta);
       };
     `),
     )
@@ -389,208 +375,22 @@ export function installBridge(sc: SandboxContext, deps: BridgeDeps): BridgeResul
     return JSON.parse(jsonOut as string);
   }
 
-  // ── Hub proxy helpers ─────────────────────────────────────────────────────
+  // ── Hub registration ──────────────────────────────────────────────────────
 
   const hubDisposables: { dispose(): void }[] = [];
 
-  function makeAcquisitionProxy(optMethods: Set<string>): AcquisitionProvider {
-    const proxy: AcquisitionProvider = {
-      id: deps.pluginId,
-      async lookupArtistAlbums(artistName) {
-        return callGuest("acquisition", "lookupArtistAlbums", artistName) as Promise<
-          AcquirableAlbum[]
-        >;
-      },
-      async acquireAlbum(providerRef) {
-        await callGuest("acquisition", "acquireAlbum", providerRef);
-      },
-      async status() {
-        return callGuest("acquisition", "status") as Promise<AcquisitionStatusItem[]>;
-      },
-    };
-    // Only include optional methods if the guest provider actually defined them.
-    if (optMethods.has("searchArtists")) {
-      proxy.searchArtists = async (term) => {
-        return callGuest("acquisition", "searchArtists", term) as Promise<ExternalArtistResult[]>;
-      };
-    }
-    if (optMethods.has("acquireArtist")) {
-      proxy.acquireArtist = async (providerRef) => {
-        await callGuest("acquisition", "acquireArtist", providerRef);
-      };
-    }
-    if (optMethods.has("cancelAlbum")) {
-      proxy.cancelAlbum = async (providerRef) => {
-        await callGuest("acquisition", "cancelAlbum", providerRef);
-      };
-    }
-    if (optMethods.has("watchNewReleases")) {
-      proxy.watchNewReleases = async (artistName, enabled) => {
-        await callGuest("acquisition", "watchNewReleases", artistName, enabled);
-      };
-    }
-    if (optMethods.has("isWatchingNewReleases")) {
-      proxy.isWatchingNewReleases = async (artistName) => {
-        return callGuest("acquisition", "isWatchingNewReleases", artistName) as Promise<boolean>;
-      };
-    }
-    if (optMethods.has("listWatchedArtists")) {
-      proxy.listWatchedArtists = async () => {
-        return callGuest("acquisition", "listWatchedArtists") as Promise<string[]>;
-      };
-    }
-    if (optMethods.has("listMonitoredArtists")) {
-      proxy.listMonitoredArtists = async () => {
-        return callGuest("acquisition", "listMonitoredArtists") as Promise<string[]>;
-      };
-    }
-    return proxy;
-  }
-
-  function makeRecommenderProxy(): TrackRecommender {
-    return {
-      id: deps.pluginId,
-      async recommend(context: RecommendContext) {
-        return callGuest("recommender", "recommend", context) as Promise<RecommendedTrack[]>;
-      },
-    };
-  }
-
-  function makeSimilarProxy(simId: string): SimilarProvider {
-    return {
-      id: simId,
-      async similarArtists(artistName) {
-        return callGuest(`similar:${simId}`, "similarArtists", artistName) as Promise<
-          SimilarItem[]
-        >;
-      },
-      async similarTracks(seed) {
-        return callGuest(`similar:${simId}`, "similarTracks", seed) as Promise<SimilarItem[]>;
-      },
-      async topAlbums(artistName) {
-        return callGuest(`similar:${simId}`, "topAlbums", artistName) as Promise<
-          { title: string }[]
-        >;
-      },
-      async artistInfo(artistName) {
-        return callGuest(`similar:${simId}`, "artistInfo", artistName) as Promise<
-          import("@musex/plugin-api").ArtistInfo | null
-        >;
-      },
-    };
-  }
-
-  function makeSectionProxy(secId: string): SectionProvider {
-    return {
-      id: secId,
-      async getSections(secCtx: SectionContext) {
-        return callGuest(`sections:${secId}`, "getSections", secCtx) as Promise<Section[]>;
-      },
-    };
-  }
-
-  function makeTrackActionProxy(actionId: string): TrackAction {
-    // Read the label + icon from the guest registry
-    let label = actionId;
-    let icon: string | undefined;
-    try {
-      const metaResult = ctx.evalCode(`__getTrackActionMeta(${JSON.stringify(actionId)})`);
-      if ("value" in metaResult) {
-        const metaJson = ctx.getString(metaResult.value);
-        metaResult.value.dispose();
-        const meta = JSON.parse(metaJson) as { label?: string; icon?: string };
-        if (meta.label) label = meta.label;
-        if (meta.icon) icon = meta.icon;
-      } else if ("error" in metaResult && metaResult.error !== undefined) {
-        metaResult.error.dispose();
-      }
-    } catch {
-      // fallback to id as label
-    }
-    const action: TrackAction = {
-      id: actionId,
-      label,
-      async onInvoke(track: TrackInfo) {
-        await callGuest(`trackAction:${actionId}`, "onInvoke", track);
-      },
-    };
-    if (icon !== undefined) action.icon = icon;
-    return action;
-  }
-
-  function makeTrackDetailProxy(detailId: string): TrackDetailProvider {
-    return {
-      id: detailId,
-      async getDetail(track: TrackInfo) {
-        return callGuest(`trackDetail:${detailId}`, "getDetail", track) as Promise<{
-          title: string;
-          rows: { label: string; value: string }[];
-        } | null>;
-      },
-    };
-  }
-
-  /** Called after activate() to register hub entries for what the guest registered. */
+  /** Called after activate() to register hub entries for what the guest
+   *  registered. The provider proxies + event subscriptions are built by the
+   *  shared, transport-agnostic registerHubProxies (driven by callGuest).
+   *  Settings actions are host-specific (they call deps.onSettingsAction, not
+   *  the hub) and are wired up here directly. */
   function registerHubEntries(): void {
     const state = currentRegState();
 
-    if (state.acquisition) {
-      hubDisposables.push(
-        deps.hub.registerAcquisitionProvider(
-          deps.pluginId,
-          makeAcquisitionProxy(new Set(state.acquisitionMethods)),
-        ),
-      );
-    }
+    registerHubProxies(deps.hub, deps.pluginId, state, callGuest, (d) => hubDisposables.push(d));
 
-    if (state.recommender) {
-      hubDisposables.push(deps.hub.registerTrackRecommender(deps.pluginId, makeRecommenderProxy()));
-    }
-
-    for (const simId of state.similar) {
-      hubDisposables.push(deps.hub.registerSimilarProvider(deps.pluginId, makeSimilarProxy(simId)));
-    }
-
-    for (const [secId, target] of Object.entries(state.sections)) {
-      hubDisposables.push(
-        deps.hub.contributeSections(
-          deps.pluginId,
-          target as "discover" | "home",
-          makeSectionProxy(secId),
-        ),
-      );
-    }
-
-    for (const actionId of state.trackActions) {
-      hubDisposables.push(
-        deps.hub.contributeTrackAction(deps.pluginId, makeTrackActionProxy(actionId)),
-      );
-    }
-
-    for (const detailId of state.trackDetail) {
-      hubDisposables.push(
-        deps.hub.contributeTrackDetail(deps.pluginId, makeTrackDetailProxy(detailId)),
-      );
-    }
-
-    // Event handlers: hub events that the guest registered for
-    for (const event of state.eventHandlers) {
-      const typedEvent = event as keyof PluginEvents;
-      hubDisposables.push(
-        deps.hub.onEvent(deps.pluginId, typedEvent, (payload) => {
-          // Fire and forget — emit to the guest asynchronously
-          void sc
-            .evalSettle(
-              `__emit(${JSON.stringify(event)}, ${JSON.stringify(JSON.stringify(payload))})`,
-            )
-            .catch((err) => {
-              console.error(`[plugin:${deps.pluginId}] __emit error:`, err);
-            });
-        }),
-      );
-    }
-
-    // Settings actions
+    // Settings actions — wired through the host's onSettingsAction sink, not
+    // the hub, so they stay outside registerHubProxies.
     for (const key of state.settingsActions) {
       deps.onSettingsAction(key, async () => {
         return callGuest("settingsAction", key) as Promise<SettingsActionResult>;

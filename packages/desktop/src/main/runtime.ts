@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { DownloadJob, Library, Pin, Track } from "@musex/core";
 import { dedupeJobs, isHttpUrl, reconcileRecords, TasteProfile } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
+import { ProviderHub } from "@musex/plugin-host";
 import { app, shell } from "electron";
 import { buildAf, replaygainMode } from "../logic/audio-filters.js";
 import { cacheKey } from "../logic/cache.js";
@@ -32,7 +33,6 @@ import { CORE_PLUGINS } from "./plugins/core-plugins.js";
 import { PlaybackMonitor } from "./plugins/playback-monitor.js";
 import { PluginHost } from "./plugins/plugin-host.js";
 import { PluginInstaller } from "./plugins/plugin-installer.js";
-import { ProviderHub } from "./providers/provider-hub.js";
 
 const ART_CACHE_MAX_BYTES = 1 * 1024 ** 3; // 1 GiB
 /** Taste profile writes are debounced: one persist ~5s after the last mutation. */

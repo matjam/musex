@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ProviderHub } from "@musex/plugin-host";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PluginNotification } from "../../shared/ipc-contract";
-import { ProviderHub } from "../providers/provider-hub";
 import { PluginHost, type PluginHostDeps } from "./plugin-host";
 
 let root: string;

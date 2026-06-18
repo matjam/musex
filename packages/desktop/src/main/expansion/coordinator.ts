@@ -12,8 +12,8 @@ import {
   planPicks,
   type SimilarNeighbor,
 } from "@musex/core";
+import type { ProviderHub } from "@musex/plugin-host";
 import { persistence } from "../adapters/persistence.js";
-import type { ProviderHub } from "../providers/provider-hub.js";
 
 /** Cycle cadence; the weekly budget is the real limiter, frequency just
  *  bounds how quickly stalls/landings are noticed. */

@@ -1,0 +1,19 @@
+{
+  "name": "@musex/plugin-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sandbox": "./src/sandbox/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@musex/core": "workspace:*",
+    "@musex/plugin-api": "workspace:*",
+    "quickjs-emscripten": "0.32.0"
+  }
+}
