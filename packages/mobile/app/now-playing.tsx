@@ -6,11 +6,13 @@ import {
   GripVertical,
   Pause,
   Play,
+  Radio,
   Repeat,
   Shuffle,
   SkipBack,
   SkipForward,
   Trash2,
+  X,
 } from "lucide-react-native";
 import { memo, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -79,7 +81,18 @@ const QueueRow = memo(function QueueRow({
 });
 
 export default function NowPlaying() {
-  const { state, session, gateway, taste, artBaseFor, token } = useStore();
+  const {
+    state,
+    session,
+    gateway,
+    taste,
+    artBaseFor,
+    token,
+    lastfm,
+    getLastfmConfig,
+    radio,
+    stopRadio,
+  } = useStore();
   const router = useRouter();
   const pb = state.playback;
   const queue = pb?.queue ?? null;
@@ -102,6 +115,14 @@ export default function NowPlaying() {
     try {
       await gateway.rateItem(current.serverId, current.id, r, token ?? "");
       taste.recordTrackRating({ title: current.title, artistName: current.artistName }, r);
+      if (getLastfmConfig().loveOnRating) {
+        const t = { artistName: current.artistName, title: current.title };
+        if (r !== null && r >= 8) {
+          void lastfm.love(t);
+        } else {
+          void lastfm.unlove(t);
+        }
+      }
     } catch {
       setRating(current.userRating ?? null); // revert on failure
     }
@@ -155,6 +176,27 @@ export default function NowPlaying() {
               <Text style={{ color: theme.textDim, fontSize: 15 }} numberOfLines={1}>
                 {current.artistName}
               </Text>
+              {radio.active ? (
+                <Pressable
+                  onPress={stopRadio}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    backgroundColor: "#1db95433",
+                    borderRadius: 12,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    marginTop: 8,
+                  }}
+                >
+                  <Radio color="#1db954" size={13} />
+                  <Text style={{ color: "#1db954", fontSize: 12, fontWeight: "600" }}>
+                    Radio · {radio.seedLabel}
+                  </Text>
+                  <X color="#1db954" size={13} />
+                </Pressable>
+              ) : null}
               <View style={{ marginTop: 10 }}>
                 <StarRating rating10={rating} onRate={(r) => void rate(r)} size={22} />
               </View>

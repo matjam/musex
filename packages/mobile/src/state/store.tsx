@@ -1,21 +1,27 @@
 import type { Library, PlaybackState, Server, Track } from "@musex/core";
 import {
+  advanceRadio,
   buildQueue,
   discoverMusicLibraries,
   PlaybackSession,
   PlayMonitor,
   pickDefaultLibrary,
   pickDefaultServer,
+  type RadioState,
+  radioKey,
+  shouldTopUp,
 } from "@musex/core";
 import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
 import {
@@ -140,6 +146,11 @@ interface Store {
   connectLastfm: () => Promise<{ ok: boolean; message: string }>;
   disconnectLastfm: () => Promise<void>;
   setLastfmSecret: (secret: string) => Promise<void>;
+  /** Radio snapshot for the UI (active + seed label). */
+  radio: { active: boolean; seedLabel: string };
+  /** Start radio seeded by an artist + optional track. Seeds the queue from last.fm recommendations. */
+  startRadio: (seed: { artist: string; title?: string; label: string }) => void;
+  stopRadio: () => void;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -227,8 +238,93 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return new PlaybackSession(engine, resolver);
   }, [engine, gateway]);
 
+  // Radio state: refs so the subscribe closure always sees the latest without
+  // causing re-renders on every position tick.
+  const radioStateRef = useRef<RadioState>({ active: false, emptyRounds: 0 });
+  const radioSeedRef = useRef<{ artist: string; title?: string; label: string } | null>(null);
+  const radioExcludeRef = useRef<Set<string>>(new Set());
+  const topUpInFlightRef = useRef(false);
+  // Snapshot for the UI: only updated when radio active/label changes.
+  const [radioSnapshot, setRadioSnapshot] = useState<{ active: boolean; seedLabel: string }>({
+    active: false,
+    seedLabel: "",
+  });
+
+  const syncRadioSnapshot = useCallback(() => {
+    setRadioSnapshot({
+      active: radioStateRef.current.active,
+      seedLabel: radioSeedRef.current?.label ?? "",
+    });
+  }, []);
+
+  const stopRadio = useCallback(() => {
+    radioStateRef.current = { active: false, emptyRounds: 0 };
+    radioSeedRef.current = null;
+    syncRadioSnapshot();
+  }, [syncRadioSnapshot]);
+
+  const doTopUp = useCallback(async () => {
+    if (topUpInFlightRef.current) return;
+    if (!radioStateRef.current.active) return;
+    const seed = radioSeedRef.current;
+    if (!seed) return;
+    const lib = state.library;
+    const tok = tokenRef.current;
+    if (!lib || !tok) return;
+
+    topUpInFlightRef.current = true;
+    try {
+      const candidates = await lastfm.recommend({ artist: seed.artist, title: seed.title }, 20);
+      const resolved: Track[] = [];
+      for (const c of candidates) {
+        const key = radioKey(c.artist, c.title || c.artist);
+        if (radioExcludeRef.current.has(key)) continue;
+        try {
+          const results = await gateway.search(lib, c.title ? c.title : c.artist, tok);
+          const match = results.tracks.find(
+            (t) => t.artistName.toLowerCase() === c.artist.toLowerCase(),
+          );
+          if (match) {
+            resolved.push(match);
+            radioExcludeRef.current.add(radioKey(match.artistName, match.title));
+            if (resolved.length >= 5) break;
+          }
+        } catch {
+          // search failure → skip
+        }
+      }
+      void session.enqueueEnd(resolved);
+      radioStateRef.current = advanceRadio(radioStateRef.current, resolved.length);
+      syncRadioSnapshot();
+    } finally {
+      topUpInFlightRef.current = false;
+    }
+  }, [state.library, lastfm, gateway, session, syncRadioSnapshot]);
+
+  const startRadio = useCallback(
+    (seed: { artist: string; title?: string; label: string }) => {
+      radioStateRef.current = { active: true, emptyRounds: 0 };
+      radioSeedRef.current = seed;
+      // Seed the exclude set with recent queue tracks (up to 50).
+      const q = session.getState().queue;
+      const exclude = new Set<string>();
+      if (q) {
+        const recent = q.tracks.slice(Math.max(0, q.tracks.length - 50));
+        for (const t of recent) exclude.add(radioKey(t.artistName, t.title));
+      }
+      radioExcludeRef.current = exclude;
+      syncRadioSnapshot();
+      // Trigger an immediate top-up.
+      void doTopUp();
+    },
+    [session, syncRadioSnapshot, doTopUp],
+  );
+
   // Mirror session state into the reducer + push lock-screen metadata on track change.
   const lastTrackId = useRef<string | null>(null);
+  // Refs for scrobble timing: prev track + when the current track started.
+  const prevTrackRef = useRef<Track | undefined>(undefined);
+  const startedAtRef = useRef<number>(Date.now());
   useEffect(
     () =>
       session.subscribe((s) => {
@@ -238,11 +334,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             { title: completed.title, artistName: completed.artistName },
             completed.kind,
           );
+          if (completed.kind === "full") {
+            void lastfm.scrobble(
+              { artistName: completed.artistName, title: completed.title },
+              startedAtRef.current,
+            );
+          }
         }
         dispatch({ type: "playback", state: s });
         const cur = s.queue ? s.queue.tracks[s.queue.index] : undefined;
         if (cur && cur.id !== lastTrackId.current) {
           lastTrackId.current = cur.id;
+          startedAtRef.current = Date.now();
+          prevTrackRef.current = cur;
           const tok = tokenRef.current;
           const base = tok ? safeBaseUrl(gateway, cur.serverId) : null;
           engine.setNowPlaying({
@@ -251,9 +355,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             album: cur.albumTitle,
             artwork: base && tok ? (artUrl(base, cur.thumb, tok) ?? undefined) : undefined,
           });
+          void lastfm.updateNowPlaying({
+            artistName: cur.artistName,
+            title: cur.title,
+            albumTitle: cur.albumTitle,
+            durationMs: cur.durationMs,
+          });
+        }
+        // Radio top-up: when active and up-next count is below the threshold.
+        if (radioStateRef.current.active && s.queue) {
+          const upNextCount = s.queue.tracks.length - s.queue.index - 1;
+          if (shouldTopUp(radioStateRef.current, upNextCount)) {
+            void doTopUp();
+          }
         }
       }),
-    [session, engine, gateway, taste, monitor],
+    [session, engine, gateway, taste, monitor, lastfm, doTopUp],
   );
 
   // Lock-screen / Control-Center next & previous -> queue navigation.
@@ -290,11 +407,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [engine, tokenStore, taste, completeSignIn]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
-  const playTracks = useMemo(
-    () => async (tracks: Track[], index: number) => {
+  // Starting a new collection stops radio.
+  const playTracks = useCallback(
+    async (tracks: Track[], index: number) => {
+      radioStateRef.current = { active: false, emptyRounds: 0 };
+      radioSeedRef.current = null;
+      syncRadioSnapshot();
       await session.loadQueue(buildQueue(tracks, index));
     },
-    [session],
+    [session, syncRadioSnapshot],
   );
 
   const selectLibrary = useMemo(
@@ -346,6 +467,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     connectLastfm: () => lastfm.connect(),
     disconnectLastfm: () => lastfm.disconnect(),
     setLastfmSecret: (secret) => saveSecret(secret),
+    radio: radioSnapshot,
+    startRadio,
+    stopRadio,
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

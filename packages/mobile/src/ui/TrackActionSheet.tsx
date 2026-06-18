@@ -1,6 +1,6 @@
 import type { Track } from "@musex/core";
 import { useRouter } from "expo-router";
-import { Disc3, ListEnd, ListPlus, ListStart, Mic, Trash2 } from "lucide-react-native";
+import { Disc3, ListEnd, ListPlus, ListStart, Mic, Radio, Trash2 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { artUrl } from "../logic/art-url";
@@ -24,7 +24,8 @@ export function TrackActionSheet({
   playlistContext?: { playlistId: string; playlistItemId: string };
   onRemovedFromPlaylist?: () => void;
 }) {
-  const { session, gateway, taste, token, artBaseFor } = useStore();
+  const { session, gateway, taste, token, artBaseFor, lastfm, getLastfmConfig, startRadio } =
+    useStore();
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(track?.userRating ?? null);
@@ -42,6 +43,14 @@ export function TrackActionSheet({
     try {
       await gateway.rateItem(track!.serverId, track!.id, r, token ?? "");
       taste.recordTrackRating({ title: track!.title, artistName: track!.artistName }, r);
+      if (getLastfmConfig().loveOnRating) {
+        const t = { artistName: track!.artistName, title: track!.title };
+        if (r !== null && r >= 8) {
+          void lastfm.love(t);
+        } else {
+          void lastfm.unlove(t);
+        }
+      }
     } catch {
       setRating(track!.userRating ?? null); // revert on failure
     }
@@ -158,6 +167,14 @@ export function TrackActionSheet({
           icon={<Disc3 color={theme.text} size={20} />}
           label="Go to album"
           onPress={() => go("/(tabs)/library/tracks", { albumId: track.albumId })}
+        />
+        <Row
+          icon={<Radio color={theme.accent} size={20} />}
+          label="Start radio"
+          onPress={() => {
+            startRadio({ artist: track.artistName, title: track.title, label: track.title });
+            onClose();
+          }}
         />
       </View>
       <AddToPlaylistSheet
