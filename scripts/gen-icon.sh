@@ -24,7 +24,10 @@ command -v magick >/dev/null || { echo "ImageMagick (magick) required" >&2; exit
 command -v iconutil >/dev/null || { echo "iconutil (macOS) required" >&2; exit 1; }
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-read -r W H < <(magick identify -format "%w %h" "$MASTER")
+# Command substitution (not `read`): `magick identify` emits no trailing
+# newline, which makes `read` return non-zero at EOF → `set -e` would abort.
+W="$(magick identify -format "%w" "$MASTER")"
+H="$(magick identify -format "%h" "$MASTER")"
 X=$((W - 1)); Y=$((H - 1))
 
 # Transparent-corner master: flood-fill the connected black corner regions to
