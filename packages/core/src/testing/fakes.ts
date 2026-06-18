@@ -9,6 +9,8 @@ import type {
   Server,
   Track,
 } from "../models/index";
+import type { FollowRecord, FollowStore } from "../ports/follow-store";
+import type { MonitorBackend } from "../ports/monitor-backend";
 import type { PlaybackEngine } from "../ports/playback-engine";
 import type { Pin, PlexGateway } from "../ports/plex-gateway";
 import { PlexAuthError } from "../ports/plex-gateway";
@@ -305,6 +307,48 @@ export class FakePlaybackEngine implements PlaybackEngine {
   }
   emitError(err: Error): void {
     this.errorCb?.(err);
+  }
+}
+
+export class FakeFollowStore implements FollowStore {
+  private readonly records = new Map<string, FollowRecord>();
+  initCalls = 0;
+
+  async init(): Promise<void> {
+    this.initCalls++;
+  }
+  async list(): Promise<FollowRecord[]> {
+    return [...this.records.values()];
+  }
+  async add(rec: FollowRecord): Promise<void> {
+    this.records.set(rec.key, rec);
+  }
+  async remove(key: string): Promise<void> {
+    this.records.delete(key);
+  }
+  async has(key: string): Promise<boolean> {
+    return this.records.has(key);
+  }
+}
+
+export class FakeMonitorBackend implements MonitorBackend {
+  private readonly followed = new Set<string>();
+  readonly followCalls: string[] = [];
+  readonly unfollowCalls: string[] = [];
+
+  async follow(artistName: string): Promise<void> {
+    this.followCalls.push(artistName);
+    this.followed.add(artistName);
+  }
+  async unfollow(artistName: string): Promise<void> {
+    this.unfollowCalls.push(artistName);
+    this.followed.delete(artistName);
+  }
+  async isFollowed(artistName: string): Promise<boolean> {
+    return this.followed.has(artistName);
+  }
+  async listFollowed(): Promise<string[]> {
+    return [...this.followed];
   }
 }
 

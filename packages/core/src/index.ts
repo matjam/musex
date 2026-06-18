@@ -2,6 +2,9 @@
 
 export type { CachingGatewayOpts } from "./adapters/caching-plex-gateway";
 export { CachingPlexGateway } from "./adapters/caching-plex-gateway";
+// Design
+export * from "./design/entity-state";
+export * from "./design/tokens";
 
 // Logic
 export * from "./logic/az-index";
@@ -10,7 +13,9 @@ export * from "./logic/discography-merge";
 export * from "./logic/download-lookup";
 export * from "./logic/download-plan";
 export * from "./logic/download-state";
+export * from "./logic/entity-ref";
 export * from "./logic/external-url";
+export * from "./logic/follow-service";
 export * from "./logic/for-you";
 export * from "./logic/format";
 export * from "./logic/genres";
@@ -34,6 +39,7 @@ export * from "./logic/smart-playlists";
 export * from "./logic/taste-expansion";
 export * from "./logic/taste-profile";
 export * from "./logic/transcode-url";
+export * from "./models/entity-ref";
 export type {
   Album,
   Artist,
@@ -53,8 +59,10 @@ export type { PlaybackState, PlaybackStatus } from "./playback/playback-session"
 // Playback
 export { PlaybackSession } from "./playback/playback-session";
 // Ports
+export type { FollowRecord, FollowStore } from "./ports/follow-store";
 export type { Hasher } from "./ports/hasher";
 export type { ListCache } from "./ports/list-cache";
+export type { MonitorBackend } from "./ports/monitor-backend";
 export type { PlaybackEngine } from "./ports/playback-engine";
 export type { Pin, PlexGateway } from "./ports/plex-gateway";
 export { OfflineUnavailable, PlexAuthError } from "./ports/plex-gateway";
