@@ -52,9 +52,7 @@ export class FollowService {
   }
 
   async listFollowed(kind: EntityKind): Promise<EntityRef[]> {
-    const local = (await this.store.list())
-      .filter((r) => r.kind === kind)
-      .map((r) => r.ref);
+    const local = (await this.store.list()).filter((r) => r.kind === kind).map((r) => r.ref);
     if (kind !== "artist" || !this.monitor) return local;
 
     const byKey = new Map<string, EntityRef>();

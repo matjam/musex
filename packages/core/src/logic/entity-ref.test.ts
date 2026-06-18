@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { Album, Artist } from "../models/index.js";
 import {
   entityRefForAlbum,
   entityRefForArtist,
   externalAlbumRef,
   externalArtistRef,
 } from "../models/entity-ref.js";
+import type { Album, Artist } from "../models/index.js";
 import { followKey, resolveEntity } from "./entity-ref.js";
 
 const ownedArtist: Artist = { id: "a1", serverId: "srv-1", name: "Radiohead" };
@@ -99,9 +99,10 @@ describe("resolveEntity", () => {
       playable: true,
       acquirable: false,
     });
-    expect(
-      resolveEntity(externalAlbumRef("OK Computer", "Radiohead")).affordances,
-    ).toMatchObject({ playable: false, acquirable: true });
+    expect(resolveEntity(externalAlbumRef("OK Computer", "Radiohead")).affordances).toMatchObject({
+      playable: false,
+      acquirable: true,
+    });
   });
 
   it("external track → not acquirable (Lidarr is album-level)", () => {

@@ -2,6 +2,9 @@
 
 export type { CachingGatewayOpts } from "./adapters/caching-plex-gateway";
 export { CachingPlexGateway } from "./adapters/caching-plex-gateway";
+// Design
+export * from "./design/entity-state";
+export * from "./design/tokens";
 
 // Logic
 export * from "./logic/az-index";
@@ -58,8 +61,8 @@ export { PlaybackSession } from "./playback/playback-session";
 // Ports
 export type { FollowRecord, FollowStore } from "./ports/follow-store";
 export type { Hasher } from "./ports/hasher";
-export type { MonitorBackend } from "./ports/monitor-backend";
 export type { ListCache } from "./ports/list-cache";
+export type { MonitorBackend } from "./ports/monitor-backend";
 export type { PlaybackEngine } from "./ports/playback-engine";
 export type { Pin, PlexGateway } from "./ports/plex-gateway";
 export { OfflineUnavailable, PlexAuthError } from "./ports/plex-gateway";
