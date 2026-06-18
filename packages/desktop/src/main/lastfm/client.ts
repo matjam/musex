@@ -1,64 +1,14 @@
-import { sign } from "./signing.js";
+import { createHash } from "node:crypto";
+import { LastfmClient as CoreLastfmClient } from "@musex/core";
 
-const API_URL = "https://ws.audioscrobbler.com/2.0/";
+const md5: (s: string) => string = (s) => createHash("md5").update(s, "utf8").digest("hex");
 
-/** A last.fm API-level error (`{ error, message }` body, HTTP 200 or 4xx). */
-export class LastfmError extends Error {
-  constructor(
-    readonly code: number,
-    detail: string,
-  ) {
-    super(`last.fm ${code}: ${detail}`);
-    this.name = "LastfmError";
-  }
-}
+export { isLastfmError, LastfmError } from "@musex/core";
 
-export function isLastfmError(e: unknown, code: number): boolean {
-  return e instanceof LastfmError && e.code === code;
-}
-
-/**
- * Minimal last.fm REST client. Calls are signed (`api_sig`) by default and
- * POSTed form-encoded with `format=json` appended AFTER signing (the signature
- * excludes `format`). Read methods (artist.getSimilar, track.getInfo, …) need
- * only `api_key` — pass `{ signed: false }` to skip the signature. No retries
- * anywhere — by design (scrobble guidance).
- */
-export class LastfmClient {
-  constructor(private readonly deps: { apiKey: string; secret: string; fetchFn: typeof fetch }) {}
-
-  async call<T>(
-    method: string,
-    params: Record<string, string>,
-    opts?: { sk?: string; signed?: boolean },
-  ): Promise<T> {
-    const baseParams: Record<string, string> = {
-      method,
-      api_key: this.deps.apiKey,
-      ...params,
-      ...(opts?.sk !== undefined ? { sk: opts.sk } : {}),
-    };
-    const body = new URLSearchParams(
-      opts?.signed === false
-        ? { ...baseParams, format: "json" }
-        : { ...baseParams, api_sig: sign(baseParams, this.deps.secret), format: "json" },
-    );
-    const res = await this.deps.fetchFn(API_URL, { method: "POST", body });
-    let json: unknown;
-    try {
-      json = await res.json();
-    } catch {
-      // Non-JSON body — surface the transport-level failure instead.
-      throw new Error(`last.fm HTTP ${res.status}: invalid response`);
-    }
-    const maybeError = json as { error?: unknown; message?: unknown };
-    if (typeof maybeError.error === "number") {
-      throw new LastfmError(
-        maybeError.error,
-        typeof maybeError.message === "string" ? maybeError.message : "unknown error",
-      );
-    }
-    if (!res.ok) throw new Error(`last.fm HTTP ${res.status}`);
-    return json as T;
+/** Desktop client: the core client with a node:crypto MD5 hasher injected, so
+ *  callers keep the {apiKey, secret, fetchFn} constructor shape. */
+export class LastfmClient extends CoreLastfmClient {
+  constructor(deps: { apiKey: string; secret: string; fetchFn: typeof fetch }) {
+    super({ ...deps, hasher: md5 });
   }
 }
