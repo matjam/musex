@@ -7,6 +7,7 @@ import {
   pickDefaultLibrary,
   pickDefaultServer,
 } from "@musex/core";
+import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
   type ReactNode,
@@ -17,12 +18,24 @@ import {
   useRef,
 } from "react";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
+import {
+  clearSession,
+  DEFAULT_LASTFM_CONFIG,
+  type LastfmConfig,
+  loadLastfmConfig,
+  loadSecret,
+  loadSessionKey,
+  saveLastfmConfig,
+  saveSecret,
+  saveSessionKey,
+} from "../adapters/lastfm-store";
 import { subscribeRemoteCommands } from "../adapters/lock-screen-commands";
 import { PlexGatewayImpl } from "../adapters/plex-gateway";
 import { loadSelectedLibrary, saveSelectedLibrary } from "../adapters/selected-library-store";
 import { PlexStreamResolver } from "../adapters/stream-resolver";
 import { SecureTokenStore } from "../adapters/token-store";
 import { CLIENT_ID } from "../config-client-id";
+import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
 import { TasteService } from "../taste/taste-service";
 
@@ -121,6 +134,12 @@ interface Store {
   completeSignIn: (token: string) => Promise<void>;
   selectLibrary: (library: Library) => Promise<void>;
   listAllLibraries: () => Promise<Library[]>;
+  lastfm: LastfmService;
+  getLastfmConfig: () => LastfmConfig;
+  setLastfmConfig: (cfg: LastfmConfig) => Promise<void>;
+  connectLastfm: () => Promise<{ ok: boolean; message: string }>;
+  disconnectLastfm: () => Promise<void>;
+  setLastfmSecret: (secret: string) => Promise<void>;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -147,11 +166,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const serversRef = useRef<Server[]>([]);
   serversRef.current = state.servers;
 
+  // Last.fm config held in memory; persisted on every change.
+  const lastfmConfigRef = useRef<LastfmConfig>(DEFAULT_LASTFM_CONFIG);
+
   const gateway = useMemo(() => new PlexGatewayImpl(fetch, CLIENT_ID), []);
   const tokenStore = useMemo(() => new SecureTokenStore(), []);
   const engine = useMemo(() => new ExpoAudioEngine(), []);
   const taste = useMemo(() => new TasteService(), []);
   const monitor = useMemo(() => new PlayMonitor(), []);
+
+  const lastfm = useMemo(
+    () =>
+      new LastfmService({
+        fetchFn: fetch,
+        openAuth: async (url) => {
+          await WebBrowser.openAuthSessionAsync(url, "musex://lastfm-callback");
+        },
+        getConfig: async () => lastfmConfigRef.current,
+        setConfig: async (cfg) => {
+          lastfmConfigRef.current = cfg;
+          await saveLastfmConfig(cfg);
+        },
+        getSecret: loadSecret,
+        setSecret: saveSecret,
+        getSessionKey: loadSessionKey,
+        setSessionKey: saveSessionKey,
+        clearSession,
+      }),
+    [],
+  );
 
   // Finish sign-in / restore: discover servers, auto-select the owned server's
   // library (or a still-valid persisted choice), persist it, and enter the app.
@@ -223,12 +266,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [session],
   );
 
-  // Bootstrap: init audio session, restore token, discover servers.
+  // Bootstrap: init audio session, restore token, discover servers, load last.fm config.
   useEffect(() => {
     let alive = true;
     (async () => {
       await engine.init();
       await taste.init();
+      // Load last.fm config + secret into the in-memory ref before the service is used.
+      const [lfmCfg] = await Promise.all([loadLastfmConfig(), loadSecret()]);
+      lastfmConfigRef.current = lfmCfg;
       const token = await tokenStore.load();
       if (!alive) return;
       if (!token) {
@@ -291,6 +337,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     completeSignIn,
     selectLibrary,
     listAllLibraries,
+    lastfm,
+    getLastfmConfig: () => lastfmConfigRef.current,
+    setLastfmConfig: async (cfg) => {
+      lastfmConfigRef.current = cfg;
+      await saveLastfmConfig(cfg);
+    },
+    connectLastfm: () => lastfm.connect(),
+    disconnectLastfm: () => lastfm.disconnect(),
+    setLastfmSecret: (secret) => saveSecret(secret),
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

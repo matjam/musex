@@ -14,7 +14,7 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
-    "plugins": ["expo-router", "expo-audio", "expo-secure-store", "expo-image"],
+    "plugins": ["expo-router", "expo-audio", "expo-secure-store", "expo-image", "expo-web-browser"],
     "extra": {
       "router": {},
       "eas": {
