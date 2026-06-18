@@ -1,14 +1,21 @@
 import type { Library, PlaybackState, Server, Track } from "@musex/core";
 import {
   advanceRadio,
+  buildDownloadLookup,
   buildQueue,
+  type DownloadJob,
+  type DownloadRecord,
   discoverMusicLibraries,
+  downloadKey,
+  downloadRecordFor,
   PlaybackSession,
   PlayMonitor,
   pickDefaultLibrary,
   pickDefaultServer,
   type RadioState,
   radioKey,
+  recordsToTracks,
+  type StorageQuality,
   shouldTopUp,
 } from "@musex/core";
 import * as WebBrowser from "expo-web-browser";
@@ -41,6 +48,12 @@ import { loadSelectedLibrary, saveSelectedLibrary } from "../adapters/selected-l
 import { PlexStreamResolver } from "../adapters/stream-resolver";
 import { SecureTokenStore } from "../adapters/token-store";
 import { CLIENT_ID } from "../config-client-id";
+import type { Connectivity } from "../downloads/connectivity-monitor";
+import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
+import { DownloadIndex } from "../downloads/download-index";
+import { DownloadManager } from "../downloads/download-manager";
+import { DownloadStore } from "../downloads/download-store";
+import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-config";
 import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
 import { TasteService } from "../taste/taste-service";
@@ -93,6 +106,7 @@ interface State {
   servers: Server[];
   library: Library | null;
   playback: PlaybackState | null;
+  connectivity: Connectivity;
 }
 
 type Action =
@@ -100,7 +114,8 @@ type Action =
   | { type: "signed-in"; token: string; servers: Server[]; library: Library | null }
   | { type: "library-selected"; library: Library }
   | { type: "signed-out" }
-  | { type: "playback"; state: PlaybackState };
+  | { type: "playback"; state: PlaybackState }
+  | { type: "connectivity"; connectivity: Connectivity };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -120,6 +135,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, phase: "signed-out", token: null, servers: [], library: null };
     case "playback":
       return { ...state, playback: action.state };
+    case "connectivity":
+      return { ...state, connectivity: action.connectivity };
     default:
       return state;
   }
@@ -151,6 +168,18 @@ interface Store {
   /** Start radio seeded by an artist + optional track. Seeds the queue from last.fm recommendations. */
   startRadio: (seed: { artist: string; title?: string; label: string }) => void;
   stopRadio: () => void;
+  // --- downloads ---
+  downloadTracks: (tracks: Track[]) => Promise<void>;
+  downloadAlbum: (library: Library, albumId: string) => Promise<void>;
+  downloadArtist: (library: Library, artistId: string) => Promise<void>;
+  removeDownload: (key: string) => Promise<void>;
+  /** Reconstruct playable Tracks from downloaded records with re-baked art URLs. */
+  downloadedTracks: () => Track[];
+  downloadsList: () => DownloadRecord[];
+  getStorageQuality: () => StorageQuality;
+  setStorageQuality: (q: StorageQuality) => Promise<void>;
+  totalDownloadBytes: () => number;
+  connectivity: Connectivity;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -168,6 +197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     servers: [],
     library: null,
     playback: null,
+    connectivity: "online" as Connectivity,
   });
 
   // Always-current token, read by the resolver at resolve-time (the session is
@@ -185,6 +215,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const engine = useMemo(() => new ExpoAudioEngine(), []);
   const taste = useMemo(() => new TasteService(), []);
   const monitor = useMemo(() => new PlayMonitor(), []);
+
+  // --- download infrastructure ---
+  const downloadStore = useMemo(() => new DownloadStore(), []);
+  const downloadIndex = useMemo(() => new DownloadIndex(), []);
+  const storageQualityRef = useRef<StorageQuality>({ mode: "original", bitrateKbps: 256 });
+
+  const downloadManager = useMemo(
+    () =>
+      new DownloadManager({
+        store: downloadStore,
+        index: downloadIndex,
+        fetch,
+        endpoint: async (serverId: string) => ({
+          baseUrl: gateway.baseUrlFor(serverId),
+          token: tokenRef.current ?? "",
+        }),
+        clientId: CLIENT_ID,
+        getQuality: () => storageQualityRef.current,
+        onProgress: () => {
+          // Progress updates trigger no state change here; UI polls downloadsList().
+        },
+      }),
+    [downloadStore, downloadIndex, gateway],
+  );
+
+  // Ref so the connectivity probe always sees the current library without
+  // causing the monitor to be reconstructed on every library change.
+  const libraryRef = useRef<Library | null>(null);
+  libraryRef.current = state.library;
+
+  const connectivityMonitor = useMemo(() => {
+    const NetInfo = require("@react-native-community/netinfo") as {
+      addEventListener: (cb: (state: { isConnected: boolean | null }) => void) => () => void;
+    };
+    return new ConnectivityMonitor({
+      subscribe: (cb) => NetInfo.addEventListener(cb),
+      probe: async () => {
+        const tok = tokenRef.current;
+        const lib = libraryRef.current;
+        if (!lib || !tok) return; // not signed in — treat as online
+        await gateway.probe(lib.serverId, tok);
+      },
+      onChange: (c) => dispatch({ type: "connectivity", connectivity: c }),
+    });
+  }, [gateway]);
 
   const lastfm = useMemo(
     () =>
@@ -234,9 +309,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       (sid) => gateway.baseUrlFor(sid),
       () => tokenRef.current ?? "",
       CLIENT_ID,
+      (track) => {
+        const rec = downloadRecordFor(buildDownloadLookup(downloadIndex.all()), track);
+        return rec ? downloadStore.uri(rec.key) : null;
+      },
     );
     return new PlaybackSession(engine, resolver);
-  }, [engine, gateway]);
+  }, [engine, gateway, downloadIndex, downloadStore]);
 
   // Radio state: refs so the subscribe closure always sees the latest without
   // causing re-renders on every position tick.
@@ -383,15 +462,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [session],
   );
 
-  // Bootstrap: init audio session, restore token, discover servers, load last.fm config.
+  // Bootstrap: init audio session, restore token, discover servers, load last.fm config,
+  // load downloads index + reconcile, load storage quality, start connectivity monitor.
   useEffect(() => {
     let alive = true;
     (async () => {
       await engine.init();
       await taste.init();
       // Load last.fm config + secret into the in-memory ref before the service is used.
-      const [lfmCfg] = await Promise.all([loadLastfmConfig(), loadSecret()]);
+      const [lfmCfg, storedQuality] = await Promise.all([loadLastfmConfig(), loadStorageQuality()]);
       lastfmConfigRef.current = lfmCfg;
+      storageQualityRef.current = storedQuality;
+      // Load the download index and reconcile with what's actually on disk.
+      await downloadIndex.load();
+      await downloadIndex.reconcile(downloadStore.presentNonEmptyKeys());
+      // Start the connectivity monitor (polls netinfo + probe on change).
+      connectivityMonitor.start();
       const token = await tokenStore.load();
       if (!alive) return;
       if (!token) {
@@ -403,8 +489,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       alive = false;
       engine.dispose();
+      connectivityMonitor.stop();
     };
-  }, [engine, tokenStore, taste, completeSignIn]);
+  }, [
+    engine,
+    tokenStore,
+    taste,
+    completeSignIn,
+    downloadIndex,
+    downloadStore,
+    connectivityMonitor,
+  ]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
   // Starting a new collection stops radio.
@@ -445,6 +540,103 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [gateway],
   );
 
+  // --- download helpers ---
+
+  /** Build a DownloadJob from a Track. */
+  const buildJob = useCallback(
+    (track: Track): DownloadJob => ({
+      key: downloadKey(track.serverId, track.media.partKey),
+      serverId: track.serverId,
+      plexPath: track.media.partKey,
+      trackId: track.id,
+      meta: {
+        title: track.title,
+        artistName: track.artistName,
+        albumTitle: track.albumTitle,
+        durationMs: track.durationMs,
+        thumb: track.thumb,
+        trackNumber: track.trackNumber,
+        albumId: track.albumId ?? "",
+        artistId: track.artistId ?? "",
+        container: track.media.container,
+        audioCodec: track.media.audioCodec,
+        partId: track.media.partId,
+        bitrate: track.media.bitrate,
+      },
+    }),
+    [],
+  );
+
+  const downloadTracks = useCallback(
+    async (tracks: Track[]) => {
+      await downloadManager.enqueue(tracks.map(buildJob));
+    },
+    [downloadManager, buildJob],
+  );
+
+  const downloadAlbum = useCallback(
+    async (library: Library, albumId: string) => {
+      const tok = tokenRef.current;
+      if (!tok) return;
+      const tracks = await gateway.listTracks(library, albumId, tok);
+      await downloadManager.enqueue(tracks.map(buildJob));
+    },
+    [gateway, downloadManager, buildJob],
+  );
+
+  const downloadArtist = useCallback(
+    async (library: Library, artistId: string) => {
+      const tok = tokenRef.current;
+      if (!tok) return;
+      const tracks = await gateway.listArtistTracks(artistId, library, tok);
+      await downloadManager.enqueue(tracks.map(buildJob));
+    },
+    [gateway, downloadManager, buildJob],
+  );
+
+  const removeDownload = useCallback(
+    async (key: string) => {
+      await downloadManager.removeDownload(key);
+    },
+    [downloadManager],
+  );
+
+  /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
+   *  with the current server base URL and token so stale baked proxy URLs from
+   *  previous launches are refreshed. */
+  const downloadedTracks = useCallback((): Track[] => {
+    const tok = tokenRef.current;
+    return recordsToTracks(downloadIndex.all()).map((track) => {
+      if (!tok) return track;
+      const base = safeBaseUrl(gateway, track.serverId);
+      if (!base || !track.thumb) return track;
+      // Re-bake: strip any existing URL (baked or raw plex path) and rebuild.
+      // The thumb stored in the record may already be a full baked URL
+      // (previous-launch format) or a raw plex path (/library/metadata/.../thumb).
+      // artUrl() works for both: a raw path → base+path+token; a full URL passed
+      // as-is would produce a double URL, so we always strip to the raw path first.
+      let rawThumb = track.thumb;
+      if (rawThumb.startsWith("http")) {
+        // Extract the plex path from the full URL by finding the path portion.
+        try {
+          rawThumb = new URL(rawThumb).pathname;
+        } catch {
+          // leave as-is
+        }
+      }
+      return { ...track, thumb: artUrl(base, rawThumb, tok) ?? track.thumb };
+    });
+  }, [downloadIndex, gateway]);
+
+  const getStorageQuality = useCallback((): StorageQuality => storageQualityRef.current, []);
+
+  const setStorageQuality = useCallback(async (q: StorageQuality) => {
+    storageQualityRef.current = q;
+    await saveStorageQuality(q);
+  }, []);
+
+  const totalDownloadBytes = useCallback(() => downloadStore.totalBytes(), [downloadStore]);
+
   const value: Store = {
     state,
     gateway,
@@ -470,6 +662,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     radio: radioSnapshot,
     startRadio,
     stopRadio,
+    downloadTracks,
+    downloadAlbum,
+    downloadArtist,
+    removeDownload,
+    downloadedTracks,
+    downloadsList: () => downloadIndex.all(),
+    getStorageQuality,
+    setStorageQuality,
+    totalDownloadBytes,
+    connectivity: state.connectivity,
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

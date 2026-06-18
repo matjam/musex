@@ -4,6 +4,7 @@
 export * from "./logic/az-index";
 export * from "./logic/collage";
 export * from "./logic/discography-merge";
+export * from "./logic/download-lookup";
 export * from "./logic/download-plan";
 export * from "./logic/download-state";
 export * from "./logic/external-url";

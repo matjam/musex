@@ -138,6 +138,14 @@ export class LibraryWatcher {
     await this.refresh({ force: false });
   }
 
+  /** Trigger a non-forced refresh immediately (e.g. on window focus). Safe to
+   *  call at any time — the existing refreshing/pendingRefresh guard coalesces
+   *  concurrent calls, and refresh() early-returns when not armed (no library,
+   *  no token, or disposed). */
+  checkNow(): void {
+    void this.refresh({ force: false });
+  }
+
   /** force=true (websocket-triggered): fire onChange even if the timestamp
    *  didn't move — the push told us content changed and correctness must not
    *  depend on Plex bumping section timestamps. force=false (poll): only on

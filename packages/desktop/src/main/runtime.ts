@@ -433,6 +433,12 @@ export class Runtime {
     this.registeredServers.add(serverId);
   }
 
+  /** Trigger an immediate non-forced library refresh (e.g. on window focus).
+   *  No-op when the watcher isn't armed (signed out, no library selected). */
+  checkLibraryNow(): void {
+    this.libraryWatcher?.checkNow();
+  }
+
   findLibrary(libraryId: string): Library {
     const lib = this.libraries.find((l) => l.id === libraryId);
     if (!lib) throw new Error(`unknown library ${libraryId}`);

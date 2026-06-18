@@ -1,5 +1,5 @@
 import type { Album, LocalPresence, Track } from "@musex/core";
-import { listValidator, trackAvailability } from "@musex/core";
+import { downloadRecordFor, listValidator, trackAvailability } from "@musex/core";
 import { Download, ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../../state/app";
@@ -7,7 +7,6 @@ import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { useSelection } from "../../state/selection";
-import { downloadRecordFor } from "../../util/downloaded-records";
 import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";

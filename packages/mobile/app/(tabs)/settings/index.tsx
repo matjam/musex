@@ -50,6 +50,24 @@ export default function SettingsIndex() {
           paddingBottom: 6,
         }}
       >
+        Storage
+      </Text>
+      <Row
+        title="Downloads & Storage"
+        subtitle="Quality, size, remove all"
+        onPress={() => router.push("/(tabs)/settings/downloads")}
+      />
+
+      <Text
+        style={{
+          color: theme.textDim,
+          fontSize: 12,
+          textTransform: "uppercase",
+          paddingHorizontal: theme.space(2),
+          paddingTop: theme.space(2),
+          paddingBottom: 6,
+        }}
+      >
         Integrations
       </Text>
       <Row

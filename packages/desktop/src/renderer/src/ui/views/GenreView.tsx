@@ -1,10 +1,15 @@
 import type { Track } from "@musex/core";
-import { albumsForGenre, listValidator, sampleThumbs, tracksForGenre } from "@musex/core";
+import {
+  albumsForGenre,
+  downloadRecordFor,
+  listValidator,
+  sampleThumbs,
+  tracksForGenre,
+} from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
-import { downloadRecordFor } from "../../util/downloaded-records";
 import { CardCollage } from "../CardCollage";
 import { ActionBar } from "../discovery/ActionBar";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
