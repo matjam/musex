@@ -10,13 +10,17 @@ export default defineConfig({
   main: {
     plugins: [
       externalizeDepsPlugin({
-        exclude: ["@musex/core", "@musex/plugin-api"],
+        exclude: ["@musex/core", "@musex/plugin-api", "@musex/plugin-host"],
       }),
     ],
     build: { rollupOptions: { output: { format: "es" } } },
   },
   preload: {
-    plugins: [externalizeDepsPlugin({ exclude: ["@musex/core", "@musex/plugin-api"] })],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ["@musex/core", "@musex/plugin-api", "@musex/plugin-host"],
+      }),
+    ],
     // Sandboxed preloads must be CommonJS; emit .cjs so it is unambiguous under "type":"module".
     build: { rollupOptions: { output: { format: "cjs", entryFileNames: "[name].cjs" } } },
   },

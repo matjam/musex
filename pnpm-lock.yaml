@@ -41,6 +41,9 @@ importers:
       '@musex/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@musex/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
       '@tanstack/react-virtual':
         specifier: ^3.14.2
         version: 3.14.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -187,6 +190,18 @@ importers:
       '@types/node':
         specifier: ^25.0.0
         version: 25.9.2
+
+  packages/plugin-host:
+    dependencies:
+      '@musex/core':
+        specifier: workspace:*
+        version: link:../core
+      '@musex/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      quickjs-emscripten:
+        specifier: 0.32.0
+        version: 0.32.0
 
 packages:
 
