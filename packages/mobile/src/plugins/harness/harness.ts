@@ -289,3 +289,7 @@ function onMessage(raw: string): void {
 // platform robustness.
 window.addEventListener("message", (e: MessageEvent) => onMessage(String(e.data)));
 document.addEventListener("message", (e) => onMessage(String((e as MessageEvent).data)));
+
+// Signal RN that the harness is initialized and listening. The RN side buffers
+// any outbound posts until this arrives, so no load/invoke is lost on cold boot.
+post({ type: "ready" });

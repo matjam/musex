@@ -37,6 +37,7 @@ export class WebViewTransport {
   private readonly pending = new Map<number, Pending>();
   private readonly timeoutMs: number;
   private hostCallHandler: HostCallHandler | null = null;
+  private readyHandler: (() => void) | null = null;
 
   constructor(
     private readonly channel: TransportChannel,
@@ -48,6 +49,11 @@ export class WebViewTransport {
   /** Set the handler invoked for inbound `hostCall` messages. */
   setHostCallHandler(fn: HostCallHandler): void {
     this.hostCallHandler = fn;
+  }
+
+  /** Set the handler invoked once when the WebView harness posts `ready`. */
+  setReadyHandler(fn: () => void): void {
+    this.readyHandler = fn;
   }
 
   /** Feed a raw message string received from the WebView (`onMessage`). */
@@ -76,6 +82,9 @@ export class WebViewTransport {
       case "log":
         // Surface plugin logs to the RN console for debugging.
         console.log(`[plugin:${msg.pluginId as string}]`, msg.message);
+        break;
+      case "ready":
+        this.readyHandler?.();
         break;
     }
   }
