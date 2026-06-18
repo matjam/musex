@@ -47,6 +47,10 @@ import { PlexGatewayImpl } from "../adapters/plex-gateway";
 import { loadSelectedLibrary, saveSelectedLibrary } from "../adapters/selected-library-store";
 import { PlexStreamResolver } from "../adapters/stream-resolver";
 import { SecureTokenStore } from "../adapters/token-store";
+import { MobileCachingGateway } from "../cache/mobile-caching-gateway";
+import { MobileListCache } from "../cache/mobile-list-cache";
+import { ExpoListCacheFs } from "../cache/mobile-list-cache-fs";
+import { sha256hex } from "../cache/sha256";
 import { CLIENT_ID } from "../config-client-id";
 import type { Connectivity } from "../downloads/connectivity-monitor";
 import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
@@ -58,7 +62,7 @@ import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
 import { TasteService } from "../taste/taste-service";
 
-function safeBaseUrl(gateway: PlexGatewayImpl, serverId: string): string | null {
+function safeBaseUrl(gateway: MobileCachingGateway, serverId: string): string | null {
   try {
     return gateway.baseUrlFor(serverId);
   } catch {
@@ -71,7 +75,7 @@ function safeBaseUrl(gateway: PlexGatewayImpl, serverId: string): string | null 
  *  library is reachable (the picker fallback handles that). Per-server failures
  *  fall through rather than aborting. */
 async function resolveLibrary(
-  gateway: PlexGatewayImpl,
+  gateway: MobileCachingGateway,
   servers: Server[],
   token: string,
 ): Promise<Library | null> {
@@ -144,7 +148,7 @@ function reducer(state: State, action: Action): State {
 
 interface Store {
   state: State;
-  gateway: PlexGatewayImpl;
+  gateway: MobileCachingGateway;
   tokenStore: SecureTokenStore;
   dispatch: (a: Action) => void;
   /** Build a queue from a track list and start playback at `index`. */
@@ -180,6 +184,8 @@ interface Store {
   setStorageQuality: (q: StorageQuality) => Promise<void>;
   totalDownloadBytes: () => number;
   connectivity: Connectivity;
+  /** Clear the persisted list cache (called on sign-out). */
+  clearListCache: () => Promise<void>;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -206,11 +212,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   tokenRef.current = state.token;
   const serversRef = useRef<Server[]>([]);
   serversRef.current = state.servers;
+  // Always-current connectivity, read synchronously by the caching gateway's
+  // isOnline() so list fetches serve-stale (offline) without a stale closure.
+  const connectivityRef = useRef<Connectivity>("online");
+  connectivityRef.current = state.connectivity;
 
   // Last.fm config held in memory; persisted on every change.
   const lastfmConfigRef = useRef<LastfmConfig>(DEFAULT_LASTFM_CONFIG);
 
-  const gateway = useMemo(() => new PlexGatewayImpl(fetch, CLIENT_ID), []);
+  // List cache (expo-file-system) + the caching gateway wrapping the raw Plex
+  // gateway. isOnline() reads the live connectivity ref so offline serves stale.
+  const listCache = useMemo(() => new MobileListCache(new ExpoListCacheFs(), sha256hex), []);
+  const gateway = useMemo(
+    () =>
+      new MobileCachingGateway(
+        new PlexGatewayImpl(fetch, CLIENT_ID),
+        listCache,
+        () => connectivityRef.current === "online",
+      ),
+    [listCache],
+  );
   const tokenStore = useMemo(() => new SecureTokenStore(), []);
   const engine = useMemo(() => new ExpoAudioEngine(), []);
   const taste = useMemo(() => new TasteService(), []);
@@ -469,6 +490,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (async () => {
       await engine.init();
       await taste.init();
+      await listCache.init();
       // Load last.fm config + secret into the in-memory ref before the service is used.
       const [lfmCfg, storedQuality] = await Promise.all([loadLastfmConfig(), loadStorageQuality()]);
       lastfmConfigRef.current = lfmCfg;
@@ -499,6 +521,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     downloadIndex,
     downloadStore,
     connectivityMonitor,
+    listCache,
   ]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
@@ -672,6 +695,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setStorageQuality,
     totalDownloadBytes,
     connectivity: state.connectivity,
+    clearListCache: () => listCache.clear(),
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }
