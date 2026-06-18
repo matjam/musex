@@ -1,7 +1,8 @@
 import type { Track } from "@musex/core";
+import { buildDownloadLookup, downloadRecordFor } from "@musex/core";
 import { useLocalSearchParams } from "expo-router";
 import { EllipsisVertical } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
@@ -12,7 +13,14 @@ import { theme } from "../../../src/ui/theme";
 
 export default function AlbumTracks() {
   const { albumId } = useLocalSearchParams<{ albumId: string }>();
-  const { state, gateway, session, playTracks, artBaseFor, token } = useStore();
+  const { state, gateway, session, playTracks, artBaseFor, token, downloadsList, connectivity } =
+    useStore();
+  const offline = connectivity === "offline";
+  const downloadLookup = useMemo(
+    () => buildDownloadLookup(downloadsList()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [downloadsList],
+  );
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetTrack, setSheetTrack] = useState<Track | null>(null);
@@ -64,30 +72,38 @@ export default function AlbumTracks() {
             <ActionBar session={session} getTracks={() => tracks} />
           </View>
         }
-        renderItem={({ item, index }) => (
-          <Pressable
-            onPress={() => void playTracks(tracks, index)}
-            onLongPress={() => setSheetTrack(item)}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              padding: theme.space(1.5),
-              borderBottomWidth: 1,
-              borderBottomColor: theme.border,
-            }}
-          >
-            <Text style={{ color: theme.textDim, width: 22, textAlign: "right" }}>
-              {item.trackNumber ?? index + 1}
-            </Text>
-            <Text style={{ color: theme.text, fontSize: 16, flex: 1 }} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <Pressable hitSlop={8} onPress={() => setSheetTrack(item)} style={{ padding: 6 }}>
-              <EllipsisVertical color={theme.textDim} size={20} />
+        renderItem={({ item, index }) => {
+          const isAvailable = !offline || !!downloadRecordFor(downloadLookup, item);
+          return (
+            <Pressable
+              onPress={isAvailable ? () => void playTracks(tracks, index) : undefined}
+              onLongPress={isAvailable ? () => setSheetTrack(item) : undefined}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                padding: theme.space(1.5),
+                borderBottomWidth: 1,
+                borderBottomColor: theme.border,
+                opacity: isAvailable ? 1 : 0.35,
+              }}
+            >
+              <Text style={{ color: theme.textDim, width: 22, textAlign: "right" }}>
+                {item.trackNumber ?? index + 1}
+              </Text>
+              <Text style={{ color: theme.text, fontSize: 16, flex: 1 }} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Pressable
+                hitSlop={8}
+                onPress={isAvailable ? () => setSheetTrack(item) : undefined}
+                style={{ padding: 6 }}
+              >
+                <EllipsisVertical color={theme.textDim} size={20} />
+              </Pressable>
             </Pressable>
-          </Pressable>
-        )}
+          );
+        }}
       />
       <TrackActionSheet
         track={sheetTrack}

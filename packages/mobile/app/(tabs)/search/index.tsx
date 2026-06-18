@@ -14,8 +14,9 @@ import { theme } from "../../../src/ui/theme";
 const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
 
 export default function SearchScreen() {
-  const { gateway, token, playTracks, artBaseFor } = useStore();
+  const { gateway, token, playTracks, artBaseFor, connectivity } = useStore();
   const library = useStore().state.library;
+  const offline = connectivity === "offline";
   const router = useRouter();
   const [q, setQ] = useState("");
   const [res, setRes] = useState<SearchResults>(EMPTY);
@@ -23,7 +24,7 @@ export default function SearchScreen() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!library || !token) return;
+    if (!library || !token || offline) return;
     if (timer.current) clearTimeout(timer.current);
     if (!q.trim()) {
       setRes(EMPTY);
@@ -37,7 +38,7 @@ export default function SearchScreen() {
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [q, library, token, gateway]);
+  }, [q, library, token, gateway, offline]);
 
   function art(serverId: string, thumb?: string): string | null {
     const b = artBaseFor(serverId);
@@ -59,7 +60,22 @@ export default function SearchScreen() {
           padding: 10,
         }}
       />
-      {q.trim() === "" ? (
+      {offline ? (
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            padding: theme.space(4),
+          }}
+        >
+          <Text style={{ color: theme.textDim, fontSize: 15, textAlign: "center" }}>
+            {
+              "You're offline — search needs your Plex server.\nYour downloads are in Library → Downloaded."
+            }
+          </Text>
+        </View>
+      ) : q.trim() === "" ? (
         <BrowseGrid />
       ) : (
         <FlatList

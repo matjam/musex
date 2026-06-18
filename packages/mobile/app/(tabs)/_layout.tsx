@@ -1,8 +1,9 @@
 import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from "expo-router/ui";
-import { Cog, Home, Library, type LucideIcon, Search } from "lucide-react-native";
+import { Cog, Home, Library, type LucideIcon, Search, WifiOff } from "lucide-react-native";
 import { forwardRef } from "react";
-import { Pressable, type View as RNView, Text } from "react-native";
+import { Pressable, type View as RNView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useStore } from "../../src/state/store";
 import { MiniPlayer } from "../../src/ui/MiniPlayer";
 import { theme } from "../../src/ui/theme";
 
@@ -33,9 +34,27 @@ TabButton.displayName = "TabButton";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { connectivity } = useStore();
   return (
     <Tabs>
       <TabSlot />
+      {connectivity === "offline" ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            backgroundColor: "#8b1a1a",
+            paddingVertical: 6,
+          }}
+        >
+          <WifiOff color="#fff" size={14} />
+          <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+            Offline · playing downloaded music
+          </Text>
+        </View>
+      ) : null}
       <MiniPlayer />
       <TabList
         style={{
