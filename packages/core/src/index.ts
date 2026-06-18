@@ -1,4 +1,7 @@
-// Models
+// Adapters
+
+export type { CachingGatewayOpts } from "./adapters/caching-plex-gateway";
+export { CachingPlexGateway } from "./adapters/caching-plex-gateway";
 
 // Logic
 export * from "./logic/az-index";
