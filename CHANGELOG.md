@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/matjam/musex/compare/v0.16.0...v0.16.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* normalize line endings to LF for the Windows CI build ([#69](https://github.com/matjam/musex/issues/69)) ([846f626](https://github.com/matjam/musex/commit/846f6262d08a8f92d3264d25fce938b20415e2ef))
+
 ## [0.16.0](https://github.com/matjam/musex/compare/v0.15.0...v0.16.0) (2026-06-19)
 
 
