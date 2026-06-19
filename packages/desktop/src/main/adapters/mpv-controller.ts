@@ -22,6 +22,9 @@ import {
 export interface MpvPaths {
   binaryPath: string;
   socketPath: string;
+  /** Real filesystem path for the opt-in verbose mpv log. Distinct from
+   *  socketPath because on Windows socketPath is a named pipe, not a file. */
+  logPath: string;
 }
 
 export interface AudioConfig {
@@ -113,8 +116,9 @@ export class MpvController {
         ...SPAWN_ARGS,
         `--input-ipc-server=${this.paths.socketPath}`,
         // Opt-in verbose mpv log (demuxer/cache/network state) — invaluable for
-        // diagnosing playback issues: MUSEX_MPV_LOG=1 writes <socket>.log.
-        ...(process.env.MUSEX_MPV_LOG ? [`--log-file=${this.paths.socketPath}.log`] : []),
+        // diagnosing playback issues: MUSEX_MPV_LOG=1 writes paths.logPath
+        // (a real userData file; NOT socketPath, which is a pipe on Windows).
+        ...(process.env.MUSEX_MPV_LOG ? [`--log-file=${this.paths.logPath}`] : []),
       ],
       { stdio: "ignore" },
     );
