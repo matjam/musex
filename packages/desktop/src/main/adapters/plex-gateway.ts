@@ -31,7 +31,7 @@ import type {
   Server,
   Track,
 } from "@musex/core";
-import { PlexAuthError, plexSort, toAlbum, toArtist, toTrack } from "@musex/core";
+import { collectPages, PlexAuthError, plexSort, toAlbum, toArtist, toTrack } from "@musex/core";
 
 /** Translate @ctrl/plex ofetch HTTP errors into PlexAuthError where appropriate.
  *  ofetch throws an object with a `response.status` number for HTTP errors. */
@@ -60,6 +60,10 @@ export interface ServerUrlCache {
 /** Bound for both the cached-URL reachability check and the discovery probe, so
  *  an unreachable URL fails fast instead of hanging ~10s. */
 const CONNECT_TIMEOUT_MS = 4000;
+/** Container page size for whole-library track fetches. A single request for a
+ *  large (~10k-track) library times out; ~1k per page keeps each request well
+ *  within the query timeout (≈10 requests for 10k, cheap against a LAN server). */
+const ALL_TRACKS_PAGE_SIZE = 1000;
 
 export class PlexapiGateway implements PlexGateway {
   /** Cache connected PlexServer objects by Plex machine identifier so browse
@@ -178,13 +182,12 @@ export class PlexapiGateway implements PlexGateway {
   }
 
   async listAllTracks(library: Library, sort: LibrarySort, token: string): Promise<Track[]> {
-    try {
-      const section = await this.musicSection(library, token);
-      const tracks = await section.searchTracks({ sort: plexSort(sort) });
-      return tracks.map((t) => toTrackSafe(t, library.serverId));
-    } catch (err) {
-      asPlexAuthError(err);
-    }
+    // Page the whole library in bounded container requests rather than one giant
+    // searchTracks() — a ~10k-track library times out as a single request. The
+    // caching layer caches the assembled result, so this runs only on a cold miss.
+    return collectPages(ALL_TRACKS_PAGE_SIZE, (start, size) =>
+      this.listAllTracksPage(library, sort, start, size, token),
+    );
   }
 
   async listAllTracksPage(

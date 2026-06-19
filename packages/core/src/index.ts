@@ -9,6 +9,7 @@ export * from "./design/tokens";
 // Logic
 export * from "./logic/az-index";
 export * from "./logic/collage";
+export * from "./logic/collect-pages";
 export * from "./logic/discography-merge";
 export * from "./logic/download-lookup";
 export * from "./logic/download-plan";
