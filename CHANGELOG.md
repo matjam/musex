@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0](https://github.com/matjam/musex/compare/v0.14.0...v0.15.0) (2026-06-19)
+
+
+### Features
+
+* desktop discovery polish — Favorite vs Follow, album download, genres, daily/decade mixes ([#64](https://github.com/matjam/musex/issues/64)) ([d970a78](https://github.com/matjam/musex/commit/d970a784eea614f82a79f75b7bb364228ef5e65c))
+* desktop search + activity polish — last.fm search, slim Activity, album-tile playback ([#66](https://github.com/matjam/musex/issues/66)) ([4299087](https://github.com/matjam/musex/commit/429908788eb06cc2c5def56812ac88272f5d0140))
+
 ## [0.14.0](https://github.com/matjam/musex/compare/v0.13.0...v0.14.0) (2026-06-19)
 
 
