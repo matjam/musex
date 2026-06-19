@@ -233,4 +233,40 @@ describe("CachingPlexGateway", () => {
     ); // uncached -> throw
     expect(inner.listTracks).not.toHaveBeenCalled();
   });
+
+  it("coalesces concurrent misses for the same key into one inner fetch", async () => {
+    const { inner, gw } = setup();
+    // Hold the inner fetch open so all three callers overlap on the miss.
+    let release: (v: Track[]) => void = () => {};
+    inner.listAllTracks = vi.fn(
+      () => new Promise<Track[]>((r) => (release = r)),
+    ) as typeof inner.listAllTracks;
+
+    const calls = [
+      gw.listAllTracks(lib, "title", "tok", "v1"),
+      gw.listAllTracks(lib, "title", "tok", "v1"),
+      gw.listAllTracks(lib, "title", "tok", "v1"),
+    ];
+    await Promise.resolve(); // let the cache.get misses settle
+    release([track("t1")]);
+    const results = await Promise.all(calls);
+
+    expect(inner.listAllTracks).toHaveBeenCalledTimes(1);
+    for (const r of results) expect(r).toEqual([track("t1")]);
+    // After settling, the in-flight entry is cleared and the result is cached.
+    await gw.listAllTracks(lib, "title", "tok", "v1");
+    expect(inner.listAllTracks).toHaveBeenCalledTimes(1); // served from cache
+  });
+
+  it("clears the in-flight entry on failure so the next call retries", async () => {
+    const { inner, gw } = setup();
+    inner.listAllTracks = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("plex down"))
+      .mockResolvedValueOnce([track("t1")]) as typeof inner.listAllTracks;
+
+    await expect(gw.listAllTracks(lib, "title", "tok", "v1")).rejects.toThrow("plex down");
+    await expect(gw.listAllTracks(lib, "title", "tok", "v1")).resolves.toEqual([track("t1")]);
+    expect(inner.listAllTracks).toHaveBeenCalledTimes(2);
+  });
 });

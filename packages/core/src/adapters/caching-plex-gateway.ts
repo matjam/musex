@@ -35,6 +35,13 @@ export class CachingPlexGateway implements PlexGateway {
     protected readonly opts: CachingGatewayOpts,
   ) {}
 
+  /** Concurrent fetches for the same key collapse onto one promise (keyed by the
+   *  schema-prefixed cache key), so a burst of identical misses — e.g. the
+   *  smart-mix warmer firing a dozen listAllTracks at launch — hits Plex once,
+   *  not N times (N parallel full-library fetches saturate the connection and
+   *  time out). Cleared when the fetch settles, success or failure. */
+  private readonly inflight = new Map<string, Promise<unknown>>();
+
   // --- cached, validator-aware ---
 
   async listArtists(library: Library, token: string, validator?: string): Promise<Artist[]> {
@@ -133,9 +140,20 @@ export class CachingPlexGateway implements PlexGateway {
       const hit = await this.cache.get<T>(vkey, validator);
       if (hit !== null) return hit;
     }
-    const data = await fetch();
-    if (validator !== undefined) await this.cache.set(vkey, validator, data);
-    return data;
+    // Coalesce concurrent misses for this key onto one fetch (+ set).
+    const existing = this.inflight.get(vkey);
+    if (existing) return existing as Promise<T>;
+    const pending = (async () => {
+      const data = await fetch();
+      if (validator !== undefined) await this.cache.set(vkey, validator, data);
+      return data;
+    })();
+    this.inflight.set(vkey, pending);
+    try {
+      return (await pending) as T;
+    } finally {
+      this.inflight.delete(vkey);
+    }
   }
 
   /** Evict each key with the schema-version prefix applied. */
