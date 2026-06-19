@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.4](https://github.com/matjam/musex/compare/v0.16.3...v0.16.4) (2026-06-19)
+
+
+### Bug Fixes
+
+* auto-updater treats a not-yet-published feed as 'no update' ([#76](https://github.com/matjam/musex/issues/76)) ([56ea404](https://github.com/matjam/musex/commit/56ea4046b88e4ea5a8c01db783cb8186c689cded))
+* daily mix times out on large libraries (page listAllTracks + coalesce fetches) ([#78](https://github.com/matjam/musex/issues/78)) ([5bc91eb](https://github.com/matjam/musex/commit/5bc91eba32cd743ec14ca0fb5d11947c17eb9f3d))
+
 ## [0.16.3](https://github.com/matjam/musex/compare/v0.16.2...v0.16.3) (2026-06-19)
 
 

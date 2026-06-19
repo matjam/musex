@@ -1,6 +1,6 @@
 {
   "name": "@musex/desktop",
-  "version": "0.16.3",
+  "version": "0.16.4",
   "private": true,
   "type": "module",
   "description": "Spotify-style desktop player for your Plex music library",
