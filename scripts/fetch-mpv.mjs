@@ -17,6 +17,17 @@ const PINS = {
     url: "https://github.com/mpv-player/mpv/releases/download/v0.41.0/mpv-v0.41.0-macos-14-arm.zip",
     sha256: "5c96f9b21355fc0a11d2e2161ad65f33031070e9fb3f6bd9865fb459b94587e6",
     binaryRelPath: "mpv.app/Contents/MacOS/mpv",
+    archive: "zip",
+  },
+  // zhongfly/mpv-winbuild x64 — a fully static build (DLLs linked into the
+  // ~118MB mpv.exe; the archive root has mpv.exe + mpv.com + fonts.conf). The
+  // .7z is fetched + 7z-extracted only on Windows (the macOS/Linux dev boxes
+  // never hit this branch); 7-Zip is pre-installed on the windows-latest runner.
+  "win32-x64": {
+    url: "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-06-18-2d5dfb343a/mpv-x86_64-20260618-git-2d5dfb343a.7z",
+    sha256: "a56188d75e4450f48bcaf465d29fac4d66ac35aed011d6606852674edbd364ed",
+    binaryRelPath: "mpv.exe", // mpv.exe is at the archive root
+    archive: "7z",
   },
 };
 
@@ -45,10 +56,11 @@ async function main() {
     return; // already provisioned
   }
 
+  const archiveKind = pin.archive ?? "zip";
   const vendorDir = join(repoRoot, "vendor");
   await mkdir(vendorDir, { recursive: true });
   const tmpDir = await mkdtemp(join(tmpdir(), "musex-mpv-"));
-  const zipPath = join(vendorDir, `mpv-download-${process.pid}.zip`);
+  const archivePath = join(vendorDir, `mpv-download-${process.pid}.${archiveKind}`);
 
   try {
     // Download
@@ -56,39 +68,71 @@ async function main() {
     if (!res.ok || !res.body) {
       throw new Error(`download failed: ${res.status} ${res.statusText} for ${pin.url}`);
     }
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(zipPath));
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(archivePath));
 
     // Verify sha256
     const actual = createHash("sha256")
-      .update(await readFile(zipPath))
+      .update(await readFile(archivePath))
       .digest("hex");
     if (actual !== pin.sha256) {
       throw new Error(`sha256 mismatch for ${pin.url}\n  expected: ${pin.sha256}\n  actual:   ${actual}`);
     }
 
-    // Extract: zip contains mpv.tar.gz, which contains mpv.app/
-    execFileSync("unzip", ["-o", "-q", zipPath, "-d", tmpDir]);
     await mkdir(targetDir, { recursive: true });
-    execFileSync("tar", ["-xzf", join(tmpDir, "mpv.tar.gz"), "-C", targetDir]);
+
+    if (archiveKind === "7z") {
+      // Windows: a zhongfly mpv-winbuild .7z — mpv.exe + companions at the
+      // archive root, extracted flat into targetDir. 7-Zip is pre-installed on
+      // the windows-latest runner (try `7z` then `7za` then `7zz`); this branch
+      // only runs when process.platform === "win32".
+      extract7z(archivePath, targetDir);
+    } else {
+      // macOS: a zip containing mpv.tar.gz, which contains mpv.app/.
+      execFileSync("unzip", ["-o", "-q", archivePath, "-d", tmpDir]);
+      execFileSync("tar", ["-xzf", join(tmpDir, "mpv.tar.gz"), "-C", targetDir]);
+    }
 
     // The mpv distribution ships some files read-only (e.g. libMoltenVK.dylib
     // at mode 444). Squirrel.Mac's ShipIt must remove the quarantine xattr
     // from every file of an update, which requires owner-write — a single
     // read-only file makes EVERY auto-update fail with "Permission denied"
     // and silently relaunch the old version. Normalize to owner-writable.
-    execFileSync("chmod", ["-R", "u+w", targetDir]);
+    // (chmod is a Unix tool; skip on Windows, where file modes don't apply.)
+    if (process.platform !== "win32") {
+      execFileSync("chmod", ["-R", "u+w", targetDir]);
+    }
 
-    // Sanity check
+    // Sanity check. macOS pins mpv v0.41.0; the Windows winbuild is a dated
+    // git build, so only assert the binary runs and self-identifies as mpv.
     const versionOut = execFileSync(binaryPath, ["--version"], { encoding: "utf8" });
-    if (!versionOut.includes(`mpv ${MPV_VERSION}`)) {
+    const expectVersion = archiveKind === "7z" ? "mpv" : `mpv ${MPV_VERSION}`;
+    if (!versionOut.includes(expectVersion)) {
       throw new Error(`mpv --version sanity check failed; output:\n${versionOut}`);
     }
 
-    console.log(`vendored mpv ${MPV_VERSION} (${key})`);
+    console.log(`vendored mpv (${key})`);
   } finally {
-    await rm(zipPath, { force: true });
+    await rm(archivePath, { force: true });
     await rm(tmpDir, { recursive: true, force: true });
   }
+}
+
+/** Extract a .7z into destDir, trying the binaries that may be on PATH
+ *  (`7z` / `7za` / `7zz`). Throws if none is available or extraction fails. */
+function extract7z(archivePath, destDir) {
+  const candidates = ["7z", "7za", "7zz"];
+  let lastErr;
+  for (const bin of candidates) {
+    try {
+      execFileSync(bin, ["x", "-y", `-o${destDir}`, archivePath], { stdio: "inherit" });
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw new Error(
+    `7z extraction failed — no working 7-Zip binary (tried ${candidates.join(", ")}): ${String(lastErr)}`,
+  );
 }
 
 main().catch((err) => {
