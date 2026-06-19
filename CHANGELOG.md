@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.3](https://github.com/matjam/musex/compare/v0.16.2...v0.16.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* deterministic list-cache eviction (Linux mtime-tie flake) ([#74](https://github.com/matjam/musex/issues/74)) ([1e2aa2e](https://github.com/matjam/musex/commit/1e2aa2eff7263d4550fabe973ed106129f2f18ca))
+
 ## [0.16.2](https://github.com/matjam/musex/compare/v0.16.1...v0.16.2) (2026-06-19)
 
 
