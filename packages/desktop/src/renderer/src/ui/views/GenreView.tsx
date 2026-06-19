@@ -1,6 +1,7 @@
 import type { Track } from "@musex/core";
 import {
   albumsForGenre,
+  albumsWithTrackGenres,
   downloadRecordFor,
   listValidator,
   sampleThumbs,
@@ -44,8 +45,10 @@ export function GenreView({ genre }: { genre: string }) {
       window.musex.listAllAlbums(id, "title", validator),
       window.musex.listAllTracks(id, "title", validator),
     ])
-      .then(([albums, tracks]) => {
+      .then(([rawAlbums, tracks]) => {
         if (cancelled) return;
+        // Fold track-level genres up to albums (Plex's bulk album list omits them).
+        const albums = albumsWithTrackGenres(rawAlbums, tracks);
         const thumbs = sampleThumbs(
           albumsForGenre(genre, albums).map((a) => a.thumb),
           4,

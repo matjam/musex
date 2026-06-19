@@ -1,5 +1,6 @@
 import {
   albumsForGenre,
+  albumsWithTrackGenres,
   type GenreEntry,
   genreIndex,
   listValidator,
@@ -24,10 +25,16 @@ export function GenresView() {
     const validator = listValidator(library.updatedAt);
     let cancelled = false;
     setFetch({ status: "loading" });
-    window.musex
-      .listAllAlbums(id, "title", validator)
-      .then((albums) => {
+    // Plex's bulk album list omits Genre tags for most albums, but the bulk
+    // track list carries them — fold track genres up to the album level so the
+    // index reflects the real library.
+    Promise.all([
+      window.musex.listAllAlbums(id, "title", validator),
+      window.musex.listAllTracks(id, "title", validator),
+    ])
+      .then(([rawAlbums, tracks]) => {
         if (cancelled) return;
+        const albums = albumsWithTrackGenres(rawAlbums, tracks);
         const genres = genreIndex(albums);
         const thumbsByGenre = new Map(
           genres.map(({ genre }) => [
