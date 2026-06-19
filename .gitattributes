@@ -1,0 +1,27 @@
+# Normalize line endings to LF in the working tree on EVERY platform.
+#
+# Without this, the windows-latest CI runner checks files out with CRLF
+# (Git's autocrlf=true default on Windows), and `biome check .` then flags a
+# stray carriage return on every file — failing `pnpm check`. Forcing LF keeps
+# the working tree consistent with the macOS/Linux runners (and with biome's
+# default `lf` lineEnding) regardless of host OS.
+#
+# `text=auto` lets Git auto-detect text vs binary; the explicit `binary` rules
+# below protect the committed binary assets from any normalization.
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.icns  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.zip   binary
+*.7z    binary
+*.dmg   binary
