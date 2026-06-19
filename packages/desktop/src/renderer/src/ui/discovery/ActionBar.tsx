@@ -5,14 +5,19 @@ export interface ActionBarProps {
   onPlay?: () => void; // primary; omit to hide
   onShuffle?: () => void;
   onSimilar?: () => void; // labeled "Similar" pill
-  /** Follow pill: omit to hide. `on` lights it green and flips the label
-   *  ("Follow" / "Following"). `disabled` (e.g. offline) blocks the toggle and
-   *  shows `title` as a tooltip. */
+  /** Follow pill: omit to hide. `on` lights it green and flips the label.
+   *  Defaults to "Follow"/"Following" (artist); pass `labelOff`/`labelOn` for
+   *  album/track favorites ("Favorite"/"Favorited"). `disabled` (e.g. offline)
+   *  blocks the toggle and shows `title` as a tooltip. */
   follow?: {
     on: boolean;
     busy?: boolean;
     disabled?: boolean;
     title?: string;
+    /** Label when not followed/favorited (default "Follow"). */
+    labelOff?: string;
+    /** Label when followed/favorited (default "Following"). */
+    labelOn?: string;
     onToggle: () => void;
   };
   /** Overflow ⋯ menu trigger; render the menu yourself via `overflow`. */
@@ -67,7 +72,7 @@ export function ActionBar({
           onClick={follow.onToggle}
         >
           <Heart size={15} />
-          {follow.on ? "Following" : "Follow"}
+          {follow.on ? (follow.labelOn ?? "Following") : (follow.labelOff ?? "Follow")}
         </button>
       )}
       {children}

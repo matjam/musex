@@ -4,7 +4,6 @@ import { Download, ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AcquirableAlbumDto, ArtistInfoDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
-import { useFollow } from "../../state/follow";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { OFFLINE_ACTION_TOOLTIP, OFFLINE_VIEW_MESSAGE } from "../../util/offline";
@@ -14,7 +13,6 @@ import {
   NO_ACQUISITION_FOLLOW_TOOLTIP,
   useFollowAction,
 } from "../discovery/FollowButton";
-import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
 import { useEntityNav } from "../hooks/useEntityNav";
@@ -57,7 +55,6 @@ export function ArtistView({ ref }: Props) {
   const { goRef } = useEntityNav();
   // Follow toggles the acquire+watch relationship for this artist (one action).
   const follow = useFollowAction(ref);
-  const { isFollowed } = useFollow();
 
   // Owned albums (exact, offline-safe) + external discography (online, provider)
   // are loaded separately and merged into one mixed list.
@@ -322,8 +319,9 @@ export function ArtistView({ ref }: Props) {
             ) : undefined
           }
         />
-        {/* TODO: real download count (Phase F) */}
-        <MonitorStatusLine following={isFollowed(ref)} downloading={0} />
+        {/* The ActionBar Follow pill already conveys follow state; no separate
+            "Following" line (Fix 3). A download-count status line returns with
+            Phase F (real download counts). */}
       </div>
 
       {/* About (last.fm bio) sits directly under the header, above the

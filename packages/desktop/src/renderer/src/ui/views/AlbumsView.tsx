@@ -2,6 +2,7 @@ import type { Album, LibrarySort } from "@musex/core";
 import { entityRefForAlbum, listValidator } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
+import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
@@ -67,6 +68,15 @@ export function AlbumsView() {
     return <div className="content-placeholder">No albums found in this library.</div>;
   }
 
+  // Owned-album ⋯ "Download" → download all this album's tracks to this device
+  // via the same IPC the AlbumView Download pill uses. Disabled offline.
+  function downloadAlbum(albumId: string) {
+    if (!library) return;
+    window.musex
+      .downloadAlbum(albumId, library.id)
+      .catch((err: unknown) => console.error("[downloads] downloadAlbum failed:", err));
+  }
+
   // "all" shows everything (offline: un-downloaded cards are dimmed, not hidden);
   // "downloaded" shows only cards with a downloaded track. Watching is artist-
   // level, so the Albums view offers no Watching mode.
@@ -99,6 +109,9 @@ export function AlbumsView() {
                 downloaded={downloaded.has(album.id)}
                 downloading={downloading.has(album.id)}
                 dim={offline && !downloaded.has(album.id)}
+                onDownload={() => downloadAlbum(album.id)}
+                downloadDisabled={offline || downloaded.has(album.id)}
+                downloadTitle={offline ? OFFLINE_ACTION_TOOLTIP : "Already downloaded"}
                 onOpen={() =>
                   dispatch({
                     type: "navigate",

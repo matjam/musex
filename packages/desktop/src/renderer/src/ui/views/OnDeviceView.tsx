@@ -1,8 +1,14 @@
 import type { Track } from "@musex/core";
-import { formatBytes, groupDownloadsByAlbum, groupTracksByAlbum } from "@musex/core";
+import {
+  entityRefForAlbum,
+  formatBytes,
+  groupDownloadsByAlbum,
+  groupTracksByAlbum,
+} from "@musex/core";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { DownloadDto } from "../../../../shared/ipc-contract";
+import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { ActionBar } from "../discovery/ActionBar";
 import { GridCard } from "../GridCard";
@@ -11,12 +17,6 @@ type FetchState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ok"; tracks: Track[]; records: DownloadDto[] };
-
-/** Human label for an in-flight download record. */
-const ACTIVE_LABEL: Partial<Record<DownloadDto["state"], string>> = {
-  queued: "Queued",
-  downloading: "Downloading",
-};
 
 /** "On this device" — the offline home, treated like a playlist. Shows downloads
  *  that are in flight (active strip) and finished (album-grouped tiles), with a
@@ -28,6 +28,7 @@ const ACTIVE_LABEL: Partial<Record<DownloadDto["state"], string>> = {
  *  the active strip, total size and per-album remove keys come from the raw
  *  `downloadsList()` records. */
 export function OnDeviceView() {
+  const { dispatch } = useApp();
   const { playTracks, playTracksShuffled } = usePlayer();
   const [fetchState, setFetchState] = useState<FetchState>({ status: "loading" });
 
@@ -130,7 +131,6 @@ export function OnDeviceView() {
                   </span>
                 </div>
               </div>
-              <span className="dl-chip">{ACTIVE_LABEL[r.state] ?? r.state}</span>
             </div>
           ))}
         </div>
@@ -138,22 +138,39 @@ export function OnDeviceView() {
 
       {albums.length > 0 && (
         <div className="browse-grid">
-          {albums.map((group) => (
-            <GridCard
-              key={group.albumId}
-              thumb={group.thumb}
-              title={group.albumTitle}
-              subtitle={group.artistName}
-              state="downloaded"
-              actionIcon={Trash2}
-              actionTitle={`Remove ${group.albumTitle} from this device`}
-              // Tile click OR the hover Play overlay both play this album in order —
-              // "navigate + play" the collection, like a playlist.
-              onOpen={() => playTracks(group.tracks, 0)}
-              onPlay={() => playTracks(group.tracks, 0)}
-              onAction={() => void removeAlbum(removeKeysByAlbum.get(group.albumId) ?? [])}
-            />
-          ))}
+          {albums.map((group) => {
+            // Build an owned album ref from the group's first track so the tile
+            // opens the unified AlbumView exactly like an album tile elsewhere.
+            const first = group.tracks[0];
+            const albumRef = first
+              ? entityRefForAlbum({
+                  id: group.albumId,
+                  serverId: first.serverId,
+                  artistId: first.artistId,
+                  title: group.albumTitle,
+                  thumb: group.thumb,
+                })
+              : null;
+            return (
+              <GridCard
+                key={group.albumId}
+                thumb={group.thumb}
+                title={group.albumTitle}
+                subtitle={group.artistName}
+                state="downloaded"
+                actionIcon={Trash2}
+                actionTitle={`Remove ${group.albumTitle} from this device`}
+                // Tile body opens the album page (like any album tile); the hover
+                // Play overlay plays this album in order.
+                onOpen={() => {
+                  if (albumRef)
+                    dispatch({ type: "navigate", view: { name: "album", ref: albumRef } });
+                }}
+                onPlay={() => playTracks(group.tracks, 0)}
+                onAction={() => void removeAlbum(removeKeysByAlbum.get(group.albumId) ?? [])}
+              />
+            );
+          })}
         </div>
       )}
     </div>
