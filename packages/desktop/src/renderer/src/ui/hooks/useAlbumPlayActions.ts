@@ -1,5 +1,4 @@
 import type { EntityRef } from "@musex/core";
-import { listValidator } from "@musex/core";
 import { useCallback } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
@@ -25,7 +24,10 @@ export function useAlbumPlayActions() {
       // Only owned (Plex) albums have fetchable tracks.
       if (!library || ref.source !== "plex" || !ref.id) return;
       try {
-        const tracks = await window.musex.listTracks(library.id, ref.id, listValidator());
+        // No validator: the caching gateway does a fetch-WITHOUT-set, so this
+        // live fetch never overwrites AlbumView's properly-validated cache entry
+        // (a "0:0" validator would mismatch and evict the good entry).
+        const tracks = await window.musex.listTracks(library.id, ref.id);
         if (tracks.length === 0) return;
         if (mode === "shuffle") playTracksShuffled(tracks);
         else if (mode === "next") enqueueNext(tracks);

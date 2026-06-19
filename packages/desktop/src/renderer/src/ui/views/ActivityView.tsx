@@ -118,6 +118,14 @@ export function ActivityView() {
     .filter((e) => e.state === "landed" && e.landedAt != null && e.landedAt > cutoff)
     .sort((a, b) => (b.landedAt ?? 0) - (a.landedAt ?? 0));
 
+  // Each entry shows in exactly one section: a freshly-landed album already
+  // appears under "Recently acquired", so exclude those from the Taste
+  // Expansion feed below (which otherwise renders ALL entries → duplicates).
+  const recentKeys = new Set(recentlyAcquired.map((e) => `${e.artistName}:${e.albumTitle}`));
+  const expansionEntries = entries.filter(
+    (e) => !recentKeys.has(`${e.artistName}:${e.albumTitle}`),
+  );
+
   const expansionVisible =
     expansion !== null && (expansion.prefs.enabled || expansion.entries.length > 0);
 
@@ -142,13 +150,13 @@ export function ActivityView() {
             Taste expansion bets — what musex tried to add and what landed.
             {expansion.lastSummary ? ` Last cycle: ${expansion.lastSummary.toLowerCase()}` : ""}
           </div>
-          {expansion.entries.length === 0 ? (
+          {expansionEntries.length === 0 ? (
             <div className="content-placeholder">
               Nothing tried yet — the next cycle will pick artists from your taste profile.
             </div>
           ) : (
             <div className="dl-list expansion-list">
-              {expansion.entries.map((e) => (
+              {expansionEntries.map((e) => (
                 <ExpansionRow
                   key={`${e.artistName}:${e.albumTitle}:${e.createdAt}`}
                   entry={e}

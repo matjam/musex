@@ -82,6 +82,7 @@ export function SearchView() {
   // debounced fetch, independent loading flag, never blocks library results.
   // Skipped entirely when offline: the lookup needs the network, and the
   // section is replaced by the offline message below.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: searchNonce is a re-run trigger (Enter), not read in the body
   useEffect(() => {
     if (!acquisitionAvailable || offline) {
       setExternal([]);
@@ -117,7 +118,7 @@ export function SearchView() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [query, acquisitionAvailable, offline]);
+  }, [query, acquisitionAvailable, offline, searchNonce]);
 
   // last.fm catalog search (artist + album + track). Independent debounced
   // fetch; needs the network so it's skipped offline. Returns empty when
