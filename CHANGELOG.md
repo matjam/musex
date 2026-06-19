@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.0](https://github.com/matjam/musex/compare/v0.13.0...v0.14.0) (2026-06-19)
+
+
+### Features
+
+* desktop entity rebuild — unified owned/unowned pages + inline Follow/acquire (SP1) ([#63](https://github.com/matjam/musex/issues/63)) ([01bf91d](https://github.com/matjam/musex/commit/01bf91d6b3c9655900846437e42bb6aec1a8f4c1))
+* entity + follow foundation (SP0) ([#62](https://github.com/matjam/musex/issues/62)) ([1183e11](https://github.com/matjam/musex/commit/1183e11c2cc9e3758696bc504012c2a246369625))
+* shared list cache + mobile offline library browse ([#60](https://github.com/matjam/musex/issues/60)) ([02dfaa1](https://github.com/matjam/musex/commit/02dfaa117c45827ed16cd29282ea0cec9b8637a0))
+
 ## [0.13.0](https://github.com/matjam/musex/compare/v0.12.0...v0.13.0) (2026-06-18)
 
 
