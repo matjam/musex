@@ -14,7 +14,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "package": "electron-vite build && electron-builder --publish never"
+    "package": "electron-vite build && electron-builder --publish never",
+    "package:ci": "electron-vite build && electron-builder --publish never -c.mac.notarize=false"
   },
   "dependencies": {
     "@ctrl/plex": "^6.0.0",
