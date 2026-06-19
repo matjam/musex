@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, unlink, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ListCache } from "@musex/core";
 
@@ -15,6 +15,10 @@ export class ListCacheStore implements ListCache {
   private readonly mem = new Map<string, Entry<unknown>>();
   /** Maps SHA-256 hex (filename stem) → original key, for mem eviction. */
   private readonly hashToKey = new Map<string, string>();
+  /** Monotonic write clock: guarantees each set() gets a strictly increasing
+   *  timestamp even for writes within the same millisecond, so eviction order
+   *  is deterministic. fs mtime granularity otherwise ties rapid writes. */
+  private writeClock = 0;
   constructor(
     private readonly dir: string,
     private readonly maxEntries = 200,
@@ -75,14 +79,29 @@ export class ListCacheStore implements ListCache {
   }
 
   async set<T>(key: string, validator: string, data: T): Promise<void> {
-    const entry: Entry<T> = { validator, ts: Date.now(), data };
+    // Strictly-monotonic ts: never less than the previous write, even within
+    // the same millisecond — so eviction (ordered by file mtime) is
+    // deterministic and matches write order.
+    const ts = Math.max(Date.now(), this.writeClock + 1);
+    this.writeClock = ts;
+    const entry: Entry<T> = { validator, ts, data };
     this.mem.set(key, entry);
     this.hashToKey.set(this.hash(key), key);
+    const file = this.file(key);
     try {
-      await writeFile(this.file(key), JSON.stringify(entry));
+      await writeFile(file, JSON.stringify(entry));
     } catch (err) {
       console.error("[musex list-cache] write failed:", err);
       return;
+    }
+    // Pin the file's mtime to the monotonic ts so evict()'s mtime ordering is
+    // deterministic regardless of filesystem timestamp granularity (rapid
+    // writes otherwise tie, making eviction order arbitrary — flaky on Linux).
+    // Best-effort: if utimes fails, eviction just degrades to OS write time.
+    try {
+      await utimes(file, new Date(ts), new Date(ts));
+    } catch {
+      // mtime stays at the OS write time; eviction order may tie for rapid writes
     }
     await this.evict();
   }
