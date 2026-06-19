@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/matjam/musex/compare/v0.15.0...v0.16.0) (2026-06-19)
+
+
+### Features
+
+* windows build — NSIS + portable (bundled mpv, unsigned) ([#67](https://github.com/matjam/musex/issues/67)) ([405383f](https://github.com/matjam/musex/commit/405383f4112c8c574c3cb9eeba12267193d97fed))
+
 ## [0.15.0](https://github.com/matjam/musex/compare/v0.14.0...v0.15.0) (2026-06-19)
 
 
