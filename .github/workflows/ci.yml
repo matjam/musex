@@ -17,6 +17,13 @@ jobs:
     # so packaging breakage (the win block, mpv bundling, icons, nsis/dmg) and
     # platform-specific test/lint/typecheck failures are caught pre-merge — not
     # at release time. Signing/notarization/upload stay in release-please.yml.
+    #
+    # Skip release-please PRs: they're a version-bump/changelog-only diff over
+    # main (already built green on merge), and merging one fires the real signed
+    # release build — so a full 3-platform build there is pure redundancy (and a
+    # bot-authored PR that would otherwise sit awaiting Actions approval). Push
+    # to main has an empty head_ref, so it still builds.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     strategy:
       fail-fast: false
       matrix:
