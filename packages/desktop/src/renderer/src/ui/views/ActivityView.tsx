@@ -221,7 +221,7 @@ export function ActivityView() {
 
       {followed.length > 0 && (
         <>
-          <h3 className="browse-title watched-title">Following for new releases</h3>
+          <h3 className="browse-title watched-title">Following</h3>
           <div className="browse-sub">
             Future albums by these artists are fetched automatically.
           </div>

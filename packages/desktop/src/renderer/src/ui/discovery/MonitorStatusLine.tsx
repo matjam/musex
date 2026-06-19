@@ -9,7 +9,7 @@ export function MonitorStatusLine({
 }) {
   if (!following && downloading === 0) return null;
   const parts: string[] = [];
-  if (following) parts.push("Following for new releases");
+  if (following) parts.push("Following");
   if (downloading > 0) parts.push(`${downloading} downloading`);
   return <div className="monitor-status">● {parts.join(" · ")}</div>;
 }

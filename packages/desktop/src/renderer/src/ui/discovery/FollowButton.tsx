@@ -8,7 +8,7 @@ import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
  *  provider; with no provider installed `followService.follow` throws and the
  *  optimistic toggle reverts. Callers gate the control on this so the user
  *  sees a disabled button with an explanation instead of a silent revert.
- *  Owned-artist/album/track follow (local favorite/watch) is unaffected. */
+ *  Owned-artist/album/track follow (local favorite) is unaffected. */
 export const NO_ACQUISITION_FOLLOW_TOOLTIP = "Connect an acquisition plugin to follow artists";
 
 export function followNeedsAcquisition(ref: EntityRef): boolean {
@@ -42,9 +42,9 @@ export function useFollowAction(ref: EntityRef) {
 
 /** The one Follow control. "♥ Following" when followed, "Follow" otherwise.
  *  For an unowned (external) artist the title hints that Follow acquires the
- *  artist and follows their new releases; with no acquisition provider the
- *  control is disabled (Follow would otherwise throw and silently revert).
- *  `disabled` (e.g. offline) blocks the toggle and shows `title`. */
+ *  artist; with no acquisition provider the control is disabled (Follow would
+ *  otherwise throw and silently revert). `disabled` (e.g. offline) blocks the
+ *  toggle and shows `title`. */
 export function FollowButton({
   entity,
   disabled,
@@ -66,7 +66,7 @@ export function FollowButton({
       (on
         ? "Following — click to unfollow"
         : unownedArtist
-          ? "Follow — acquire this artist and follow their new releases"
+          ? "Follow — acquire this artist"
           : "Follow"));
   return (
     <button

@@ -472,7 +472,7 @@ function ExternalAlbumView({ entityRef }: { entityRef: EntityRef }) {
                     ? NO_ACQUISITION_FOLLOW_TOOLTIP
                     : follow.on
                       ? "Following — click to unfollow"
-                      : "Follow — acquire this artist and follow their new releases",
+                      : "Follow — acquire this artist",
                 onToggle: () => void follow.onToggle(),
               }}
             />

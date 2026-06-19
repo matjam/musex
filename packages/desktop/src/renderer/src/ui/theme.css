@@ -3295,3 +3295,47 @@ img.queue-row-art {
 .entity-badge--red { border-color: var(--red); color: #ff8a84; }
 .entity-badge--muted { border-color: var(--line); color: var(--muted); }
 .entity-badge--text { border-color: var(--text); color: var(--text); }
+
+/* ---- Artist About (last.fm bio under the header, above the discography) ---- */
+
+.artist-about {
+  margin-bottom: 22px;
+}
+
+.artist-about .browse-title {
+  margin-bottom: 8px;
+}
+
+/* Clamped to a few lines so a long bio doesn't push the album grid down;
+   `--expanded` lifts the clamp. The toggle below is gated on real overflow. */
+.artist-bio {
+  margin: 0;
+  max-width: 760px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.artist-bio--expanded {
+  display: block;
+  overflow: visible;
+}
+
+.artist-bio-toggle {
+  margin-top: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.artist-bio-toggle:hover {
+  text-decoration: underline;
+}

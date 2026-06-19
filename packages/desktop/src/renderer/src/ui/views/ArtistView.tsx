@@ -71,6 +71,12 @@ export function ArtistView({ ref }: Props) {
   const [morePos, setMorePos] = useState({ x: 0, y: 0 });
   const [queueFetch, setQueueFetch] = useState<"idle" | "busy">("idle");
 
+  // About (bio) is clamped to a few lines under the header; "more"/"less"
+  // expands it. `bioOverflows` gates the toggle so a short bio shows no button.
+  const [bioExpanded, setBioExpanded] = useState(false);
+  const [bioOverflows, setBioOverflows] = useState(false);
+  const bioRef = useRef<HTMLParagraphElement>(null);
+
   // Owned artists may arrive (e.g. from a track link) without userRating — fetch
   // the authoritative value and seed the overlay (set-only-if-absent).
   useEffect(() => {
@@ -168,6 +174,20 @@ export function ArtistView({ ref }: Props) {
       cancelled = true;
     };
   }, [ref.name, offline]);
+
+  // Reset the expand toggle when the bio changes, then measure whether the
+  // clamped paragraph actually overflows (scrollHeight > clientHeight) so the
+  // "more" button only appears when there's hidden text.
+  const bio = info?.bio;
+  useLayoutEffect(() => {
+    setBioExpanded(false);
+    const el = bioRef.current;
+    if (!el || !bio) {
+      setBioOverflows(false);
+      return;
+    }
+    setBioOverflows(el.scrollHeight - el.clientHeight > 1);
+  }, [bio]);
 
   const discography: DiscographyItem[] = unifyDiscography(ownedAlbums, external);
 
@@ -306,6 +326,28 @@ export function ArtistView({ ref }: Props) {
         <MonitorStatusLine following={isFollowed(ref)} downloading={0} />
       </div>
 
+      {/* About (last.fm bio) sits directly under the header, above the
+          discography, clamped to a few lines with a more/less toggle so a long
+          bio doesn't push the album grid far down. Only rendered when a bio
+          actually exists (online + last.fm configured). */}
+      {info?.bio && (
+        <section className="artist-about">
+          <h3 className="browse-title">About</h3>
+          <p ref={bioRef} className={`artist-bio${bioExpanded ? " artist-bio--expanded" : ""}`}>
+            {info.bio}
+          </p>
+          {(bioOverflows || bioExpanded) && (
+            <button
+              type="button"
+              className="artist-bio-toggle"
+              onClick={() => setBioExpanded((v) => !v)}
+            >
+              {bioExpanded ? "less" : "more"}
+            </button>
+          )}
+        </section>
+      )}
+
       {/* The whole external discography lookup is online-only; an external
           artist with no owned albums has nothing to show offline. */}
       {offline && !owned && <div className="content-placeholder">{OFFLINE_VIEW_MESSAGE}</div>}
@@ -342,13 +384,6 @@ export function ArtistView({ ref }: Props) {
             ))}
           </div>
         </>
-      )}
-
-      {info?.bio && (
-        <section className="home-row artist-about">
-          <h3 className="browse-title">About</h3>
-          <p className="artist-bio">{info.bio}</p>
-        </section>
       )}
 
       {moreOpen && (
