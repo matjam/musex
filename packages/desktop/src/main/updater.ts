@@ -3,6 +3,7 @@ import { app, type BrowserWindow, dialog } from "electron";
 // Node's cjs-module-lexer can't see — a named ESM import is undefined at
 // runtime. Import the default (module.exports) and destructure.
 import electronUpdater, { type UpdateInfo } from "electron-updater";
+import { isUpdateFeedUnavailable } from "./updater-feed-error.js";
 
 const { autoUpdater } = electronUpdater;
 
@@ -76,20 +77,35 @@ export function setupAutoUpdater(deps: AutoUpdaterDeps): AutoUpdaterHandle {
     }
   });
 
+  const showUpToDate = (): void => {
+    void showDialog({
+      type: "info",
+      message: "You're up to date",
+      detail: `musex ${app.getVersion()} is the latest version.`,
+    });
+  };
+
   autoUpdater.on("update-not-available", () => {
     state = "idle";
     if (interactive) {
       interactive = false;
-      void showDialog({
-        type: "info",
-        message: "You're up to date",
-        detail: `musex ${app.getVersion()} is the latest version.`,
-      });
+      showUpToDate();
     }
   });
 
   autoUpdater.on("error", (err: Error) => {
     state = downloadedVersion ? "downloaded" : "idle";
+    // A freshly-created release whose artifacts haven't uploaded yet (or a tag
+    // with no release) 404s the feed. That's not a failure — there's just no
+    // update to offer — so behave as "up to date", not an error dialog.
+    if (isUpdateFeedUnavailable(err)) {
+      console.warn("[updater] update feed not available yet — treating as no update:", err.message);
+      if (interactive) {
+        interactive = false;
+        showUpToDate();
+      }
+      return;
+    }
     console.error("[updater] error:", err);
     if (interactive) {
       interactive = false;
