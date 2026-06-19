@@ -125,6 +125,7 @@ export const IPC = {
   lastfmGetConfig: "musex:lastfm:getConfig", // -> LastfmConfigDto
   lastfmSetConfig: "musex:lastfm:setConfig", // (LastfmConfigPatchDto) -> void
   lastfmConnect: "musex:lastfm:connect", // -> { ok: boolean; message: string }
+  lastfmSearch: "musex:lastfm:search", // (query) -> LastfmSearchDto (live; empty when not configured)
   // Offline downloads
   downloadTracks: "musex:downloads:tracks", // (tracks: Track[], libraryId) -> void
   downloadAlbum: "musex:downloads:album", // (albumId, libraryId) -> void
@@ -401,6 +402,17 @@ export type LastfmConfigPatchDto = {
   loveOnRating?: boolean;
 };
 
+/** last.fm catalog search results (artist + album + track). External — none of
+ *  these are owned/playable; the renderer navigates to the artist/album page
+ *  to Follow/acquire. `imageUrl`s are baked through the proxy's /ext endpoint
+ *  (last.fm artist images are deprecated placeholders, so artists rarely carry
+ *  one; album art usually exists). */
+export type LastfmSearchDto = {
+  artists: { name: string; imageUrl?: string }[];
+  albums: { title: string; artistName: string; imageUrl?: string }[];
+  tracks: { title: string; artistName: string }[];
+};
+
 // ── Offline downloads ─────────────────────────────────────────────────────
 
 /** One offline-download record on the wire (the core DownloadRecord verbatim). */
@@ -621,6 +633,9 @@ export interface MusexApi {
   lastfmSetConfig(patch: LastfmConfigPatchDto): Promise<void>;
   /** Start the Last.fm account auth flow (opens browser, polls until approved or timeout). */
   lastfmConnect(): Promise<{ ok: boolean; message: string }>;
+  /** Live last.fm catalog search (artist + album + track). Empty when last.fm
+   *  isn't configured. imageUrls are proxy-baked. */
+  lastfmSearch(query: string): Promise<LastfmSearchDto>;
   /** Queue specific tracks for offline download (renderer already holds the Track objects). */
   downloadTracks(tracks: Track[], libraryId: string): Promise<void>;
   /** Queue every track of an album for offline download. */

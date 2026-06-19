@@ -700,6 +700,46 @@ html:not([data-platform="darwin"]) .topbar {
   margin-bottom: 18px;
 }
 
+/* Sub-section heading inside a browse section (e.g. Artists/Albums/Songs
+   under "Not in your library"). */
+.browse-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 14px 0 8px;
+}
+
+/* External (last.fm) track results — not playable, each navigates to its
+   artist page. Rendered as quiet rows rather than the virtualized track list. */
+.search-external-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.search-external-track {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+.search-external-track:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.search-external-track-title {
+  font-size: 13px;
+  color: var(--text);
+}
+.search-external-track-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* "On this device" header: title + size on the left, Play/Shuffle on the right. */
 .on-device-header {
   display: flex;

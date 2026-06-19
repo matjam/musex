@@ -3,10 +3,11 @@ import {
   downloadRecordFor,
   entityRefForAlbum,
   entityRefForArtist,
+  externalAlbumRef,
   externalArtistRef,
 } from "@musex/core";
 import { useEffect, useState } from "react";
-import type { ExternalArtistResultDto } from "../../../../shared/ipc-contract";
+import type { ExternalArtistResultDto, LastfmSearchDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
@@ -21,6 +22,7 @@ import { TrackRow } from "../TrackRow";
 import { VirtualTrackList } from "../VirtualTrackList";
 
 const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
+const EMPTY_LASTFM: LastfmSearchDto = { artists: [], albums: [], tracks: [] };
 
 export function SearchView() {
   // The query lives in app state (driven by the top-bar search box).
@@ -34,6 +36,8 @@ export function SearchView() {
   const [loading, setLoading] = useState(false);
   const [external, setExternal] = useState<ExternalArtistResultDto[]>([]);
   const [externalLoading, setExternalLoading] = useState(false);
+  const [lastfm, setLastfm] = useState<LastfmSearchDto>(EMPTY_LASTFM);
+  const [lastfmLoading, setLastfmLoading] = useState(false);
   const [menu, setMenu] = useState<TrackMenuTarget | null>(null);
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
 
@@ -113,20 +117,93 @@ export function SearchView() {
     };
   }, [query, acquisitionAvailable, offline]);
 
+  // last.fm catalog search (artist + album + track). Independent debounced
+  // fetch; needs the network so it's skipped offline. Returns empty when
+  // last.fm isn't configured (no api key) — the section just stays hidden.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: searchNonce is a re-run trigger (Enter), not read in the body
+  useEffect(() => {
+    if (offline) {
+      setLastfm(EMPTY_LASTFM);
+      setLastfmLoading(false);
+      return;
+    }
+    const q = query.trim();
+    if (q === "") {
+      setLastfm(EMPTY_LASTFM);
+      setLastfmLoading(false);
+      return;
+    }
+    setLastfmLoading(true);
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      window.musex
+        .lastfmSearch(q)
+        .then((r) => {
+          if (!cancelled) {
+            setLastfm(r);
+            setLastfmLoading(false);
+          }
+        })
+        .catch((err: unknown) => {
+          console.error("[lastfm] search failed:", err);
+          if (!cancelled) {
+            setLastfm(EMPTY_LASTFM);
+            setLastfmLoading(false);
+          }
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [query, offline, searchNonce]);
+
   const playingTrackId =
     state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
 
   // External results duplicating a library artist hit are noise — hide them.
   const libraryArtistNames = new Set(results.artists.map((a) => a.name.toLowerCase()));
-  const externalArtists = external.filter((a) => !libraryArtistNames.has(a.name.toLowerCase()));
+  const libraryAlbumTitles = new Set(results.albums.map((a) => a.title.trim().toLowerCase()));
+
+  // Merged "Not in your library" artists: the acquisition plugin (Lidarr) +
+  // last.fm, deduped by lowercased name (the same artist often surfaces in
+  // both), and minus anything already owned. Acquisition results win on
+  // collision (they carry providerId/providerRef → Follow-to-acquire works).
+  type ExternalArtist = { name: string; imageUrl?: string };
+  const seenArtists = new Set<string>();
+  const externalArtists: ExternalArtist[] = [];
+  for (const a of external) {
+    const key = a.name.toLowerCase();
+    if (libraryArtistNames.has(key) || seenArtists.has(key)) continue;
+    seenArtists.add(key);
+    externalArtists.push({ name: a.name, ...(a.imageUrl ? { imageUrl: a.imageUrl } : {}) });
+  }
+  for (const a of lastfm.artists) {
+    const key = a.name.toLowerCase();
+    if (libraryArtistNames.has(key) || seenArtists.has(key)) continue;
+    seenArtists.add(key);
+    externalArtists.push({ name: a.name, ...(a.imageUrl ? { imageUrl: a.imageUrl } : {}) });
+  }
+
+  // last.fm albums minus owned (same title case-insensitive).
+  const externalAlbums = lastfm.albums.filter(
+    (a) => !libraryAlbumTitles.has(a.title.trim().toLowerCase()),
+  );
+  // last.fm tracks: external tracks aren't playable/acquirable, so each just
+  // navigates to its artist (to Follow / acquire). Owned tracks aren't deduped
+  // out — the label makes clear it's a jump to the artist, not the track.
+  const externalTracks = lastfm.tracks;
+
+  const hasExternal =
+    externalArtists.length > 0 || externalAlbums.length > 0 || externalTracks.length > 0;
 
   const hasQuery = query.trim() !== "";
   const empty =
     results.artists.length === 0 &&
     results.albums.length === 0 &&
     results.tracks.length === 0 &&
-    externalArtists.length === 0;
-  const anyLoading = loading || externalLoading;
+    !hasExternal;
+  const anyLoading = loading || externalLoading || lastfmLoading;
 
   return (
     <div className="search-page">
@@ -210,35 +287,89 @@ export function SearchView() {
         </div>
       )}
 
-      {hasQuery && offline && acquisitionAvailable && (
+      {hasQuery && offline && (
         <div className="browse-section">
           <h3 className="browse-title">Not in your library</h3>
           <div className="content-placeholder">{OFFLINE_VIEW_MESSAGE}</div>
         </div>
       )}
 
-      {externalArtists.length > 0 && (
+      {!offline && hasExternal && (
         <div className="browse-section">
           <h3 className="browse-title">Not in your library</h3>
-          <div className="browse-sub">via your acquisition plugin — Follow to acquire</div>
-          <div className="browse-grid">
-            {externalArtists.map((artist) => (
-              <GridCard
-                key={`${artist.providerId}:${artist.providerRef}`}
-                round
-                thumb={artist.imageUrl}
-                title={artist.name}
-                subtitle={artist.disambiguation}
-                entity={externalArtistRef(artist.name)}
-                onOpen={() =>
-                  dispatch({
-                    type: "navigate",
-                    view: { name: "artist", ref: externalArtistRef(artist.name) },
-                  })
-                }
-              />
-            ))}
+          <div className="browse-sub">
+            From Last.fm and your acquisition plugin — open to Follow
           </div>
+
+          {externalArtists.length > 0 && (
+            <>
+              <h4 className="browse-subtitle">Artists</h4>
+              <div className="browse-grid">
+                {externalArtists.map((artist) => (
+                  <GridCard
+                    key={`artist:${artist.name.toLowerCase()}`}
+                    round
+                    thumb={artist.imageUrl}
+                    title={artist.name}
+                    entity={externalArtistRef(artist.name)}
+                    onOpen={() =>
+                      dispatch({
+                        type: "navigate",
+                        view: { name: "artist", ref: externalArtistRef(artist.name) },
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {externalAlbums.length > 0 && (
+            <>
+              <h4 className="browse-subtitle">Albums</h4>
+              <div className="browse-grid">
+                {externalAlbums.map((album) => {
+                  const ref = externalAlbumRef(album.title, album.artistName);
+                  return (
+                    <GridCard
+                      key={`album:${album.artistName.toLowerCase()}:${album.title.toLowerCase()}`}
+                      thumb={album.imageUrl}
+                      title={album.title}
+                      subtitle={album.artistName}
+                      entity={ref}
+                      onOpen={() => dispatch({ type: "navigate", view: { name: "album", ref } })}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {externalTracks.length > 0 && (
+            <>
+              <h4 className="browse-subtitle">Songs</h4>
+              <div className="search-external-tracks">
+                {externalTracks.map((track) => {
+                  const ref = externalArtistRef(track.artistName);
+                  // External tracks aren't playable/acquirable — navigate to
+                  // the artist page (to Follow / acquire). Labelled so it's clear.
+                  return (
+                    <button
+                      type="button"
+                      key={`track:${track.artistName.toLowerCase()}:${track.title.toLowerCase()}`}
+                      className="search-external-track"
+                      onClick={() => dispatch({ type: "navigate", view: { name: "artist", ref } })}
+                    >
+                      <span className="search-external-track-title">{track.title}</span>
+                      <span className="search-external-track-sub">
+                        {track.artistName} · go to artist
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 
