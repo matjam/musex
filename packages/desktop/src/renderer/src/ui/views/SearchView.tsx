@@ -11,9 +11,10 @@ import type { ExternalArtistResultDto, LastfmSearchDto } from "../../../../share
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
-import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
+import { OFFLINE_ACTION_TOOLTIP, OFFLINE_VIEW_MESSAGE } from "../../util/offline";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
+import { useAlbumPlayActions } from "../hooks/useAlbumPlayActions";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -32,6 +33,7 @@ export function SearchView() {
   const { state, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
   const acquisitionAvailable = useAcquisitionAvailable();
+  const { playAlbum: playAlbumFromTile } = useAlbumPlayActions();
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [external, setExternal] = useState<ExternalArtistResultDto[]>([]);
@@ -248,6 +250,9 @@ export function SearchView() {
                   subtitle={album.year != null ? String(album.year) : undefined}
                   entity={ref}
                   onOpen={() => dispatch({ type: "navigate", view: { name: "album", ref } })}
+                  onPlayAlbum={(mode) => void playAlbumFromTile(ref, mode)}
+                  playActionsDisabled={offline}
+                  playActionsTitle={offline ? OFFLINE_ACTION_TOOLTIP : undefined}
                 />
               );
             })}
