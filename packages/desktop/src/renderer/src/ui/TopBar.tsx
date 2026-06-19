@@ -1,6 +1,5 @@
 import { ChevronLeft, ChevronRight, Menu as MenuIcon, Search, WifiOff } from "lucide-react";
 import { useApp } from "../state/app";
-import { ActivityPill } from "./ActivityPill";
 
 // Non-mac windows are frameless, so the File/Edit/View/Help menu has no
 // visible menu bar; a hamburger pops it up. macOS keeps its native menu bar.
@@ -65,10 +64,16 @@ export function TopBar() {
           placeholder="What do you want to listen to?"
           value={searchQuery}
           onChange={(e) => dispatch({ type: "set-search", query: e.target.value })}
+          onKeyDown={(e) => {
+            // Enter re-runs the search even when the text is unchanged.
+            if (e.key === "Enter") {
+              e.preventDefault();
+              dispatch({ type: "search-now" });
+            }
+          }}
           aria-label="Search your library"
         />
       </div>
-      <ActivityPill />
       {connectivity === "offline" && (
         <div className="topbar-offline-pill">
           <WifiOff size={12} />

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { GridCard } from "../GridCard";
+import { useAlbumPlayActions } from "../hooks/useAlbumPlayActions";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
 import { LibraryFilter, type LibraryFilterMode } from "../LibraryFilter";
@@ -17,6 +18,7 @@ type FetchState =
 export function AlbumsView() {
   const { library, connectivity, dispatch } = useApp();
   const { playAlbum } = useCollectionPlay();
+  const { playAlbum: playAlbumFromTile } = useAlbumPlayActions();
   const [sort, setSort] = useState<LibrarySort>("title");
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
@@ -119,6 +121,9 @@ export function AlbumsView() {
                   })
                 }
                 onPlay={() => void playAlbum(album)}
+                onPlayAlbum={(mode) => void playAlbumFromTile(entityRefForAlbum(album), mode)}
+                playActionsDisabled={offline}
+                playActionsTitle={offline ? OFFLINE_ACTION_TOOLTIP : undefined}
               />
             ))}
           </div>

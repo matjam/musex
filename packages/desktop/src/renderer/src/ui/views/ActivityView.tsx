@@ -1,13 +1,14 @@
 import { externalArtistRef } from "@musex/core";
-import { Heart, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import type { AcquisitionStatusDto, ExpansionStateDto } from "../../../../shared/ipc-contract";
-import { useFollow } from "../../state/follow";
+import type { ExpansionStateDto } from "../../../../shared/ipc-contract";
 import { EntityLink } from "../discovery/EntityLink";
 import { StateBadge } from "../discovery/StateBadge";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
 
 const REFRESH_MS = 10_000;
+/** "Recently acquired" window: expansion entries that landed in the last 14 days. */
+const RECENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** Expansion entries carry their own lifecycle states (suggested/requested/
  *  landed/abandoned/rejected). Map the ones with an acquisition-badge
@@ -18,10 +19,13 @@ const EXPANSION_BADGE: Record<string, AcquisitionBadgeState | undefined> = {
   requested: "requested",
 };
 
-type FetchState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ok"; rows: AcquisitionStatusDto[] };
+const STATE_LABEL: Record<string, string> = {
+  suggested: "Suggested",
+  requested: "Requested",
+  landed: "Landed",
+  abandoned: "Abandoned",
+  rejected: "Rejected",
+};
 
 function provenanceLine(e: ExpansionStateDto["entries"][number]): string {
   const pct = `${Math.round(e.provenance.match * 100)}%`;
@@ -31,111 +35,66 @@ function provenanceLine(e: ExpansionStateDto["entries"][number]): string {
   return `because you listen to ${e.provenance.seed} · similarity ${pct}`;
 }
 
-const STATE_LABEL: Record<string, string> = {
-  suggested: "Suggested",
-  requested: "Requested",
-  landed: "Landed",
-  abandoned: "Abandoned",
-  rejected: "Rejected",
-};
-
-/** Taste-expansion attempt feed: every bet with state, provenance and a
- *  "Not for me" escape hatch. Rendered above the provider download queue. */
-function ExpansionsFeed({
-  state,
+/** One album row (used by both the Recently-acquired and Taste-expansion feeds). */
+function ExpansionRow({
+  entry,
   onReject,
 }: {
-  state: ExpansionStateDto | null;
-  onReject: (artistName: string) => void;
+  entry: ExpansionStateDto["entries"][number];
+  onReject?: (artistName: string) => void;
 }) {
-  if (state === null || (!state.prefs.enabled && state.entries.length === 0)) return null;
   return (
-    <>
-      <h3 className="browse-title">Expansions</h3>
-      <div className="browse-sub">
-        Taste expansion bets — what musex tried to add and what landed.
-        {state.lastSummary ? ` Last cycle: ${state.lastSummary.toLowerCase()}` : ""}
+    <div className="dl-row">
+      <div className="dl-row-main">
+        <div className="dl-row-title">
+          {entry.albumTitle}
+          <span className="dl-row-artist">
+            {" — "}
+            <EntityLink entity={externalArtistRef(entry.artistName)}>{entry.artistName}</EntityLink>
+          </span>
+          {entry.deepening && <span className="expansion-deepening"> · deepening</span>}
+        </div>
+        <div className="dl-row-detail">{entry.note ?? provenanceLine(entry)}</div>
       </div>
-      {state.entries.length === 0 ? (
-        <div className="content-placeholder">
-          Nothing tried yet — the next cycle will pick artists from your taste profile.
-        </div>
+      {EXPANSION_BADGE[entry.state] ? (
+        <StateBadge state={EXPANSION_BADGE[entry.state] as AcquisitionBadgeState} />
       ) : (
-        <div className="dl-list expansion-list">
-          {state.entries.map((e) => (
-            <div className="dl-row" key={`${e.artistName}:${e.albumTitle}:${e.createdAt}`}>
-              <div className="dl-row-main">
-                <div className="dl-row-title">
-                  {e.albumTitle}
-                  <span className="dl-row-artist">
-                    {" — "}
-                    <EntityLink entity={externalArtistRef(e.artistName)}>{e.artistName}</EntityLink>
-                  </span>
-                  {e.deepening && <span className="expansion-deepening"> · deepening</span>}
-                </div>
-                <div className="dl-row-detail">{e.note ?? provenanceLine(e)}</div>
-              </div>
-              {EXPANSION_BADGE[e.state] ? (
-                <StateBadge state={EXPANSION_BADGE[e.state] as AcquisitionBadgeState} />
-              ) : (
-                <span className="dl-chip">{STATE_LABEL[e.state] ?? e.state}</span>
-              )}
-              {e.state !== "rejected" && (
-                <button
-                  type="button"
-                  className="expansion-reject"
-                  title={`Not for me — never suggest ${e.artistName} again`}
-                  onClick={() => onReject(e.artistName)}
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+        <span className="dl-chip">{STATE_LABEL[entry.state] ?? entry.state}</span>
       )}
-    </>
+      {onReject && entry.state !== "rejected" && (
+        <button
+          type="button"
+          className="expansion-reject"
+          title={`Not for me — never suggest ${entry.artistName} again`}
+          onClick={() => onReject(entry.artistName)}
+        >
+          <X size={13} />
+        </button>
+      )}
+    </div>
   );
 }
 
-/** The acquisition activity feed: the in-flight / requested download queue
- *  across acquisition providers, the taste-expansion bets, and the artists you
- *  follow for new releases. Reachable from the persistent sidebar "Activity"
- *  entry and the top-bar activity pill's "View all". Auto-refreshes while open. */
+/** The activity feed, scoped to the data that actually carries a real
+ *  timestamp:
+ *
+ *  1. "Recently acquired" — expansion entries that LANDED in the last 14 days.
+ *     This is the only acquisition data with a real timestamp. General Lidarr
+ *     grabs (the `acquisitionStatus()` queue) carry NO timestamp, so they are
+ *     deliberately NOT shown here — they would otherwise read as perpetually
+ *     "acquiring" with no way to tell what's new (a known acquisition-provider
+ *     limitation).
+ *  2. "Taste Expansion" — the in-progress bets / provenance, as before.
+ *
+ *  Reachable from the persistent sidebar "Activity" entry. Auto-refreshes. */
 export function ActivityView() {
-  const { isFollowed, setFollowed } = useFollow();
-  const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [expansion, setExpansion] = useState<ExpansionStateDto | null>(null);
-  // Names (original casing) for the followed-for-new-releases list; visibility
-  // is gated live by the follow store so the X button (unfollow) updates
-  // optimistically.
-  const [followedNames, setFollowedNames] = useState<string[]>([]);
 
   const refresh = useCallback(() => {
-    window.musex
-      .acquisitionStatus()
-      .then((rows) => setFetch({ status: "ok", rows }))
-      .catch((err: unknown) => {
-        console.error("[acquisition] status failed:", err);
-        // Keep showing the last good rows; only surface the error before
-        // the first successful fetch.
-        setFetch((prev) =>
-          prev.status === "ok"
-            ? prev
-            : {
-                status: "error",
-                message: err instanceof Error ? err.message : "Failed to load downloads",
-              },
-        );
-      });
     window.musex
       .expansionGetState()
       .then(setExpansion)
       .catch((err: unknown) => console.error("[expansion] state failed:", err));
-    window.musex
-      .newReleaseWatchList()
-      .then(setFollowedNames)
-      .catch((err: unknown) => console.error("[follow] list failed:", err));
   }, []);
 
   useEffect(() => {
@@ -151,99 +110,61 @@ export function ActivityView() {
       .catch((err: unknown) => console.error("[expansion] reject failed:", err));
   }
 
-  function unfollow(artistName: string) {
-    void setFollowed(externalArtistRef(artistName), false).catch((err: unknown) =>
-      console.error("[follow] unfollow failed:", err),
-    );
-  }
+  const entries = expansion?.entries ?? [];
+  const cutoff = Date.now() - RECENT_WINDOW_MS;
+  // Newest-first. expansionGetState already returns newest-first, but landedAt
+  // (not createdAt) is the relevant time here, so sort explicitly.
+  const recentlyAcquired = entries
+    .filter((e) => e.state === "landed" && e.landedAt != null && e.landedAt > cutoff)
+    .sort((a, b) => (b.landedAt ?? 0) - (a.landedAt ?? 0));
 
-  // Live view: hide names the store no longer considers followed (optimistic
-  // unfollow), so the list updates without waiting for the next refresh.
-  const followed = followedNames.filter((name) => isFollowed(externalArtistRef(name)));
+  // Each entry shows in exactly one section: a freshly-landed album already
+  // appears under "Recently acquired", so exclude those from the Taste
+  // Expansion feed below (which otherwise renders ALL entries → duplicates).
+  const recentKeys = new Set(recentlyAcquired.map((e) => `${e.artistName}:${e.albumTitle}`));
+  const expansionEntries = entries.filter(
+    (e) => !recentKeys.has(`${e.artistName}:${e.albumTitle}`),
+  );
+
+  const expansionVisible =
+    expansion !== null && (expansion.prefs.enabled || expansion.entries.length > 0);
 
   return (
     <div className="browse-section downloads-view">
-      <ExpansionsFeed state={expansion} onReject={reject} />
-
-      <h3 className="browse-title">Downloads</h3>
-      <div className="browse-sub">Albums requested through acquisition plugins.</div>
-
-      {fetch.status === "loading" && <div className="content-placeholder">Loading…</div>}
-
-      {fetch.status === "error" && (
-        <div className="content-placeholder error-text">Error: {fetch.message}</div>
-      )}
-
-      {fetch.status === "ok" && fetch.rows.length === 0 && (
-        <div className="content-placeholder">
-          Nothing requested. Follow an artist to acquire their music.
-        </div>
-      )}
-
-      {fetch.status === "ok" && fetch.rows.length > 0 && (
+      <h3 className="browse-title">Recently acquired</h3>
+      <div className="browse-sub">Albums that landed on your server in the last 14 days.</div>
+      {recentlyAcquired.length === 0 ? (
+        <div className="content-placeholder">Nothing landed recently.</div>
+      ) : (
         <div className="dl-list">
-          {fetch.rows.map((row) => (
-            <div className="dl-row" key={`${row.providerId}:${row.artistName}:${row.title}`}>
-              <div className="dl-row-main">
-                <div className="dl-row-title">
-                  {row.title}
-                  <span className="dl-row-artist">
-                    {" — "}
-                    <EntityLink entity={externalArtistRef(row.artistName)}>
-                      {row.artistName}
-                    </EntityLink>
-                  </span>
-                </div>
-                {row.progress != null && (
-                  <div className="dl-progress">
-                    <div
-                      className="dl-progress-fill"
-                      style={{
-                        width: `${Math.round(Math.min(1, Math.max(0, row.progress)) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                )}
-                {row.detail && <div className="dl-row-detail">{row.detail}</div>}
-              </div>
-              <StateBadge
-                state={row.state}
-                percent={
-                  row.state === "downloading" && row.progress != null
-                    ? row.progress * 100
-                    : undefined
-                }
-              />
-            </div>
+          {recentlyAcquired.map((e) => (
+            <ExpansionRow key={`${e.artistName}:${e.albumTitle}:${e.landedAt}`} entry={e} />
           ))}
         </div>
       )}
 
-      {followed.length > 0 && (
+      {expansionVisible && (
         <>
-          <h3 className="browse-title watched-title">Following</h3>
+          <h3 className="browse-title">Taste Expansion</h3>
           <div className="browse-sub">
-            Future albums by these artists are fetched automatically.
+            Taste expansion bets — what musex tried to add and what landed.
+            {expansion.lastSummary ? ` Last cycle: ${expansion.lastSummary.toLowerCase()}` : ""}
           </div>
-          <div className="dl-list">
-            {followed.map((name) => (
-              <div className="dl-row" key={name}>
-                <div className="dl-row-main">
-                  <div className="dl-row-title">
-                    <Heart size={13} className="watched-icon" /> {name}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="expansion-reject"
-                  title={`Unfollow ${name}`}
-                  onClick={() => unfollow(name)}
-                >
-                  <X size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
+          {expansionEntries.length === 0 ? (
+            <div className="content-placeholder">
+              Nothing tried yet — the next cycle will pick artists from your taste profile.
+            </div>
+          ) : (
+            <div className="dl-list expansion-list">
+              {expansionEntries.map((e) => (
+                <ExpansionRow
+                  key={`${e.artistName}:${e.albumTitle}:${e.createdAt}`}
+                  entry={e}
+                  onReject={reject}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

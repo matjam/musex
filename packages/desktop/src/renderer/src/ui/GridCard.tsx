@@ -1,7 +1,7 @@
 import type { EntityRef } from "@musex/core";
 import { entityState, resolveEntity } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
-import { Download, ListPlus, MoreHorizontal, Play } from "lucide-react";
+import { Download, ListPlus, MoreHorizontal, Play, Shuffle } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useFollow } from "../state/follow";
 import { AlbumArt } from "./AlbumArt";
@@ -37,6 +37,14 @@ interface Props {
   downloadTitle?: string;
   /** ⋯ menu: "Play next" → enqueue this collection next. */
   onPlayNext?: () => void;
+  /** ⋯ menu (owned albums): play the album now / next / shuffled without
+   *  entering the album view. The consumer binds it to the album's tracks.
+   *  Omit to hide the Play now / Play next / Shuffle items. */
+  onPlayAlbum?: (mode: "now" | "next" | "shuffle") => void;
+  /** Disable the Play now / next / shuffle items (e.g. offline — no tracks). */
+  playActionsDisabled?: boolean;
+  /** Tooltip for the play items when disabled. */
+  playActionsTitle?: string;
   // ── Non-entity collection-tile props (playlists, smart-mix tiles, on-device
   //    albums — tiles that aren't a single library entity). Prefer `entity` +
   //    flags for entity cards. ──
@@ -76,6 +84,9 @@ export function GridCard({
   downloadDisabled,
   downloadTitle,
   onPlayNext,
+  onPlayAlbum,
+  playActionsDisabled,
+  playActionsTitle,
   state,
   statePercent,
   dim = false,
@@ -223,6 +234,50 @@ export function GridCard({
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
+                {/* Owned-album playback straight from the tile (no album view). */}
+                {entity.kind === "album" && !unowned && onPlayAlbum && (
+                  <>
+                    <button
+                      type="button"
+                      className="ctx-item ctx-item--icon"
+                      disabled={playActionsDisabled}
+                      title={playActionsDisabled ? playActionsTitle : undefined}
+                      onClick={() => {
+                        onPlayAlbum("now");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <Play size={14} />
+                      Play now
+                    </button>
+                    <button
+                      type="button"
+                      className="ctx-item ctx-item--icon"
+                      disabled={playActionsDisabled}
+                      title={playActionsDisabled ? playActionsTitle : undefined}
+                      onClick={() => {
+                        onPlayAlbum("next");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <ListPlus size={14} />
+                      Play next
+                    </button>
+                    <button
+                      type="button"
+                      className="ctx-item ctx-item--icon"
+                      disabled={playActionsDisabled}
+                      title={playActionsDisabled ? playActionsTitle : undefined}
+                      onClick={() => {
+                        onPlayAlbum("shuffle");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <Shuffle size={14} />
+                      Shuffle
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="ctx-item"

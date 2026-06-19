@@ -15,6 +15,7 @@ import {
 } from "../discovery/FollowButton";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
+import { useAlbumPlayActions } from "../hooks/useAlbumPlayActions";
 import { useEntityNav } from "../hooks/useEntityNav";
 import { StarRating } from "../StarRating";
 import { type DiscographyItem, unifyDiscography } from "./artist-discography";
@@ -52,6 +53,7 @@ export function ArtistView({ ref }: Props) {
   const { playTracks, playTracksShuffled, enqueueNext, enqueueEnd, startRadioFromArtist } =
     usePlayer();
   const { ratingFor, rate, seed } = useRatings();
+  const { playAlbum: playAlbumFromTile } = useAlbumPlayActions();
   const { goRef } = useEntityNav();
   // Follow toggles the acquire+watch relationship for this artist (one action).
   const follow = useFollowAction(ref);
@@ -378,6 +380,9 @@ export function ArtistView({ ref }: Props) {
                 dim={item.unavailable}
                 onOpen={() => goRef(item.ref)}
                 onGetAlbum={item.acquire ? () => acquireAlbum(item) : undefined}
+                onPlayAlbum={(mode) => void playAlbumFromTile(item.ref, mode)}
+                playActionsDisabled={offline}
+                playActionsTitle={offline ? OFFLINE_ACTION_TOOLTIP : undefined}
               />
             ))}
           </div>

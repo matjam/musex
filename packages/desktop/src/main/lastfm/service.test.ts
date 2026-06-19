@@ -79,7 +79,7 @@ function makeService(fetchImpl: typeof fetch, configOverride?: Partial<LastfmCon
     },
   });
 
-  return { hub, notifications, opened, storage };
+  return { hub, service, notifications, opened, storage };
 }
 
 /** Build a minimal last.fm API JSON response body string. */
@@ -402,5 +402,101 @@ describe("LastfmService — dispose", () => {
     expect(hub.registry.trackDetailProviders.length).toBe(1);
     expect(hub.registry.trackActions.length).toBe(1);
     expect(hub.registry.eventSubscribers.length).toBe(3); // trackStarted, scrobble, trackRated
+  });
+});
+
+// ── catalog search (artist + album + track) ──────────────────────────────────
+
+describe("LastfmService — search", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Route the three search methods (all POST the same endpoint) by the
+   *  `method` form field in the request body. */
+  function searchFetch(bodies: { artist: unknown; album: unknown; track: unknown }): typeof fetch {
+    return vi.fn(async (_url: unknown, init: { body: URLSearchParams }) => {
+      const method = init.body.get("method");
+      if (method === "artist.search") return new Response(lfmJson(bodies.artist), { status: 200 });
+      if (method === "album.search") return new Response(lfmJson(bodies.album), { status: 200 });
+      if (method === "track.search") return new Response(lfmJson(bodies.track), { status: 200 });
+      return new Response(lfmJson({}), { status: 200 });
+    }) as unknown as typeof fetch;
+  }
+
+  it("returns artists, albums and tracks parsed from the three search methods", async () => {
+    const { service } = makeService(
+      searchFetch({
+        artist: {
+          results: {
+            artistmatches: {
+              artist: [{ name: "Mike Oldfield" }, { name: "" }, { other: 1 }],
+            },
+          },
+        },
+        album: {
+          results: {
+            albummatches: {
+              album: [
+                {
+                  name: "Tubular Bells",
+                  artist: "Mike Oldfield",
+                  image: [{ size: "large", "#text": "https://img/tb.png" }],
+                },
+                { name: "No Artist" }, // dropped (missing artist)
+              ],
+            },
+          },
+        },
+        track: {
+          results: {
+            trackmatches: {
+              track: [
+                { name: "Tubular Bells", artist: "Mike Oldfield" },
+                { name: "X" }, // dropped (missing artist)
+              ],
+            },
+          },
+        },
+      }),
+    );
+    const res = await service.search?.("tubular bells");
+    expect(res?.artists).toEqual([{ name: "Mike Oldfield" }]);
+    expect(res?.albums).toEqual([
+      { title: "Tubular Bells", artistName: "Mike Oldfield", imageUrl: "https://img/tb.png" },
+    ]);
+    expect(res?.tracks).toEqual([{ title: "Tubular Bells", artistName: "Mike Oldfield" }]);
+  });
+
+  it("drops the last.fm placeholder image (treated as no artwork)", async () => {
+    const placeholder =
+      "https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png";
+    const { service } = makeService(
+      searchFetch({
+        artist: {
+          results: {
+            artistmatches: {
+              artist: [{ name: "A", image: [{ size: "large", "#text": placeholder }] }],
+            },
+          },
+        },
+        album: { results: { albummatches: { album: [] } } },
+        track: { results: { trackmatches: { track: [] } } },
+      }),
+    );
+    const res = await service.search?.("a");
+    expect(res?.artists).toEqual([{ name: "A" }]); // no imageUrl
+  });
+
+  it("returns empty when last.fm isn't configured (no api key)", async () => {
+    const { service } = makeService(searchFetch({ artist: {}, album: {}, track: {} }), {
+      apiKey: "",
+    });
+    const res = await service.search?.("anything");
+    expect(res).toEqual({ artists: [], albums: [], tracks: [] });
+  });
+
+  it("returns empty for a blank query", async () => {
+    const { service } = makeService(searchFetch({ artist: {}, album: {}, track: {} }));
+    const res = await service.search?.("   ");
+    expect(res).toEqual({ artists: [], albums: [], tracks: [] });
   });
 });

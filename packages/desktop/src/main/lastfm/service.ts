@@ -64,6 +64,30 @@ type TrackInfoResponse = {
   };
 };
 
+type ArtistSearchResponse = {
+  results?: {
+    artistmatches?: { artist?: { name?: string; image?: LastfmImage[] }[] };
+  };
+};
+type AlbumSearchResponse = {
+  results?: {
+    albummatches?: { album?: { name?: string; artist?: string; image?: LastfmImage[] }[] };
+  };
+};
+type TrackSearchResponse = {
+  results?: {
+    trackmatches?: { track?: { name?: string; artist?: string }[] };
+  };
+};
+
+/** Catalog search result shape returned to the IPC layer (proxy-baking of
+ *  imageUrls happens in main/ipc.ts). */
+export type LastfmSearchResult = {
+  artists: { name: string; imageUrl?: string }[];
+  albums: { title: string; artistName: string; imageUrl?: string }[];
+  tracks: { title: string; artistName: string }[];
+};
+
 interface ArtistInfoResponse {
   artist?: {
     name?: string;
@@ -204,6 +228,68 @@ export class LastfmService {
 
     // Store the connect function so IPC can call it.
     this.connect = connect;
+
+    // ── Catalog search (artist + album + track) ──────────────────────────────
+
+    const SEARCH_LIMIT = "8";
+
+    /** Live last.fm catalog search. Unsigned read methods; no session needed.
+     *  Returns empty when last.fm isn't configured (no api key/secret). */
+    const search = async (query: string, limit = SEARCH_LIMIT): Promise<LastfmSearchResult> => {
+      const empty: LastfmSearchResult = { artists: [], albums: [], tracks: [] };
+      const q = query.trim();
+      if (q === "") return empty;
+      const c = await client();
+      if (!c) return empty;
+
+      const [artistRes, albumRes, trackRes] = await Promise.all([
+        c
+          .call<ArtistSearchResponse>("artist.search", { artist: q, limit }, { signed: false })
+          .catch((err: unknown) => {
+            deps.log("artist.search failed:", errText(err));
+            return null;
+          }),
+        c
+          .call<AlbumSearchResponse>("album.search", { album: q, limit }, { signed: false })
+          .catch((err: unknown) => {
+            deps.log("album.search failed:", errText(err));
+            return null;
+          }),
+        c
+          .call<TrackSearchResponse>("track.search", { track: q, limit }, { signed: false })
+          .catch((err: unknown) => {
+            deps.log("track.search failed:", errText(err));
+            return null;
+          }),
+      ]);
+
+      const rawArtists = artistRes?.results?.artistmatches?.artist;
+      const artists = (Array.isArray(rawArtists) ? rawArtists : []).flatMap((a) => {
+        if (typeof a.name !== "string" || a.name.length === 0) return [];
+        const imageUrl = pickImageUrl(a.image);
+        return [{ name: a.name, ...(imageUrl !== null ? { imageUrl } : {}) }];
+      });
+
+      const rawAlbums = albumRes?.results?.albummatches?.album;
+      const albums = (Array.isArray(rawAlbums) ? rawAlbums : []).flatMap((a) => {
+        if (typeof a.name !== "string" || a.name.length === 0) return [];
+        if (typeof a.artist !== "string" || a.artist.length === 0) return [];
+        const imageUrl = pickImageUrl(a.image);
+        return [
+          { title: a.name, artistName: a.artist, ...(imageUrl !== null ? { imageUrl } : {}) },
+        ];
+      });
+
+      const rawTracks = trackRes?.results?.trackmatches?.track;
+      const tracks = (Array.isArray(rawTracks) ? rawTracks : []).flatMap((t) => {
+        if (typeof t.name !== "string" || t.name.length === 0) return [];
+        if (typeof t.artist !== "string" || t.artist.length === 0) return [];
+        return [{ title: t.name, artistName: t.artist }];
+      });
+
+      return { artists, albums, tracks };
+    };
+    this.search = search;
 
     // ── Artwork cache helper ─────────────────────────────────────────────────
 
@@ -623,4 +709,8 @@ export class LastfmService {
   /** Connect the Last.fm account (starts the auth poll loop).
    *  Assigned by start(); null before start() is called. */
   connect: (() => Promise<{ ok: boolean; message: string }>) | null = null;
+
+  /** Live catalog search (artist + album + track). Assigned by start(); null
+   *  before start() is called. Returns empty when last.fm isn't configured. */
+  search: ((query: string) => Promise<LastfmSearchResult>) | null = null;
 }

@@ -22,8 +22,10 @@ import type { SectionDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { usePlaylists } from "../../state/playlists";
 import { todaySeed, useSmartMixes } from "../../state/smart-mixes";
+import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { CardCollage } from "../CardCollage";
 import { GridCard } from "../GridCard";
+import { useAlbumPlayActions } from "../hooks/useAlbumPlayActions";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { PluginSections } from "../PluginSections";
 import { MIX_ICONS, smartIcon } from "../smart-mix-icons";
@@ -54,10 +56,12 @@ function pickRandom<T>(items: T[], n: number): T[] {
 const RANDOM_COUNT = 12;
 
 export function HomeView() {
-  const { library, dispatch } = useApp();
+  const { library, dispatch, connectivity } = useApp();
   const { warm: warmSmartMixes } = useSmartMixes();
   const { playlists } = usePlaylists();
   const { playAlbum, playArtist, playPlaylist } = useCollectionPlay();
+  const { playAlbum: playAlbumFromTile } = useAlbumPlayActions();
+  const offline = connectivity === "offline";
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [mixThumbs, setMixThumbs] = useState<Map<string, string[]>>(new Map());
@@ -437,6 +441,9 @@ export function HomeView() {
                   dispatch({ type: "navigate", view: { name: "album", ref: entityRefForAlbum(a) } })
                 }
                 onPlay={() => void playAlbum(a)}
+                onPlayAlbum={(mode) => void playAlbumFromTile(entityRefForAlbum(a), mode)}
+                playActionsDisabled={offline}
+                playActionsTitle={offline ? OFFLINE_ACTION_TOOLTIP : undefined}
               />
             ))}
           </div>

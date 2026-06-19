@@ -39,6 +39,9 @@ interface AppState {
   history: NavHistory<View>;
   /** Reachability of the Plex server (main's ConnectivityMonitor). */
   connectivity: "online" | "offline";
+  /** Bumped by `search-now` (Enter in the search box) to force SearchView to
+   *  re-fetch even when the query text is unchanged. */
+  searchNonce: number;
 }
 type Action =
   | { type: "signing-in"; code: string }
@@ -46,6 +49,7 @@ type Action =
   | { type: "restore-done"; library: Library | null }
   | { type: "navigate"; view: View }
   | { type: "set-search"; query: string }
+  | { type: "search-now" }
   | { type: "library-updated"; library: Library }
   | { type: "library-switched"; library: Library }
   | { type: "connectivity-changed"; online: boolean }
@@ -86,6 +90,19 @@ function reducer(s: AppState, a: Action): AppState {
         ...s,
         searchQuery: a.query,
         view: a.query.trim() ? { name: "search" } : s.view,
+        history: entering ? pushView(s.history, s.view) : s.history,
+      };
+    }
+    case "search-now": {
+      // Enter in the search box: re-run the search even if the text is
+      // unchanged. Bump the nonce (SearchView deps on it) and make sure we're
+      // on the search view (re-entering from elsewhere pushes history).
+      if (s.searchQuery.trim() === "") return s;
+      const entering = s.view.name !== "search";
+      return {
+        ...s,
+        searchNonce: s.searchNonce + 1,
+        view: { name: "search" },
         history: entering ? pushView(s.history, s.view) : s.history,
       };
     }
@@ -139,6 +156,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     searchQuery: "",
     history: EMPTY_HISTORY,
     connectivity: "online",
+    searchNonce: 0,
   });
 
   useEffect(() => {

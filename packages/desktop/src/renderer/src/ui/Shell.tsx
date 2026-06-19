@@ -129,9 +129,9 @@ export function Shell() {
       case "on-device":
         return <OnDeviceView />;
       case "activity":
-        // The acquisition activity feed (download queue + expansions +
-        // followed-for-new-releases). Reached from the persistent sidebar
-        // "Activity" entry and the top-bar activity pill's "View all".
+        // Recently-acquired (landed expansion albums, last 14 days) + the
+        // taste-expansion bets feed. Reached from the persistent sidebar
+        // "Activity" entry and ArtistsView's "View acquisition activity" link.
         return <ActivityView />;
     }
   }

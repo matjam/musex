@@ -31,6 +31,7 @@ import type {
   ExternalArtistResultDto,
   LastfmConfigDto,
   LastfmConfigPatchDto,
+  LastfmSearchDto,
   LoadPlaybackResult,
   LogLevel,
   NowPlayingMsg,
@@ -1036,6 +1037,34 @@ export function registerIpc(rt: Runtime): void {
   ipcMain.handle(IPC.lastfmConnect, async () => {
     if (!rt.lastfmService?.connect) throw new Error("Last.fm service not started");
     return rt.lastfmService.connect();
+  });
+
+  // Live last.fm catalog search (SearchView's "Not in your library" section).
+  // Empty when last.fm isn't configured. Artwork is baked through the proxy's
+  // /ext endpoint like every other plugin/service-supplied image; unbakeable
+  // URLs are dropped (rather than served raw, which would leak + not disk-cache).
+  ipcMain.handle(IPC.lastfmSearch, async (_e, query: unknown): Promise<LastfmSearchDto> => {
+    if (typeof query !== "string") throw new Error("invalid query");
+    const search = rt.lastfmService?.search;
+    if (!search) return { artists: [], albums: [], tracks: [] };
+    const res = await search(query);
+    const bake = (imageUrl: string | undefined): string | undefined =>
+      imageUrl === undefined ? undefined : rt.proxy.externalArtUrl(imageUrl);
+    return {
+      artists: res.artists.map((a) => {
+        const imageUrl = bake(a.imageUrl);
+        return { name: a.name, ...(imageUrl !== undefined ? { imageUrl } : {}) };
+      }),
+      albums: res.albums.map((a) => {
+        const imageUrl = bake(a.imageUrl);
+        return {
+          title: a.title,
+          artistName: a.artistName,
+          ...(imageUrl !== undefined ? { imageUrl } : {}),
+        };
+      }),
+      tracks: res.tracks,
+    };
   });
 
   // ── Offline downloads ─────────────────────────────────────────────────────

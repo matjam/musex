@@ -137,6 +137,7 @@ const api: MusexApi = {
   lastfmGetConfig: () => ipcRenderer.invoke(IPC.lastfmGetConfig) as Promise<LastfmConfigDto>,
   lastfmSetConfig: (patch: LastfmConfigPatchDto) => ipcRenderer.invoke(IPC.lastfmSetConfig, patch),
   lastfmConnect: () => ipcRenderer.invoke(IPC.lastfmConnect),
+  lastfmSearch: (query: string) => ipcRenderer.invoke(IPC.lastfmSearch, query),
   downloadTracks: (tracks, libraryId) => ipcRenderer.invoke(IPC.downloadTracks, tracks, libraryId),
   downloadAlbum: (albumId, libraryId) => ipcRenderer.invoke(IPC.downloadAlbum, albumId, libraryId),
   downloadArtist: (artistId, libraryId) =>
