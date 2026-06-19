@@ -6,11 +6,36 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write # the build-artifacts comment
+
 jobs:
-  check:
-    # ubuntu is fine: `pnpm check` (typecheck + biome + vitest) runs node-side —
-    # no mpv binary (vendor is darwin-arm64-only) and no Electron runtime needed.
-    runs-on: ubuntu-latest
+  build:
+    # Build the app on all three platforms on every PR (and push to main):
+    # runs the full electron-builder package UNSIGNED and WITHOUT publishing,
+    # so packaging breakage (the win block, mpv bundling, icons, nsis/dmg) and
+    # platform-specific test/lint/typecheck failures are caught pre-merge — not
+    # at release time. Signing/notarization/upload stay in release-please.yml.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+            artifacts: |
+              packages/desktop/release/*.AppImage
+              packages/desktop/release/*.deb
+          - os: macos-latest
+            name: macos
+            artifacts: |
+              packages/desktop/release/*.dmg
+              packages/desktop/release/*.zip
+          - os: windows-latest
+            name: windows
+            artifacts: |
+              packages/desktop/release/*.exe
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
@@ -25,5 +50,70 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # darwin: vendored mpv zip; windows: vendored mpv .7z (7-Zip is on the
+      # runner); linux: no-op (mpv is a system dep, not bundled).
+      - name: Vendor mpv
+        run: pnpm vendor
+
       - name: Check (typecheck + lint + tests)
         run: pnpm check
+
+      # Unsigned, no-publish package. CSC_IDENTITY_AUTO_DISCOVERY=false skips
+      # code-signing on macOS; package:ci adds -c.mac.notarize=false. No Apple/
+      # Windows certs needed, so this works on PRs (incl. the no-secrets case).
+      - name: Build (unsigned, no publish)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: pnpm --filter @musex/desktop run package:ci
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: musex-${{ matrix.name }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 14
+
+  comment:
+    # On a PR where all three builds succeeded, post (or update) a single
+    # comment linking the artifacts. Same-repo only — fork PRs get a read-only
+    # token and can't comment.
+    needs: build
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.build.result == 'success' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- pr-build-artifacts -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const sha = context.payload.pull_request.head.sha.slice(0, 7);
+            const body = [
+              marker,
+              '### 📦 Build artifacts',
+              '',
+              'All three platform builds passed. Download the **unsigned** installers from this run (artifacts expire after 14 days):',
+              '',
+              `**[⬇ Artifacts for this run](${runUrl})**`,
+              '',
+              '- 🍎 macOS — `musex-macos` (dmg + zip)',
+              '- 🐧 Linux — `musex-linux` (AppImage + deb)',
+              '- 🪟 Windows — `musex-windows` (installer + portable exe)',
+              '',
+              `_Unsigned CI builds for testing only — not for distribution. Commit \`${sha}\`._`,
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
