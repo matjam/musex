@@ -3,12 +3,12 @@ import { LOVED_RATING } from "../index.js";
 import type { Track } from "../models/index";
 import {
   computeSmartPlaylist,
-  SMART_DESCRIPTIONS,
-  SMART_TITLES,
   type SmartKind,
+  smartDescription,
   type SmartTrackStat,
   smartMixEmpty,
   smartMixThumbs,
+  smartTitle,
   smartTrackKey,
 } from "./smart-playlists";
 import { KEY_SEPARATOR } from "./taste-profile";
@@ -49,14 +49,18 @@ describe("smartTrackKey", () => {
   });
 });
 
-describe("SMART_TITLES", () => {
-  it("names all four kinds", () => {
-    expect(SMART_TITLES).toEqual({
-      "for-you": "For You",
-      "top-rated": "Top Rated",
-      "heavy-rotation": "Heavy Rotation",
-      rediscover: "Rediscover",
-    });
+describe("smartTitle", () => {
+  it("names the rule kinds and the daily mix", () => {
+    expect(smartTitle("for-you")).toBe("For You");
+    expect(smartTitle("top-rated")).toBe("Top Rated");
+    expect(smartTitle("heavy-rotation")).toBe("Heavy Rotation");
+    expect(smartTitle("rediscover")).toBe("Rediscover");
+    expect(smartTitle("daily")).toBe("Daily Mix");
+  });
+
+  it("renders a decade kind as e.g. 1980s", () => {
+    expect(smartTitle("decade-1980")).toBe("1980s");
+    expect(smartTitle("decade-2000")).toBe("2000s");
   });
 });
 
@@ -227,10 +231,11 @@ describe("smartMixEmpty", () => {
   });
 });
 
-describe("SMART_DESCRIPTIONS", () => {
+describe("smartDescription", () => {
   it("every smart kind has a tile description", () => {
-    const kinds: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
-    for (const k of kinds) expect(SMART_DESCRIPTIONS[k].length).toBeGreaterThan(0);
+    const kinds: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover", "daily"];
+    for (const k of kinds) expect(smartDescription(k).length).toBeGreaterThan(0);
+    expect(smartDescription("decade-1990").length).toBeGreaterThan(0);
   });
 });
 

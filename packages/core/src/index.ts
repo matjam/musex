@@ -26,6 +26,7 @@ export * from "./logic/library-sort";
 export * from "./logic/library-watch";
 export * from "./logic/list-cache-keys";
 export * from "./logic/list-validator";
+export * from "./logic/mixes";
 export * from "./logic/mood-mixes";
 export * from "./logic/nav-history";
 export * from "./logic/offline-availability";

@@ -1,24 +1,55 @@
 import type { Track } from "../models/index";
 import { KEY_SEPARATOR } from "./taste-profile";
 
-/** The canned smart playlists (sidebar "Smart" section). */
-export type SmartKind = "for-you" | "top-rated" | "heavy-rotation" | "rediscover";
+/** The canned smart playlists (sidebar "Smart" section). The rule-based kinds
+ *  are fixed strings; `daily` is a date-seeded shuffle; `decade-<start>` is one
+ *  decade's tracks shuffled. All string forms so views/history compare cleanly
+ *  (JSON.stringify) and so a parametric decade can't be hidden behind a Record. */
+export type RuleSmartKind = "for-you" | "top-rated" | "heavy-rotation" | "rediscover";
+export type DecadeSmartKind = `decade-${number}`;
+export type SmartKind = RuleSmartKind | "daily" | DecadeSmartKind;
 
-export const SMART_TITLES: Record<SmartKind, string> = {
+/** Build the SmartKind for a decade start year (1980 → "decade-1980"). */
+export function decadeKind(decadeStart: number): DecadeSmartKind {
+  return `decade-${decadeStart}`;
+}
+
+/** The decade start encoded in a `decade-<start>` kind, or null for any other. */
+export function parseDecadeKind(kind: SmartKind): number | null {
+  const m = /^decade-(\d{4})$/.exec(kind);
+  return m?.[1] !== undefined ? Number(m[1]) : null;
+}
+
+const RULE_TITLES: Record<RuleSmartKind | "daily", string> = {
   "for-you": "For You",
   "top-rated": "Top Rated",
   "heavy-rotation": "Heavy Rotation",
   rediscover: "Rediscover",
+  daily: "Daily Mix",
 };
 
-/** Tile descriptions (Home "Smart Mixes" row) — every card gets one so the
- *  smart and mood tiles share the same structure and align. */
-export const SMART_DESCRIPTIONS: Record<SmartKind, string> = {
+const RULE_DESCRIPTIONS: Record<RuleSmartKind | "daily", string> = {
   "for-you": "Fresh picks from your favorite artists and their neighbors.",
   "top-rated": "Everything you've rated four stars and up.",
   "heavy-rotation": "The tracks you keep coming back to.",
   rediscover: "Old favorites you haven't played in a while.",
+  daily: "A fresh shuffle of your whole library, refreshed every day.",
 };
+
+/** Display title for a smart-mix kind (decades render as "1980s"). */
+export function smartTitle(kind: SmartKind): string {
+  const decade = parseDecadeKind(kind);
+  if (decade !== null) return `${decade}s`;
+  return RULE_TITLES[kind as RuleSmartKind | "daily"];
+}
+
+/** Tile description (Home "Smart Mixes" row) — every card gets one so the
+ *  smart and mood tiles share the same structure and align. */
+export function smartDescription(kind: SmartKind): string {
+  const decade = parseDecadeKind(kind);
+  if (decade !== null) return `The best of the ${decade}s, shuffled.`;
+  return RULE_DESCRIPTIONS[kind as RuleSmartKind | "daily"];
+}
 
 /** Plex 0–10 rating at/above which a track counts as "loved" (8 = 4 stars). */
 export const LOVED_RATING = 8;
@@ -63,7 +94,7 @@ function dedupedThumbs(thumbs: (string | undefined)[]): string[] {
  *  composition is a multi-IPC fan-out — far too heavy for a Home tile — so it
  *  approximates with the top-taste artists' track art. */
 export function smartMixThumbs(
-  kind: SmartKind,
+  kind: RuleSmartKind,
   tracks: Track[],
   stats: SmartTrackStat[],
   artistScores: { name: string; score: number }[],
@@ -86,7 +117,7 @@ export function smartMixThumbs(
  *  "for-you" approximates: it composes from the top-taste artists, so an
  *  empty taste profile means an empty mix. */
 export function smartMixEmpty(
-  kind: SmartKind,
+  kind: RuleSmartKind,
   tracks: Track[],
   stats: SmartTrackStat[],
   artistScores: { name: string; score: number }[],
@@ -103,7 +134,7 @@ export function smartMixEmpty(
  * multi-source composer (`logic/for-you.ts`) and the view branches to it.
  */
 export function computeSmartPlaylist(
-  kind: Exclude<SmartKind, "for-you">,
+  kind: Exclude<RuleSmartKind, "for-you">,
   tracks: Track[],
   stats: SmartTrackStat[],
   artistScores: { name: string; score: number }[],
