@@ -1,10 +1,10 @@
-import type { Playlist, SmartKind, Track } from "@musex/core";
+import type { Playlist, RuleSmartKind, Track } from "@musex/core";
 import {
   listValidator,
   recentlyPlayedTracks,
-  SMART_TITLES,
   smartMixEmpty,
   smartMixThumbs,
+  smartTitle,
 } from "@musex/core";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -16,7 +16,7 @@ import { Collage } from "../../../src/ui/Collage";
 import { NewPlaylistDialog } from "../../../src/ui/NewPlaylistDialog";
 import { theme } from "../../../src/ui/theme";
 
-const MIX_KINDS: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
+const MIX_KINDS: RuleSmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
 const CARD = 130;
 
 type PlaylistAction = { pl: Playlist; kind: "menu" | "rename" | "confirm-delete" };
@@ -25,7 +25,7 @@ export default function HomeScreen() {
   const { state, gateway, taste, artBaseFor, token, playTracks } = useStore();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [mixes, setMixes] = useState<{ kind: SmartKind; thumbs: string[] }[]>([]);
+  const [mixes, setMixes] = useState<{ kind: RuleSmartKind; thumbs: string[] }[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [recent, setRecent] = useState<Track[]>([]);
   const [action, setAction] = useState<PlaylistAction | null>(null);
@@ -110,7 +110,7 @@ export default function HomeScreen() {
               >
                 <Collage urls={m.thumbs.slice(0, 4).map(bake)} size={CARD} />
                 <Text numberOfLines={2} style={cardLabel}>
-                  {SMART_TITLES[m.kind]}
+                  {smartTitle(m.kind)}
                 </Text>
               </Pressable>
             ))}

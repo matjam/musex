@@ -7,6 +7,44 @@ export interface GenreEntry {
 }
 
 /**
+ * Enrich each album's `genres` with the union of its tracks' genres, matched by
+ * `track.albumId`. Plex's bulk album-list endpoint omits Genre tags for most
+ * albums, but the bulk track-list response carries them, so the album genres
+ * alone make the genre index look almost empty. Folding track genres up to the
+ * album level recovers the real library shape.
+ *
+ * Casing is preserved (first-seen wins) and duplicates are merged
+ * case-insensitively, matching the rest of this module. Returns NEW album
+ * objects; the inputs are not mutated.
+ */
+export function albumsWithTrackGenres(albums: Album[], tracks: Track[]): Album[] {
+  // Per album: lower-cased key -> first-seen display casing.
+  const genresByAlbum = new Map<string, Map<string, string>>();
+  const add = (albumId: string, genre: string) => {
+    let byKey = genresByAlbum.get(albumId);
+    if (!byKey) {
+      byKey = new Map();
+      genresByAlbum.set(albumId, byKey);
+    }
+    const key = genre.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, genre);
+  };
+
+  for (const album of albums) {
+    for (const genre of album.genres ?? []) add(album.id, genre);
+  }
+  for (const track of tracks) {
+    for (const genre of track.genres ?? []) add(track.albumId, genre);
+  }
+
+  return albums.map((album) => {
+    const byKey = genresByAlbum.get(album.id);
+    if (!byKey) return album;
+    return { ...album, genres: [...byKey.values()] };
+  });
+}
+
+/**
  * Pure genre index over the album list. Albums carry Plex Genre tags (the
  * best-tagged level in music libraries); group them case-insensitively,
  * keeping the first-seen casing as the display name. Sorted by album count

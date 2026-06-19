@@ -1,4 +1,4 @@
-import { MOOD_MIXES, SMART_TITLES, type SmartKind } from "@musex/core";
+import { MOOD_MIXES, type SmartKind, smartTitle } from "@musex/core";
 import {
   Activity,
   ChevronDown,
@@ -16,7 +16,7 @@ import { useState } from "react";
 import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";
-import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
+import { MIX_ICONS, smartIcon } from "./smart-mix-icons";
 import { ActivityView } from "./views/ActivityView";
 import { AlbumsView } from "./views/AlbumsView";
 import { AlbumView } from "./views/AlbumView";
@@ -35,7 +35,7 @@ import { SmartPlaylistView } from "./views/SmartPlaylistView";
 import { TracksView } from "./views/TracksView";
 
 /** Sidebar order for the smart playlists in the Smart Mixes section. */
-const SMART_NAV: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
+const SMART_NAV: SmartKind[] = ["daily", "for-you", "top-rated", "heavy-rotation", "rediscover"];
 
 /** Collapsed state per sidebar section, persisted across launches.
  *  localStorage (not main-process settings) — pure UI state. */
@@ -215,7 +215,7 @@ export function Shell() {
 
         <SidebarSection title="Smart Mixes" collapsed={smartCollapsed} onToggle={toggleSmart}>
           {SMART_NAV.map((kind) => {
-            const Icon = SMART_ICONS[kind];
+            const Icon = smartIcon(kind);
             return (
               <button
                 key={kind}
@@ -224,7 +224,7 @@ export function Shell() {
                 onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
               >
                 <Icon size={16} />
-                {SMART_TITLES[kind]}
+                {smartTitle(kind)}
               </button>
             );
           })}

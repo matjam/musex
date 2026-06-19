@@ -1,8 +1,28 @@
-import type { EntityRef } from "@musex/core";
+import type { EntityKind, EntityRef } from "@musex/core";
 import { Heart } from "lucide-react";
 import { useState } from "react";
 import { useFollow } from "../../state/follow";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
+
+/** Kind-aware wording for the follow control. Following = acquire + watch for
+ *  new releases and only makes sense for an ARTIST ("Follow" / "Following").
+ *  For an album or track the action is a local favorite/bookmark
+ *  ("Favorite" / "Favorited"). The underlying FollowService semantics are
+ *  identical; only the label differs, keyed on `ref.kind`. */
+export interface FollowLabels {
+  /** Verb when not yet followed/favorited. */
+  off: string;
+  /** State when followed/favorited. */
+  on: string;
+  /** ⋯ menu verb to remove the relationship. */
+  remove: string;
+}
+
+export function followLabels(kind: EntityKind): FollowLabels {
+  return kind === "artist"
+    ? { off: "Follow", on: "Following", remove: "Unfollow" }
+    : { off: "Favorite", on: "Favorited", remove: "Unfavorite" };
+}
 
 /** Following an EXTERNAL (unowned) artist acquires them via an acquisition
  *  provider; with no provider installed `followService.follow` throws and the
@@ -57,6 +77,8 @@ export function FollowButton({
   const { on, busy, onToggle } = useFollowAction(entity);
   const acquisitionAvailable = useAcquisitionAvailable();
   const unownedArtist = followNeedsAcquisition(entity);
+  const labels = followLabels(entity.kind);
+  const isArtist = entity.kind === "artist";
   // An external-artist Follow needs an acquisition provider; without one the
   // service rejects, so disable rather than let the optimistic toggle revert.
   const blockedNoProvider = unownedArtist && !on && !acquisitionAvailable;
@@ -64,10 +86,14 @@ export function FollowButton({
     ? NO_ACQUISITION_FOLLOW_TOOLTIP
     : (title ??
       (on
-        ? "Following — click to unfollow"
+        ? isArtist
+          ? "Following — click to unfollow"
+          : "Favorited — click to remove"
         : unownedArtist
           ? "Follow — acquire this artist"
-          : "Follow"));
+          : isArtist
+            ? "Follow"
+            : "Favorite"));
   return (
     <button
       type="button"
@@ -77,7 +103,7 @@ export function FollowButton({
       onClick={() => void onToggle()}
     >
       <Heart size={15} />
-      {on ? "Following" : "Follow"}
+      {on ? labels.on : labels.off}
     </button>
   );
 }

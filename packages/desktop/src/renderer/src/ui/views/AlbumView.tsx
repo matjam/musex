@@ -238,6 +238,8 @@ function OwnedAlbumView({ entityRef }: { entityRef: EntityRef }) {
                 follow={{
                   on: favorite.on,
                   busy: favorite.busy,
+                  labelOff: "Favorite",
+                  labelOn: "Favorited",
                   title: favorite.on ? "Favorited — click to remove" : "Favorite this album",
                   onToggle: () => void favorite.onToggle(),
                 }}

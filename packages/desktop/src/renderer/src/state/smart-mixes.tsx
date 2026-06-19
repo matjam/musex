@@ -1,9 +1,14 @@
-import type { Library, Track } from "@musex/core";
+import type { Album, Library, Track } from "@musex/core";
 import {
   composeForYou,
   computeSmartPlaylist,
+  dailyMix,
+  decadeKind,
+  decadeMix,
+  decadesInLibrary,
   type ForYouInput,
   listValidator,
+  parseDecadeKind,
   type SmartKind,
 } from "@musex/core";
 import {
@@ -18,8 +23,35 @@ import {
 } from "react";
 import { useApp } from "./app";
 
-/** All four smart-mix kinds, in Home-card order. */
-const ALL_KINDS: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
+/** The fixed (non-decade) smart-mix kinds, in Home-card order. Decade mixes are
+ *  library-dependent, so they're discovered at warm time and appended. */
+const FIXED_KINDS: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover", "daily"];
+
+/** Today's date as a stable seed for the Daily Mix (e.g. "2026-06-18"). */
+export function todaySeed(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Build an albumId → release year map from the library's albums. Decade mixes
+ *  resolve a track's year through its album (Track carries no year). */
+function albumYearMap(albums: Album[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const a of albums) {
+    if (a.year != null) m.set(a.id, a.year);
+  }
+  return m;
+}
+
+/** The decade-start years present in the library (newest-first), from albums.
+ *  Drives both the warm set and Home's Decades rail. */
+export async function librariesDecades(library: Library): Promise<number[]> {
+  const albums = await window.musex.listAllAlbums(
+    library.id,
+    "title",
+    listValidator(library.updatedAt),
+  );
+  return decadesInLibrary(albums.map((a) => a.year));
+}
 
 /** How many taste-profile top artists seed the For You mix. */
 const FOR_YOU_SEEDS = 5;
@@ -36,11 +68,29 @@ const FOR_YOU_MAX_ARTISTS = 12;
 export async function computeMix(kind: SmartKind, library: Library): Promise<Track[]> {
   if (kind === "for-you") return computeForYouMix(library);
   const validator = listValidator(library.updatedAt);
+
+  if (kind === "daily") {
+    const tracks = await window.musex.listAllTracks(library.id, "title", validator);
+    return dailyMix(tracks, todaySeed());
+  }
+
+  const decade = parseDecadeKind(kind);
+  if (decade !== null) {
+    const [tracks, albums] = await Promise.all([
+      window.musex.listAllTracks(library.id, "title", validator),
+      window.musex.listAllAlbums(library.id, "title", validator),
+    ]);
+    const years = albumYearMap(albums);
+    return decadeMix(tracks, decade, kind, (t) => years.get(t.albumId));
+  }
+
+  // Remaining kinds are the rule-based ones (for-you/daily/decade returned above).
+  const ruleKind = kind as "top-rated" | "heavy-rotation" | "rediscover";
   const [tracks, snapshot] = await Promise.all([
     window.musex.listAllTracks(library.id, "title", validator),
     window.musex.getTasteSnapshot(),
   ]);
-  return computeSmartPlaylist(kind, tracks, snapshot.stats, snapshot.topArtists, Date.now());
+  return computeSmartPlaylist(ruleKind, tracks, snapshot.stats, snapshot.topArtists, Date.now());
 }
 
 /**
@@ -169,28 +219,45 @@ export function SmartMixProvider({ children }: { children: ReactNode }) {
     if (!lib) return;
     warmingRef.current = true;
     const libId = lib.id;
-    // Mark every kind as warming up front so a re-open mid-warm shows progress.
-    setMixes((prev) => {
-      const next = new Map(prev);
-      for (const kind of ALL_KINDS) next.set(kind, { status: "warming" });
-      return next;
-    });
-    // Compute each mix independently; one failing must not abort the others.
-    const jobs = ALL_KINDS.map((kind) =>
-      computeMix(kind, lib)
-        .then((tracks) => {
-          // Drop results for a library we've since switched away from.
-          if (libraryRef.current?.id !== libId) return;
-          setMixes((prev) => new Map(prev).set(kind, { status: "ready", tracks }));
-        })
-        .catch((err: unknown) => {
-          console.warn(`[smart-mixes] warm failed for "${kind}":`, err);
-          if (libraryRef.current?.id !== libId) return;
-          // Leave it as an error so the view's on-open fallback computes it.
-          setMixes((prev) => new Map(prev).set(kind, { status: "error" }));
-        }),
-    );
-    void Promise.allSettled(jobs).finally(() => {
+
+    const run = async () => {
+      // The decade kinds are library-dependent: discover them first, then warm
+      // the fixed kinds + one mix per present decade. A discovery failure still
+      // warms the fixed kinds.
+      let decadeKinds: SmartKind[] = [];
+      try {
+        decadeKinds = (await librariesDecades(lib)).map((d) => decadeKind(d));
+      } catch (err) {
+        console.warn("[smart-mixes] decade discovery failed:", err);
+      }
+      if (libraryRef.current?.id !== libId) return;
+      const kinds: SmartKind[] = [...FIXED_KINDS, ...decadeKinds];
+
+      // Mark every kind as warming up front so a re-open mid-warm shows progress.
+      setMixes((prev) => {
+        const next = new Map(prev);
+        for (const kind of kinds) next.set(kind, { status: "warming" });
+        return next;
+      });
+      // Compute each mix independently; one failing must not abort the others.
+      const jobs = kinds.map((kind) =>
+        computeMix(kind, lib)
+          .then((tracks) => {
+            // Drop results for a library we've since switched away from.
+            if (libraryRef.current?.id !== libId) return;
+            setMixes((prev) => new Map(prev).set(kind, { status: "ready", tracks }));
+          })
+          .catch((err: unknown) => {
+            console.warn(`[smart-mixes] warm failed for "${kind}":`, err);
+            if (libraryRef.current?.id !== libId) return;
+            // Leave it as an error so the view's on-open fallback computes it.
+            setMixes((prev) => new Map(prev).set(kind, { status: "error" }));
+          }),
+      );
+      await Promise.allSettled(jobs);
+    };
+
+    void run().finally(() => {
       warmingRef.current = false;
     });
   }, []);

@@ -1,13 +1,13 @@
 import type { EntityRef } from "@musex/core";
 import { entityState, resolveEntity } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
-import { ListPlus, MoreHorizontal, Play } from "lucide-react";
+import { Download, ListPlus, MoreHorizontal, Play } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useFollow } from "../state/follow";
 import { AlbumArt } from "./AlbumArt";
 import { CardCollage } from "./CardCollage";
 import { EntityBadge } from "./discovery/EntityBadge";
-import { FollowButton } from "./discovery/FollowButton";
+import { FollowButton, followLabels } from "./discovery/FollowButton";
 import { StateBadge } from "./discovery/StateBadge";
 import type { AcquisitionBadgeState } from "./discovery/state-badge";
 
@@ -26,8 +26,15 @@ interface Props {
   downloaded?: boolean;
   downloading?: boolean;
   acquiring?: boolean;
-  /** ⋯ menu: "Get just this album" (albums) → acquire just this album. */
+  /** ⋯ menu: "Get just this album" (external/acquirable albums) → acquire it. */
   onGetAlbum?: () => void;
+  /** ⋯ menu: "Download" (owned albums) → download this album to this device.
+   *  Omit to hide. */
+  onDownload?: () => void;
+  /** Disable the Download menu item (e.g. offline, or already downloaded). */
+  downloadDisabled?: boolean;
+  /** Tooltip for the Download menu item when disabled. */
+  downloadTitle?: string;
   /** ⋯ menu: "Play next" → enqueue this collection next. */
   onPlayNext?: () => void;
   // ── Non-entity collection-tile props (playlists, smart-mix tiles, on-device
@@ -65,6 +72,9 @@ export function GridCard({
   downloading,
   acquiring,
   onGetAlbum,
+  onDownload,
+  downloadDisabled,
+  downloadTitle,
   onPlayNext,
   state,
   statePercent,
@@ -94,8 +104,11 @@ export function GridCard({
           following: follow.isFollowed(entity),
         })
       : null;
-  // Owned/in-library is the default — no badge. Everything else renders one.
-  const showEntityBadge = computedState != null && computedState !== "owned";
+  // Owned/in-library is the default — no badge. "following" is also suppressed:
+  // the card's ⋯ menu (Follow/Unfollow) already conveys follow state, so a
+  // separate "Following" tag is redundant (Fix 3). Everything else renders one.
+  const showEntityBadge =
+    computedState != null && computedState !== "owned" && computedState !== "following";
   const unowned = entity?.source === "external";
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -218,8 +231,29 @@ export function GridCard({
                     setMenuOpen(false);
                   }}
                 >
-                  {follow.isFollowed(entity) ? "Unfollow" : "Follow"}
+                  {/* Artist → Follow/Unfollow; album/track → Favorite/Unfavorite. */}
+                  {follow.isFollowed(entity)
+                    ? followLabels(entity.kind).remove
+                    : followLabels(entity.kind).off}
                 </button>
+                {/* Owned album: download to this device (the same path as the
+                    AlbumView Download pill). */}
+                {entity.kind === "album" && onDownload && (
+                  <button
+                    type="button"
+                    className="ctx-item ctx-item--icon"
+                    disabled={downloadDisabled}
+                    title={downloadDisabled ? downloadTitle : undefined}
+                    onClick={() => {
+                      onDownload();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Download size={14} />
+                    Download
+                  </button>
+                )}
+                {/* External/acquirable album: acquire just this one. */}
                 {entity.kind === "album" && onGetAlbum && (
                   <button
                     type="button"

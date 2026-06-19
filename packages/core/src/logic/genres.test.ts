@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Album, Track } from "../models/index";
-import { albumsForGenre, genreIndex, tracksForGenre } from "./genres";
+import { albumsForGenre, albumsWithTrackGenres, genreIndex, tracksForGenre } from "./genres";
 
 function album(over: Partial<Album> & { id: string }): Album {
   return {
@@ -58,6 +58,60 @@ describe("genreIndex", () => {
   it("ignores albums without genres and returns empty for an empty library", () => {
     expect(genreIndex([album({ id: "1" }), album({ id: "2", genres: [] })])).toEqual([]);
     expect(genreIndex([])).toEqual([]);
+  });
+});
+
+describe("albumsWithTrackGenres", () => {
+  it("folds track-level genres up to their album (real-library case: albums untagged, tracks tagged)", () => {
+    const albums = [album({ id: "a1" }), album({ id: "a2" }), album({ id: "a3" })];
+    const tracks = [
+      track({ id: "t1", albumId: "a1", artistName: "A", genres: ["Rock"] }),
+      track({ id: "t2", albumId: "a1", artistName: "A", genres: ["Rock", "Indie"] }),
+      track({ id: "t3", albumId: "a2", artistName: "B", genres: ["Jazz"] }),
+      track({ id: "t4", albumId: "a3", artistName: "C" }), // no genres
+    ];
+    const enriched = albumsWithTrackGenres(albums, tracks);
+
+    expect(enriched.find((a) => a.id === "a1")?.genres).toEqual(["Rock", "Indie"]);
+    expect(enriched.find((a) => a.id === "a2")?.genres).toEqual(["Jazz"]);
+    expect(enriched.find((a) => a.id === "a3")?.genres).toBeUndefined();
+
+    // The whole point: the index is now populated from track genres.
+    expect(genreIndex(enriched)).toEqual([
+      { genre: "Indie", albumCount: 1 },
+      { genre: "Jazz", albumCount: 1 },
+      { genre: "Rock", albumCount: 1 },
+    ]);
+  });
+
+  it("merges album and track genres case-insensitively, keeping first-seen casing", () => {
+    const albums = [album({ id: "a1", genres: ["Rock"] })];
+    const tracks = [
+      track({ id: "t1", albumId: "a1", artistName: "A", genres: ["rock", "Jazz"] }),
+      track({ id: "t2", albumId: "a1", artistName: "A", genres: ["JAZZ"] }),
+    ];
+    expect(albumsWithTrackGenres(albums, tracks)[0]?.genres).toEqual(["Rock", "Jazz"]);
+  });
+
+  it("counts an album once per genre even when several tracks repeat it", () => {
+    const albums = [album({ id: "a1" }), album({ id: "a2" })];
+    const tracks = [
+      track({ id: "t1", albumId: "a1", artistName: "A", genres: ["Rock"] }),
+      track({ id: "t2", albumId: "a1", artistName: "A", genres: ["Rock"] }),
+      track({ id: "t3", albumId: "a2", artistName: "B", genres: ["Rock"] }),
+    ];
+    const enriched = albumsWithTrackGenres(albums, tracks);
+    expect(genreIndex(enriched)).toEqual([{ genre: "Rock", albumCount: 2 }]);
+    expect(albumsForGenre("rock", enriched).map((a) => a.id)).toEqual(["a1", "a2"]);
+    expect(tracksForGenre("rock", enriched, tracks).map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
+  });
+
+  it("does not mutate the input albums", () => {
+    const a1 = album({ id: "a1" });
+    const albums = [a1];
+    const tracks = [track({ id: "t1", albumId: "a1", artistName: "A", genres: ["Rock"] })];
+    albumsWithTrackGenres(albums, tracks);
+    expect(a1.genres).toBeUndefined();
   });
 });
 

@@ -1,5 +1,5 @@
 import type { Track } from "@musex/core";
-import { downloadRecordFor, SMART_TITLES, type SmartKind } from "@musex/core";
+import { downloadRecordFor, parseDecadeKind, type SmartKind, smartTitle } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
@@ -13,19 +13,23 @@ import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
 import { VirtualTrackList } from "../VirtualTrackList";
 
-const EMPTY_MESSAGES: Record<SmartKind, string> = {
+const EMPTY_MESSAGES: Record<string, string> = {
   "for-you": "Play and rate more music first — For You builds on your listening history.",
   "top-rated": "Nothing here yet — rate tracks 4 stars or more and they'll show up.",
   "heavy-rotation": "Nothing here yet — keep listening and your most-played tracks will show up.",
   rediscover: "Nothing to rediscover yet — favorites you haven't played in a while land here.",
+  daily: "Nothing here yet — your Daily Mix appears once your library has tracks.",
 };
 
+/** Empty-state copy for any kind, falling back for the parametric decades. */
+function emptyMessage(kind: SmartKind): string {
+  if (parseDecadeKind(kind) !== null) return "No tracks from this decade in your library yet.";
+  return EMPTY_MESSAGES[kind] ?? "Nothing here yet.";
+}
+
 /** For You needs several round trips (taste → similar → albums → tracks). */
-const LOADING_MESSAGES: Record<SmartKind, string> = {
+const LOADING_MESSAGES: Record<string, string> = {
   "for-you": "Mixing from your taste profile…",
-  "top-rated": "Loading…",
-  "heavy-rotation": "Loading…",
-  rediscover: "Loading…",
 };
 
 type FetchState =
@@ -83,7 +87,7 @@ export function SmartPlaylistView({ kind }: { kind: SmartKind }) {
     <div className="tracks-view">
       <div className="tracks-view-header">
         <div className="browse-header">
-          <h3 className="browse-title">{SMART_TITLES[kind]}</h3>
+          <h3 className="browse-title">{smartTitle(kind)}</h3>
           <div className="tracks-header-actions">
             {fetch.status === "ok" && fetch.tracks.length > 0 && (
               <ActionBar
@@ -101,7 +105,7 @@ export function SmartPlaylistView({ kind }: { kind: SmartKind }) {
       </div>
 
       {fetch.status === "loading" && (
-        <div className="content-placeholder">{LOADING_MESSAGES[kind]}</div>
+        <div className="content-placeholder">{LOADING_MESSAGES[kind] ?? "Loading…"}</div>
       )}
 
       {fetch.status === "error" && (
@@ -109,7 +113,7 @@ export function SmartPlaylistView({ kind }: { kind: SmartKind }) {
       )}
 
       {fetch.status === "ok" && fetch.tracks.length === 0 && (
-        <div className="content-placeholder">{EMPTY_MESSAGES[kind]}</div>
+        <div className="content-placeholder">{emptyMessage(kind)}</div>
       )}
 
       {fetch.status === "ok" && fetch.tracks.length > 0 && (
