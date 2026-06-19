@@ -27,6 +27,7 @@ run("MpvController (real vendored mpv, env-gated)", () => {
     const controller = new MpvController({
       binaryPath: BINARY,
       socketPath: join(os.tmpdir(), "musex-mpv-test.sock"),
+      logPath: join(os.tmpdir(), "musex-mpv-test.log"),
     });
     const events: EngineEvent[] = [];
     controller.setSink((e) => events.push(e));
@@ -54,6 +55,7 @@ run("MpvController (real vendored mpv, env-gated)", () => {
     const controller = new MpvController({
       binaryPath: BINARY,
       socketPath: join(os.tmpdir(), "musex-mpv-af-test.sock"),
+      logPath: join(os.tmpdir(), "musex-mpv-af-test.log"),
     });
     try {
       await controller.start();

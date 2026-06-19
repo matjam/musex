@@ -52,6 +52,12 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$ROOT/packages/desktop/build/icon.icns"
 
+# --- Windows: multi-size .ico (committed; CI has no ImageMagick) ---
+# Windows draws the icon as-is (no macOS-grid inset), so use the transparent-
+# corner squircle directly. auto-resize bakes the standard Windows icon sizes.
+magick "$TMP/transparent.png" -define icon:auto-resize=256,128,64,48,32,16 \
+  "$ROOT/packages/desktop/build/icon.ico"
+
 # --- Mobile (iOS): full-bleed opaque (fill corners with the gradient) ---
 # Background = the master scaled up + blurred so the gradient covers the frame;
 # composite the transparent-corner squircle over it, then drop the alpha.
@@ -61,4 +67,5 @@ magick "$TMP/bg.png" "$TMP/transparent.png" -gravity center -composite \
 
 echo "icons generated:"
 echo "  desktop: packages/desktop/build/icon.icns + icon.png (transparent squircle)"
+echo "  windows: packages/desktop/build/icon.ico (multi-size transparent squircle)"
 echo "  mobile : packages/mobile/assets/icon.png (full-bleed opaque)"

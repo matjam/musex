@@ -153,3 +153,49 @@ jobs:
               -e "s|^sha256sums=.*|sha256sums=('${SHA}')|" \
               packaging/arch/PKGBUILD > /tmp/aur/PKGBUILD
           gh release upload "$TAG_NAME" /tmp/aur/PKGBUILD --clobber
+
+  build-windows:
+    needs: release-please
+    # Same gating as build-macos/build-linux: fires on a new release or dispatch.
+    if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        # version read from package.json "packageManager"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Windows BUNDLES mpv (like macOS): fetch + 7z-extract the zhongfly
+      # winbuild. 7-Zip is pre-installed on windows-latest.
+      - name: Vendor mpv
+        run: pnpm vendor
+
+      - name: Check (typecheck + lint + tests)
+        run: pnpm check
+
+      # electron-builder builds the win targets (nsis installer + portable),
+      # unsigned — no Windows cert env.
+      - name: Package (unsigned)
+        run: pnpm --filter @musex/desktop run package
+
+      # latest.yml is the electron-updater feed for Windows; the .exe glob
+      # covers both the NSIS installer and the portable build.
+      - name: Upload artifacts to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+        shell: pwsh
+        run: |
+          gh release upload "$env:TAG_NAME" `
+            (Get-Item packages/desktop/release/*.exe) `
+            (Get-Item packages/desktop/release/*.blockmap) `
+            packages/desktop/release/latest.yml `
+            --clobber

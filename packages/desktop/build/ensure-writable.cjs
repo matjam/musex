@@ -11,5 +11,8 @@
 const { execFileSync } = require("node:child_process");
 
 module.exports = async function ensureWritable(context) {
+  // The ShipIt quarantine-xattr issue this guards against is macOS-only, and
+  // `chmod` is a Unix tool absent on the Windows runner — no-op on win32.
+  if (process.platform === "win32") return;
   execFileSync("chmod", ["-R", "u+w", context.appOutDir]);
 };

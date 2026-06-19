@@ -1,13 +1,21 @@
 # musex
 
-A desktop music player (macOS and Linux) for your own Plex library — the feel of
-a popular music streaming app, over music you actually own.
+A music player for your own Plex library — the feel of a popular music
+streaming app, over music you actually own. Desktop (macOS, Linux, Windows)
+today, with a native iOS app in testing.
 
 musex streams directly from your Plex Media Server and plays the **original
 files** — every codec Plex can store (FLAC, ALAC, Opus, MP3, …) is decoded by
-mpv, so nothing is ever transcoded. On top of that it builds
-a listening profile from what you actually play, and turns it into smart
-playlists, mood mixes, radio, and recommendations.
+mpv, so nothing is ever transcoded. On top of that it builds a listening
+profile from what you actually play, and turns it into smart playlists, mood
+mixes, radio, and recommendations.
+
+> [!IMPORTANT]
+> **musex is alpha software and needs testers.** Desktop builds for macOS,
+> Linux, and Windows are available now; the iOS app is in testing and Android
+> will follow once iOS is reasonably stable. It works, and I use it daily — but
+> it's early. If you try it, please [file bugs](https://github.com/matjam/musex/issues);
+> that's exactly the help the project needs right now.
 
 <img width="1392" height="932" alt="image" src="https://github.com/user-attachments/assets/95c64b08-5e9d-4845-aac1-62db37fbe6b5" />
 
@@ -22,7 +30,7 @@ playlists, mood mixes, radio, and recommendations.
   audio engine, not the UI.
 - **A familiar streaming-app layout** — home view, artist/album/genre browsing,
   full-library search, playlists, queue, shuffle/repeat, keyboard shortcuts
-  (`⌘/` shows them all).
+  (`⌘/` or `Ctrl+/` shows them all).
 - **Taste profile** — plays, skips, and star ratings feed an on-device
   listening profile (nothing is uploaded anywhere). It powers:
   - **Smart playlists** — Top Rated, Heavy Rotation, Rediscover, and a
@@ -35,29 +43,42 @@ playlists, mood mixes, radio, and recommendations.
   tracks (synced with your star ratings), similar artists/tracks, and listening
   stats feed the Similar panel, radio, and Discover. Configure it in **Settings
   → Last.fm**.
-- **Plugins** — a small, **sandboxed** plugin system extends the app. Plugins
-  run in an isolated runtime with no access to your files, system, or Plex
-  account — only a deliberately narrow, source-agnostic API
-  (`@musex/plugin-api`). Acquisition plugins let you browse an external artist's
-  full discography, add albums (or monitor a whole artist) for download, and
-  watch request status — turning "I wish I had this" into "it's in my library" —
-  while federated search shows what you own next to what you could acquire.
-  Because the API is source-agnostic, any plugin that can look up an artist's
-  albums and fetch one (an online store, a download manager, anything) plugs
-  into the same search, downloads, and taste-expansion machinery with no app
-  changes. **Optional example plugins that demonstrate the system are published
-  in the [`musex-plugins`](https://github.com/matjam/musex-plugins) repo** —
-  install them via **Settings → Plugins → Add from GitHub**. See
+- **Offline & downloads** — pin tracks, albums, or whole artists to your device
+  and keep playing when Plex is unreachable. An **On this device** view collects
+  everything you've downloaded, and you can store downloads as the original
+  files or transcoded to AAC to save space.
+- **Follow what you love** — follow an artist and musex (via an acquisition
+  plugin) grabs their full discography and watches for new releases; favorite
+  individual albums and tracks. Whether something is in your Plex library or
+  only known from last.fm, you reach it the same way — the path stops mattering.
+- **Plugins (desktop)** — a small, **sandboxed** plugin system extends the
+  desktop app. Plugins run in an isolated QuickJS runtime with no access to your
+  files, system, or Plex account — only a deliberately narrow, source-agnostic
+  API (`@musex/plugin-api`). Acquisition plugins let you browse an external
+  artist's full discography, add albums (or follow a whole artist) for download,
+  and watch request status — turning "I wish I had this" into "it's in my
+  library" — while federated search shows what you own next to what you could
+  acquire. Because the API is source-agnostic, any plugin that can look up an
+  artist's albums and fetch one (an online store, a download manager, anything)
+  plugs into the same search, downloads, and follow machinery with no app
+  changes. **Optional example plugins are published in the
+  [`musex-plugins`](https://github.com/matjam/musex-plugins) repo** — install
+  them via **Settings → Plugins → Add from GitHub**. See
   [docs/plugins.md](docs/plugins.md).
 - **Auto-update** — checks GitHub Releases silently and updates in place on
-  macOS and the Linux AppImage; `.deb`/package installs update through your
-  package manager.
+  macOS, Windows, and the Linux AppImage; `.deb`/package installs update
+  through your package manager.
 
 ## Install
 
-Grab the latest build from [Releases](https://github.com/matjam/musex/releases):
+Grab the latest build from [Releases](https://github.com/matjam/musex/releases).
+Everything is alpha — expect rough edges, and please report what you hit.
 
 - **macOS** (Apple Silicon): `musex-x.y.z-arm64.dmg` — signed and notarized.
+- **Windows** (x64): the NSIS installer (`.exe`) or the portable `.exe`. These
+  are **not yet code-signed**, so on first run Windows SmartScreen will warn
+  about an "unknown publisher" — choose *More info → Run anyway*. Auto-updates
+  in place.
 - **Linux** (x64): `musex-x.y.z-x86_64.AppImage` (`chmod +x` and run;
   auto-updates) or `musex_x.y.z_amd64.deb` (`sudo apt install ./musex_*.deb`).
   **Linux requires `mpv`** — the `.deb` installs it automatically; AppImage
@@ -67,16 +88,37 @@ Grab the latest build from [Releases](https://github.com/matjam/musex/releases):
   `curl -LO https://github.com/matjam/musex/releases/latest/download/PKGBUILD &&
   makepkg -si` (repackages the AppImage; pulls `mpv`). See
   [`packaging/arch`](packaging/arch/).
+- **iOS:** in active testing — there's no public build yet. If you'd like to
+  help test it, [open an issue](https://github.com/matjam/musex/issues) and say
+  hi.
 
 You'll need a [Plex Media Server](https://www.plex.tv/) with a music library.
 On first launch musex signs you in via plex.tv (PIN flow) and stores the token
-in the OS keychain (macOS Keychain / libsecret or kwallet on Linux; if no
-keyring is available the token is stored unencrypted with a warning).
+in the OS keychain (macOS Keychain / Windows Credential Manager / libsecret or
+kwallet on Linux; if no keyring is available the token is stored unencrypted
+with a warning).
 
 last.fm is built in — configure it in Settings → Last.fm. Optional example
 plugins that demonstrate the plugin system live in the
 [`musex-plugins`](https://github.com/matjam/musex-plugins) repo; install them
 via Settings → Plugins → Add from GitHub.
+
+## Did I use Claude?
+
+Yes I did. Claude turned a multi-year project into a multi-week one. Is the code
+perfect? Probably not — but that's why it needs to be tested, why bugs need to
+be filed, and why I keep working on fixing things. I'm genuinely happy with
+where it is right now: there's a functional desktop app, and the iOS app is
+starting to work well.
+
+## Roadmap
+
+Near-term, beyond stabilising what's already here:
+
+- iOS landscape mode for iPhone, and proper iPad layout support
+- Apple CarPlay
+- AirPlay
+- Android (once iOS is reasonably stable)
 
 ## Development
 
@@ -84,19 +126,26 @@ Requires Node 24 (the version CI uses) and [pnpm](https://pnpm.io/) 11.
 
 ```sh
 pnpm install
-pnpm vendor          # fetch the pinned mpv build (macOS; no-op on Linux)
-pnpm dev             # run the app with hot reload
+pnpm vendor          # fetch the pinned mpv build (macOS + Windows; no-op on Linux)
+pnpm dev             # run the desktop app with hot reload
 pnpm check           # lint + typecheck + format + tests (the CI bar)
 ```
 
 On Linux, mpv is a **system dependency** rather than bundled, so `pnpm vendor`
-is a no-op there — install mpv from your package manager before `pnpm dev`.
+is a no-op there — install mpv from your package manager before `pnpm dev`. On
+macOS and Windows the pinned mpv build is bundled with the app.
 
 ### Architecture
 
-Hexagonal: a pure, platform-agnostic `@musex/core` (domain models, use-cases,
-playback state machine, port interfaces — no Node, no DOM, no Electron) sits
-in the middle, and every surface is an adapter over it.
+musex is a **pnpm monorepo**, built that way deliberately so every platform —
+desktop, iOS, and the rest of the roadmap — shares as much code as possible.
+
+At the centre is a pure, platform-agnostic `@musex/core` (domain models,
+use-cases, the playback state machine, port interfaces — no Node, no DOM, no
+Electron, no React Native). Every surface is a thin adapter over it: the
+Electron desktop app and the Expo/React Native iOS app each provide their own
+Plex gateway, audio engine, secure storage, and UI, but the logic in the middle
+is the same tested code.
 
 In the Electron app, the **main process is the data plane**: it talks to Plex,
 holds the token, proxies audio/art through a localhost server (the token never
@@ -106,18 +155,20 @@ plays no audio itself. Plugins run **sandboxed** (a QuickJS isolate with no
 file, system, or Plex access) against a deliberately narrow API
 (`@musex/plugin-api`) that never exposes Plex tokens or URLs; last.fm is a
 built-in first-party feature, not a plugin. See
-[docs/plugins.md](docs/plugins.md).
+[docs/plugins.md](docs/plugins.md). (The plugin system is desktop-only; on iOS,
+equivalent features are built in.)
 
 Releases are automated with release-please: conventional commits on `main`
 roll up into a release PR, and merging it builds and publishes the macOS DMG
-(signed + notarized) alongside the Linux AppImage and `.deb`.
+(signed + notarized) alongside the Windows installer, the Linux AppImage, and
+the `.deb`.
 
 ## License
 
-[MIT](LICENSE). The macOS app bundles an unmodified
+[MIT](LICENSE). The macOS and Windows apps bundle an unmodified
 [mpv](https://mpv.io/) binary (GPL-2.0-or-later) as a separate process for
 audio playback; mpv's source is available at
-[mpv-player/mpv](https://github.com/mpv-player/mpv), and the exact build we
-ship is fetched by [`scripts/fetch-mpv.mjs`](scripts/fetch-mpv.mjs). On Linux
+[mpv-player/mpv](https://github.com/mpv-player/mpv), and the exact builds we
+ship are fetched by [`scripts/fetch-mpv.mjs`](scripts/fetch-mpv.mjs). On Linux
 mpv is the system package, not bundled. Full dependency attribution is in the
 app's About window.
