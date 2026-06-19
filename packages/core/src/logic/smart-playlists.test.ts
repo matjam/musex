@@ -4,8 +4,8 @@ import type { Track } from "../models/index";
 import {
   computeSmartPlaylist,
   type SmartKind,
-  smartDescription,
   type SmartTrackStat,
+  smartDescription,
   smartMixEmpty,
   smartMixThumbs,
   smartTitle,

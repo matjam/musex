@@ -110,9 +110,7 @@ describe("decadeMix", () => {
 
 describe("decadesInLibrary", () => {
   it("returns distinct decade starts newest-first, ignoring undefined", () => {
-    expect(decadesInLibrary([1985, 1999, 2001, 1980, undefined, 2005])).toEqual([
-      2000, 1990, 1980,
-    ]);
+    expect(decadesInLibrary([1985, 1999, 2001, 1980, undefined, 2005])).toEqual([2000, 1990, 1980]);
   });
 
   it("is empty when no years are present", () => {

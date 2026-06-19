@@ -1,5 +1,5 @@
-import type { SmartKind, Track } from "@musex/core";
-import { composeForYou, computeSmartPlaylist, listValidator, SMART_TITLES } from "@musex/core";
+import type { RuleSmartKind, Track } from "@musex/core";
+import { composeForYou, computeSmartPlaylist, listValidator, smartTitle } from "@musex/core";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -9,7 +9,7 @@ import { TrackList } from "../../../src/ui/TrackList";
 import { theme } from "../../../src/ui/theme";
 
 export default function MixScreen() {
-  const { kind } = useLocalSearchParams<{ kind: SmartKind }>();
+  const { kind } = useLocalSearchParams<{ kind: RuleSmartKind }>();
   const { state, gateway, session, taste, artBaseFor, token } = useStore();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +71,7 @@ export default function MixScreen() {
 
   return (
     <TrackList
-      title={kind ? SMART_TITLES[kind] : "Mix"}
+      title={kind ? smartTitle(kind) : "Mix"}
       tracks={tracks}
       session={session}
       artBaseFor={artBaseFor}

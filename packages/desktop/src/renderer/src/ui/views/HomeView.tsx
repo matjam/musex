@@ -1,30 +1,42 @@
 import type { Album, Artist } from "@musex/core";
 import {
   albumsForMix,
+  dailyMix,
+  decadeKind,
+  decadeOf,
+  decadesInLibrary,
   entityRefForAlbum,
   entityRefForArtist,
   listValidator,
   MOOD_MIXES,
-  SMART_DESCRIPTIONS,
-  SMART_TITLES,
+  type RuleSmartKind,
   type SmartKind,
   sampleThumbs,
+  smartDescription,
   smartMixEmpty,
   smartMixThumbs,
+  smartTitle,
 } from "@musex/core";
 import { useEffect, useState } from "react";
 import type { SectionDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { usePlaylists } from "../../state/playlists";
-import { useSmartMixes } from "../../state/smart-mixes";
+import { todaySeed, useSmartMixes } from "../../state/smart-mixes";
 import { CardCollage } from "../CardCollage";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { PluginSections } from "../PluginSections";
-import { MIX_ICONS, SMART_ICONS } from "../smart-mix-icons";
+import { MIX_ICONS, smartIcon } from "../smart-mix-icons";
 
-/** Home-card order for the smart playlists. */
-const SMART_ORDER: SmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
+/** Home-card order for the rule-based smart playlists (collage art needs the
+ *  taste snapshot via smartMixThumbs, so they're handled together). */
+const RULE_ORDER: RuleSmartKind[] = ["for-you", "top-rated", "heavy-rotation", "rediscover"];
+
+/** Daily Mix sits alongside the rule mixes but composes from the whole library. */
+const DAILY_KIND: SmartKind = "daily";
+
+/** How many album thumbs sample into a decade / daily tile collage. */
+const TILE_COLLAGE = 4;
 
 /** Fisher-Yates pick of up to `n` random items (fresh each visit). */
 function pickRandom<T>(items: T[], n: number): T[] {
@@ -52,6 +64,8 @@ export function HomeView() {
   const [mixEmpty, setMixEmpty] = useState<Set<string>>(new Set());
   const [smartThumbs, setSmartThumbs] = useState<Map<SmartKind, string[]>>(new Map());
   const [smartEmpty, setSmartEmpty] = useState<Set<SmartKind>>(new Set());
+  // Decade-start years present in the library (newest-first), from albums.
+  const [decades, setDecades] = useState<number[]>([]);
   const [playlistArt, setPlaylistArt] = useState<Map<string, string[]>>(new Map());
   const [playlistEmpty, setPlaylistEmpty] = useState<Set<string>>(new Set());
   const [brokenComposite, setBrokenComposite] = useState<Set<string>>(new Set());
@@ -147,15 +161,17 @@ export function HomeView() {
 
   // Smart-mix tile art: compose each mix in the background (cheap pure rules
   // over the cached all-tracks list + taste snapshot) and collage its album art.
+  // Also drives Daily Mix art + the Decades rail (album-year-keyed).
   useEffect(() => {
     if (!library) return;
     let cancelled = false;
     const validator = listValidator(library.updatedAt);
     Promise.all([
       window.musex.listAllTracks(library.id, "title", validator),
+      window.musex.listAllAlbums(library.id, "title", validator),
       window.musex.getTasteSnapshot(),
     ])
-      .then(([tracks, taste]) => {
+      .then(([tracks, albumList, taste]) => {
         if (cancelled) return;
         const stats = taste.stats.map((s) => ({
           key: s.key,
@@ -164,20 +180,51 @@ export function HomeView() {
           decayedPlays: s.decayedPlays,
         }));
         const now = Date.now();
-        setSmartThumbs(
-          new Map(
-            SMART_ORDER.map((kind) => [
+        const thumbs = new Map<SmartKind, string[]>();
+        const emptyKinds = new Set<SmartKind>();
+        for (const kind of RULE_ORDER) {
+          thumbs.set(
+            kind,
+            sampleThumbs(
+              smartMixThumbs(kind, tracks, stats, taste.topArtists, now),
+              TILE_COLLAGE,
               kind,
-              sampleThumbs(smartMixThumbs(kind, tracks, stats, taste.topArtists, now), 4, kind),
-            ]),
+            ),
+          );
+          if (smartMixEmpty(kind, tracks, stats, taste.topArtists, now)) emptyKinds.add(kind);
+        }
+
+        // Daily Mix: art from a sample of today's deterministic shuffle; only
+        // empty when the library has no tracks.
+        thumbs.set(
+          DAILY_KIND,
+          sampleThumbs(
+            dailyMix(tracks, todaySeed()).map((t) => t.thumb),
+            TILE_COLLAGE,
+            "daily",
           ),
         );
-        // Tiles for mixes that would open empty just hide.
-        setSmartEmpty(
-          new Set(
-            SMART_ORDER.filter((kind) => smartMixEmpty(kind, tracks, stats, taste.topArtists, now)),
-          ),
-        );
+        if (tracks.length === 0) emptyKinds.add(DAILY_KIND);
+
+        // Decades: art per decade from that decade's album thumbs.
+        const present = decadesInLibrary(albumList.map((a) => a.year));
+        for (const start of present) {
+          const kind = decadeKind(start);
+          thumbs.set(
+            kind,
+            sampleThumbs(
+              albumList
+                .filter((a) => a.year != null && decadeOf(a.year) === start)
+                .map((a) => a.thumb),
+              TILE_COLLAGE,
+              kind,
+            ),
+          );
+        }
+
+        setSmartThumbs(thumbs);
+        setSmartEmpty(emptyKinds);
+        setDecades(present);
       })
       .catch(() => {
         // tile art is decoration — icon placeholder stays on failure
@@ -242,6 +289,39 @@ export function HomeView() {
     albums.length === 0 &&
     pluginSections.every((s) => s.items.length === 0);
 
+  // One smart-mix tile (rule, daily, or decade) — shared by the Smart Mixes
+  // and Decades rails so their markup can't drift.
+  const renderSmartCard = (kind: SmartKind) => {
+    const Icon = smartIcon(kind);
+    const thumbs = smartThumbs.get(kind) ?? [];
+    return (
+      <button
+        key={kind}
+        type="button"
+        className={`genre-card smart-card smart-card--${kind}`}
+        onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
+      >
+        {thumbs.length > 0 ? (
+          <div className="smart-card-art smart-card-art--collage">
+            <CardCollage thumbs={thumbs} className="genre-card-collage" />
+            <span className="smart-card-glyph">
+              <Icon size={14} />
+            </span>
+          </div>
+        ) : (
+          <div className="smart-card-art">
+            <Icon size={42} strokeWidth={1.5} />
+          </div>
+        )}
+        <div className="genre-card-name">{smartTitle(kind)}</div>
+        <div className="mix-card-desc">{smartDescription(kind)}</div>
+      </button>
+    );
+  };
+
+  const smartCards: SmartKind[] = [...RULE_ORDER, DAILY_KIND];
+  const decadeCards: SmartKind[] = decades.map((d) => decadeKind(d));
+
   return (
     <div className="browse-section home-view">
       <h2 className="home-greeting">Home</h2>
@@ -249,33 +329,7 @@ export function HomeView() {
       <section className="home-row">
         <h3 className="browse-title">Smart Mixes</h3>
         <div className="genre-grid">
-          {SMART_ORDER.filter((kind) => !smartEmpty.has(kind)).map((kind) => {
-            const Icon = SMART_ICONS[kind];
-            const thumbs = smartThumbs.get(kind) ?? [];
-            return (
-              <button
-                key={kind}
-                type="button"
-                className={`genre-card smart-card smart-card--${kind}`}
-                onClick={() => dispatch({ type: "navigate", view: { name: "smart", kind } })}
-              >
-                {thumbs.length > 0 ? (
-                  <div className="smart-card-art smart-card-art--collage">
-                    <CardCollage thumbs={thumbs} className="genre-card-collage" />
-                    <span className="smart-card-glyph">
-                      <Icon size={14} />
-                    </span>
-                  </div>
-                ) : (
-                  <div className="smart-card-art">
-                    <Icon size={42} strokeWidth={1.5} />
-                  </div>
-                )}
-                <div className="genre-card-name">{SMART_TITLES[kind]}</div>
-                <div className="mix-card-desc">{SMART_DESCRIPTIONS[kind]}</div>
-              </button>
-            );
-          })}
+          {smartCards.filter((kind) => !smartEmpty.has(kind)).map(renderSmartCard)}
           {MOOD_MIXES.filter((mix) => !mixEmpty.has(mix.id)).map((mix) => (
             <button
               key={mix.id}
@@ -290,6 +344,13 @@ export function HomeView() {
           ))}
         </div>
       </section>
+
+      {decadeCards.length > 0 && (
+        <section className="home-row">
+          <h3 className="browse-title">Decades</h3>
+          <div className="genre-grid">{decadeCards.map(renderSmartCard)}</div>
+        </section>
+      )}
 
       {discoveries.length > 0 && (
         <section className="home-row">
