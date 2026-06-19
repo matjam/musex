@@ -292,7 +292,7 @@ export function ArtistView({ ref }: Props) {
           }
         />
         {/* TODO: real download count (Phase F) */}
-        <MonitorStatusLine watching={isFollowed(ref)} downloading={0} />
+        <MonitorStatusLine following={isFollowed(ref)} downloading={0} />
       </div>
 
       {/* The whole external discography lookup is online-only; an external
