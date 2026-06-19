@@ -1,5 +1,6 @@
 import { MOOD_MIXES, SMART_TITLES, type SmartKind } from "@musex/core";
 import {
+  Activity,
   ChevronDown,
   ChevronRight,
   Compass,
@@ -16,7 +17,7 @@ import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";
 import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
-import { AcquiringView } from "./views/AcquiringView";
+import { ActivityView } from "./views/ActivityView";
 import { AlbumsView } from "./views/AlbumsView";
 import { AlbumView } from "./views/AlbumView";
 import { ArtistsView } from "./views/ArtistsView";
@@ -86,6 +87,7 @@ export function Shell() {
   const homeActive = view.name === "home";
   const discoverActive = view.name === "discover";
   const onDeviceActive = view.name === "on-device";
+  const activityActive = view.name === "activity";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   // The per-genre drill-down keeps the Genres nav highlighted.
@@ -127,11 +129,10 @@ export function Shell() {
       case "on-device":
         return <OnDeviceView />;
       case "activity":
-        // The acquisition activity feed — reachable via the "Watching" filter
-        // in Artists (the "View acquisition activity" link), not a sidebar slot.
-        // (Renamed view: external-artist folded into the unified artist view;
-        // acquiring → activity. The AcquiringView component rename is Batch 4.)
-        return <AcquiringView />;
+        // The acquisition activity feed (download queue + expansions +
+        // followed-for-new-releases). Reached from the persistent sidebar
+        // "Activity" entry and the top-bar activity pill's "View all".
+        return <ActivityView />;
     }
   }
 
@@ -163,6 +164,15 @@ export function Shell() {
         >
           <HardDriveDownload size={16} />
           On this device
+        </button>
+
+        <button
+          type="button"
+          className={`nav-item${activityActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "activity" } })}
+        >
+          <Activity size={16} />
+          Activity
         </button>
 
         <SidebarSection title="Library" collapsed={libraryCollapsed} onToggle={toggleLibrary}>

@@ -299,6 +299,85 @@ html:not([data-platform="darwin"]) .topbar {
   -webkit-app-region: no-drag;
 }
 
+/* Conditional acquisition activity pill — sits just right of the search box,
+   left of the offline pill. Only mounted while items are in flight. */
+.topbar-activity {
+  position: absolute;
+  left: calc(50% + min(19%, 180px) + 18px);
+  -webkit-app-region: no-drag;
+}
+.topbar-activity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(84, 210, 160, 0.15);
+  border: 1px solid var(--green);
+  color: var(--green);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.topbar-activity-popover {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 40;
+  min-width: 260px;
+  max-width: 320px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.topbar-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.topbar-activity-row {
+  display: flex;
+  flex-direction: column;
+}
+.topbar-activity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.topbar-activity-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.topbar-activity-artist {
+  font-size: 11px;
+  color: var(--muted);
+}
+.topbar-activity-viewall {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 0;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.topbar-activity-viewall:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+/* When the activity pill is present, the offline pill shifts right to clear it. */
+.topbar-activity ~ .topbar-offline-pill {
+  left: calc(50% + min(19%, 180px) + 120px);
+}
+
 /* ---- App layout ---- */
 
 .app-root {
