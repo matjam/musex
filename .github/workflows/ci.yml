@@ -17,6 +17,21 @@ jobs:
     # so packaging breakage (the win block, mpv bundling, icons, nsis/dmg) and
     # platform-specific test/lint/typecheck failures are caught pre-merge — not
     # at release time. Signing/notarization/upload stay in release-please.yml.
+    #
+    # Skip release-please PRs: they're a version-bump/changelog-only diff over
+    # main (already built green on merge), and merging one fires the real signed
+    # release build — so a full 3-platform build there is pure redundancy (and a
+    # bot-authored PR that would otherwise sit awaiting Actions approval). Gate
+    # on the BOT IDENTITY + same-repo, not just the branch name (which anyone
+    # could spoof to skip CI on their own PR). Push to main has an empty
+    # head_ref / no pull_request, so it still builds.
+    if: >-
+      ${{ !(
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'release-please--')
+      ) }}
     strategy:
       fail-fast: false
       matrix:
@@ -39,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         # version read from package.json "packageManager"
 
       - uses: actions/setup-node@v6
