@@ -64,6 +64,13 @@ export function TopBar() {
           placeholder="What do you want to listen to?"
           value={searchQuery}
           onChange={(e) => dispatch({ type: "set-search", query: e.target.value })}
+          onKeyDown={(e) => {
+            // Enter re-runs the search even when the text is unchanged.
+            if (e.key === "Enter") {
+              e.preventDefault();
+              dispatch({ type: "search-now" });
+            }
+          }}
           aria-label="Search your library"
         />
       </div>

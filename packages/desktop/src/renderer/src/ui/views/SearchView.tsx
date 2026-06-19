@@ -24,7 +24,7 @@ const EMPTY: SearchResults = { artists: [], albums: [], tracks: [] };
 
 export function SearchView() {
   // The query lives in app state (driven by the top-bar search box).
-  const { library, dispatch, searchQuery: query, connectivity } = useApp();
+  const { library, dispatch, searchQuery: query, connectivity, searchNonce } = useApp();
   const offline = connectivity === "offline";
   const downloadRecords = useDownloadRecords();
   const { state, playTrackNext } = usePlayer();
@@ -38,6 +38,7 @@ export function SearchView() {
   const [newSeed, setNewSeed] = useState<string[] | null>(null);
 
   // Debounced live search (~250ms). Blank query clears immediately.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: searchNonce is a re-run trigger (Enter), not read in the body
   useEffect(() => {
     if (!library) return;
     const q = query.trim();
@@ -69,7 +70,7 @@ export function SearchView() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [query, library]);
+  }, [query, library, searchNonce]);
 
   // Federated external search (acquisition plugin) — a second
   // debounced fetch, independent loading flag, never blocks library results.
