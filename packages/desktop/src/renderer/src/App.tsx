@@ -6,6 +6,7 @@ import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
+import { SmartMixProvider } from "./state/smart-mixes";
 import { AboutModal } from "./ui/AboutModal";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { LogsModal } from "./ui/LogsModal";
@@ -73,19 +74,21 @@ function Inner() {
         <PlaylistsProvider>
           <SelectionProvider>
             <RatingsProvider>
-              <KeyboardShortcuts
-                toggleQueue={() => togglePanel("queue")}
-                toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
-                openSettings={() => setSettingsOpen(true)}
-              />
-              <div className="app-root">
-                <TopBar />
-                <Shell />
-                <NowPlayingBar onToggleQueue={() => togglePanel("queue")} />
-                <Toasts />
-                {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
-                {about}
-              </div>
+              <SmartMixProvider>
+                <KeyboardShortcuts
+                  toggleQueue={() => togglePanel("queue")}
+                  toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
+                  openSettings={() => setSettingsOpen(true)}
+                />
+                <div className="app-root">
+                  <TopBar />
+                  <Shell />
+                  <NowPlayingBar onToggleQueue={() => togglePanel("queue")} />
+                  <Toasts />
+                  {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+                  {about}
+                </div>
+              </SmartMixProvider>
             </RatingsProvider>
           </SelectionProvider>
         </PlaylistsProvider>
