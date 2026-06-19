@@ -1,47 +1,49 @@
+import {
+  entityRefForAlbum,
+  entityRefForArtist,
+  entityRefForTrack,
+  externalArtistRef,
+} from "@musex/core";
 import { describe, expect, it } from "vitest";
-import { resolveEntityTarget } from "./entity-target";
+import { viewForEntity } from "./entity-target";
 
-describe("resolveEntityTarget", () => {
-  it("owned artist → artist view", () => {
-    expect(
-      resolveEntityTarget({ kind: "artist", artistId: "a1", serverId: "s1", name: "Bonobo" }),
-    ).toEqual({ name: "artist", artist: { id: "a1", serverId: "s1", name: "Bonobo" } });
+describe("viewForEntity", () => {
+  it("owned artist → artist view carrying the ref", () => {
+    const ref = entityRefForArtist({ id: "a1", serverId: "s1", name: "Bonobo" });
+    expect(viewForEntity(ref)).toEqual({ name: "artist", ref });
   });
-  it("artist without id but with provider → external-artist view", () => {
-    expect(resolveEntityTarget({ kind: "artist", name: "Bonobo", hasProvider: true })).toEqual({
-      name: "external-artist",
-      artistName: "Bonobo",
-    });
+
+  it("external artist → artist view (same destination as owned)", () => {
+    const ref = externalArtistRef("Bonobo");
+    expect(viewForEntity(ref)).toEqual({ name: "artist", ref });
   });
-  it("artist without id and no provider → null", () => {
-    expect(resolveEntityTarget({ kind: "artist", name: "Bonobo" })).toBeNull();
-  });
-  it("owned album → album view", () => {
-    const r = resolveEntityTarget({
-      kind: "album",
-      albumId: "al1",
+
+  it("owned album → album view carrying the ref", () => {
+    const ref = entityRefForAlbum({
+      id: "al1",
       serverId: "s1",
       artistId: "a1",
       title: "Migration",
     });
-    expect(r).toEqual({
-      name: "album",
-      album: { id: "al1", serverId: "s1", artistId: "a1", title: "Migration", thumb: undefined },
-    });
+    expect(viewForEntity(ref)).toEqual({ name: "album", ref });
   });
-  it("album without artistId still navigates (compilations / various-artist)", () => {
-    const r = resolveEntityTarget({
-      kind: "album",
-      albumId: "al1",
+
+  it("owned track → artist view (no album id, never the external placeholder)", () => {
+    // An owned track carries no album id, so it can't reach its OWNED album
+    // page here; falling back to the artist page is safe (the old behaviour
+    // sent it to an external album placeholder — the wrong, unowned page).
+    const ref = entityRefForTrack({
+      id: "t1",
       serverId: "s1",
-      title: "Now 50",
+      albumId: "al1",
+      artistId: "a1",
+      artistName: "Bonobo",
+      albumTitle: "Migration",
+      title: "Kerala",
+      durationMs: 1000,
+      media: { container: "flac", audioCodec: "flac", partId: "p", partKey: "/k" },
     });
-    expect(r).toEqual({
-      name: "album",
-      album: { id: "al1", serverId: "s1", artistId: "", title: "Now 50", thumb: undefined },
-    });
-  });
-  it("album without albumId → null", () => {
-    expect(resolveEntityTarget({ kind: "album", serverId: "s1" })).toBeNull();
+    const v = viewForEntity(ref);
+    expect(v).toEqual({ name: "artist", ref: externalArtistRef("Bonobo") });
   });
 });

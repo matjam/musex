@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   DownloadRecord,
   ExpansionEntry,
+  FollowRecord,
   Library,
   RepeatMode,
   StorageQuality,
@@ -63,6 +64,9 @@ export interface PersistedState {
   // Offline-download storage quality: keep the original file, or transcode to
   // MP3 at a chosen bitrate. Records live in their own store (downloadsStore).
   storageQuality: StorageQuality;
+  // Per-device follows / favorites (artists routed through the acquisition
+  // provider; album/track are local-only). Backs the SP0 FollowStore.
+  follows: FollowRecord[];
 }
 
 /** Default local-cache cap: 5 GiB. */
@@ -93,6 +97,7 @@ const store = new Store<PersistedState>({
     pluginSources: {},
     lastfm: DEFAULT_LASTFM_CONFIG,
     storageQuality: DEFAULT_STORAGE_QUALITY,
+    follows: [],
   },
 });
 
@@ -277,5 +282,11 @@ export const persistence = {
   },
   setStorageQuality(q: StorageQuality): void {
     store.set("storageQuality", q);
+  },
+  getFollows(): FollowRecord[] {
+    return store.get("follows") ?? [];
+  },
+  setFollows(records: FollowRecord[]): void {
+    store.set("follows", records);
   },
 };

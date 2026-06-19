@@ -1,5 +1,6 @@
 import { MOOD_MIXES, SMART_TITLES, type SmartKind } from "@musex/core";
 import {
+  Activity,
   ChevronDown,
   ChevronRight,
   Compass,
@@ -16,13 +17,12 @@ import { useApp } from "../state/app";
 import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";
 import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
-import { AcquiringView } from "./views/AcquiringView";
-import { AlbumDetailView } from "./views/AlbumDetailView";
+import { ActivityView } from "./views/ActivityView";
 import { AlbumsView } from "./views/AlbumsView";
-import { ArtistDetailView } from "./views/ArtistDetailView";
+import { AlbumView } from "./views/AlbumView";
 import { ArtistsView } from "./views/ArtistsView";
+import { ArtistView } from "./views/ArtistView";
 import { DiscoverView } from "./views/DiscoverView";
-import { ExternalArtistView } from "./views/ExternalArtistView";
 import { GenresView } from "./views/GenresView";
 import { GenreView } from "./views/GenreView";
 import { HomeView } from "./views/HomeView";
@@ -87,6 +87,7 @@ export function Shell() {
   const homeActive = view.name === "home";
   const discoverActive = view.name === "discover";
   const onDeviceActive = view.name === "on-device";
+  const activityActive = view.name === "activity";
   const artistsActive = view.name === "artists" || view.name === "artist" || view.name === "album";
   const albumsActive = view.name === "albums";
   // The per-genre drill-down keeps the Genres nav highlighted.
@@ -102,9 +103,11 @@ export function Shell() {
       case "artists":
         return <ArtistsView />;
       case "artist":
-        return <ArtistDetailView artist={view.artist} />;
+        // One unified page for owned + external artists — no source split.
+        return <ArtistView ref={view.ref} />;
       case "album":
-        return <AlbumDetailView album={view.album} />;
+        // One unified page for owned + external albums — no source split.
+        return <AlbumView ref={view.ref} />;
       case "albums":
         return <AlbumsView />;
       case "search":
@@ -121,17 +124,15 @@ export function Shell() {
         return <PlaylistView playlist={view.playlist} />;
       case "smart":
         return <SmartPlaylistView kind={view.kind} />;
-      case "external-artist":
-        return <ExternalArtistView artistName={view.artistName} />;
       case "similar":
         return <SimilarView target={view.target} />;
       case "on-device":
         return <OnDeviceView />;
-      case "acquiring":
-        // The acquisition activity feed — reachable via the "Acquiring" filter
-        // in Albums/Artists (the "View acquisition activity" link), not a
-        // sidebar slot.
-        return <AcquiringView />;
+      case "activity":
+        // The acquisition activity feed (download queue + expansions +
+        // followed-for-new-releases). Reached from the persistent sidebar
+        // "Activity" entry and the top-bar activity pill's "View all".
+        return <ActivityView />;
     }
   }
 
@@ -163,6 +164,15 @@ export function Shell() {
         >
           <HardDriveDownload size={16} />
           On this device
+        </button>
+
+        <button
+          type="button"
+          className={`nav-item${activityActive ? " active" : ""}`}
+          onClick={() => dispatch({ type: "navigate", view: { name: "activity" } })}
+        >
+          <Activity size={16} />
+          Activity
         </button>
 
         <SidebarSection title="Library" collapsed={libraryCollapsed} onToggle={toggleLibrary}>

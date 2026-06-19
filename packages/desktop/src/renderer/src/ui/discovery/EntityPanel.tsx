@@ -1,40 +1,32 @@
-import type { Album, Track } from "@musex/core";
-import { formatDuration, listValidator, relativeTime, smartTrackKey } from "@musex/core";
-import { AudioLines, ExternalLink, X } from "lucide-react";
+import type { Track } from "@musex/core";
+import {
+  entityRefForAlbum,
+  entityRefForArtist,
+  externalAlbumRef,
+  externalArtistRef,
+  formatDuration,
+  relativeTime,
+  smartTrackKey,
+} from "@musex/core";
+import { AudioLines, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { ArtistInfoDto, TrackDetailDto, TrackStatDto } from "../../../../shared/ipc-contract";
+import type { TrackDetailDto, TrackStatDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { type EntityPanelPayload, usePanel } from "../../state/panel";
 import { toTrackInfo, usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
-import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { StarRating } from "../StarRating";
 import { ActionBar } from "./ActionBar";
 import { EntityLink } from "./EntityLink";
-import { useMonitorAction } from "./MonitorButton";
 
-/** Unified right-hand panel for an artist / album / song. Replaces the separate
- *  TrackDetailPanel + ArtistInfoPanel — switches on payload.kind, preserving each
- *  one's behavior: hero artwork, clickable breadcrumb, Play/Similar/Monitor
- *  actions, metadata + listening stats, and the About section (artist bio /
- *  plugin-contributed track-detail sections). */
+/** The right-hand context panel — now-playing / track-detail ONLY (entity
+ *  navigation always goes to the unified pages, never the panel). Renders the
+ *  selected/now-playing track: hero artwork, clickable breadcrumb (→ unified
+ *  artist/album pages via EntityLink), Play/Similar, rating, metadata, listening
+ *  stats, and plugin-contributed track-detail sections. */
 export function EntityPanel({ payload }: { payload: EntityPanelPayload }) {
-  switch (payload.kind) {
-    case "song":
-      return <SongPanel track={payload.track} />;
-    case "album":
-      return <AlbumPanel album={payload.album} />;
-    case "artist":
-      return (
-        <ArtistPanel
-          artistName={payload.artistName}
-          artistId={payload.artistId}
-          serverId={payload.serverId}
-          thumb={payload.thumb}
-        />
-      );
-  }
+  return <SongPanel track={payload.track} />;
 }
 
 /** Shared panel chrome: header (kind label + close) wrapping the content. */
@@ -121,12 +113,15 @@ function SongPanel({ track }: { track: Track }) {
       {/* Hierarchy crumb: Artist › Album › Track (navigable via EntityLink). */}
       <div className="breadcrumb detail-crumb">
         <EntityLink
-          entity={{
-            kind: "artist",
-            name: track.artistName,
-            artistId: track.artistId || undefined,
-            serverId: track.serverId,
-          }}
+          entity={
+            track.artistId
+              ? entityRefForArtist({
+                  id: track.artistId,
+                  serverId: track.serverId,
+                  name: track.artistName,
+                })
+              : externalArtistRef(track.artistName)
+          }
         >
           {track.artistName}
         </EntityLink>
@@ -134,14 +129,17 @@ function SongPanel({ track }: { track: Track }) {
           <>
             {" › "}
             <EntityLink
-              entity={{
-                kind: "album",
-                albumId: track.albumId || undefined,
-                serverId: track.serverId,
-                artistId: track.artistId || undefined,
-                title: track.albumTitle,
-                thumb: track.thumb,
-              }}
+              entity={
+                track.albumId
+                  ? entityRefForAlbum({
+                      id: track.albumId,
+                      serverId: track.serverId,
+                      artistId: track.artistId,
+                      title: track.albumTitle,
+                      thumb: track.thumb,
+                    })
+                  : externalAlbumRef(track.albumTitle, track.artistName)
+              }
             >
               {track.albumTitle}
             </EntityLink>
@@ -248,262 +246,6 @@ function SongPanel({ track }: { track: Track }) {
           ))}
         </div>
       ))}
-    </PanelShell>
-  );
-}
-
-// ---- Album ---------------------------------------------------------------
-
-function AlbumPanel({ album }: { album: Album }) {
-  const { library, dispatch } = useApp();
-  const { state, playTracks, playTracksShuffled } = usePlayer();
-  const [tracks, setTracks] = useState<Track[] | null>(null);
-
-  useEffect(() => {
-    if (!library) return;
-    let cancelled = false;
-    setTracks(null);
-    window.musex
-      .listTracks(library.id, album.id, listValidator(album.updatedAt))
-      .then((t) => {
-        if (!cancelled) setTracks(t);
-      })
-      .catch((err) => console.error("[album] listTracks failed:", err));
-    return () => {
-      cancelled = true;
-    };
-  }, [library, album.id, album.updatedAt]);
-
-  // Artist NAME comes from the first loaded track (Album carries only artistId).
-  const artistName = tracks?.[0]?.artistName ?? "";
-  const playingTrackId =
-    state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
-  const totalMs = (tracks ?? []).reduce((sum, t) => sum + t.durationMs, 0);
-
-  return (
-    <PanelShell label="Album">
-      <AlbumArt thumb={album.thumb} className="detail-art" label={album.title} kind="album" />
-
-      <div className="breadcrumb detail-crumb">
-        {artistName && (
-          <EntityLink
-            entity={{
-              kind: "artist",
-              name: artistName,
-              artistId: album.artistId || undefined,
-              serverId: album.serverId,
-            }}
-          >
-            {artistName}
-          </EntityLink>
-        )}
-        {artistName && " › "}
-        <span className="breadcrumb-current">{album.title}</span>
-      </div>
-
-      <div className="detail-title">{album.title}</div>
-
-      <ActionBar
-        onPlay={tracks && tracks.length > 0 ? () => playTracks(tracks, 0) : undefined}
-        onShuffle={tracks && tracks.length > 0 ? () => playTracksShuffled(tracks) : undefined}
-        onSimilar={
-          artistName
-            ? () =>
-                dispatch({
-                  type: "navigate",
-                  view: { name: "similar", target: { kind: "artist", name: artistName } },
-                })
-            : undefined
-        }
-      />
-
-      <div className="detail-meta">
-        {album.year != null && (
-          <div className="detail-meta-row">
-            <span>Year</span>
-            <span>{album.year}</span>
-          </div>
-        )}
-        {tracks != null && (
-          <div className="detail-meta-row">
-            <span>Tracks</span>
-            <span>{tracks.length}</span>
-          </div>
-        )}
-        {totalMs > 0 && (
-          <div className="detail-meta-row">
-            <span>Duration</span>
-            <span>{formatDuration(totalMs)}</span>
-          </div>
-        )}
-      </div>
-
-      {tracks != null && (
-        <div className="detail-meta detail-plugin">
-          <div className="detail-plugin-title">Tracks</div>
-          {tracks.map((t) => (
-            <div
-              key={t.id}
-              className={`detail-meta-row${t.id === playingTrackId ? " playing" : ""}`}
-            >
-              <span>
-                {t.trackNumber != null ? `${t.trackNumber}. ` : ""}
-                {t.title}
-              </span>
-              <span>{formatDuration(t.durationMs)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </PanelShell>
-  );
-}
-
-// ---- Artist --------------------------------------------------------------
-
-type ArtistFetch = { status: "loading" } | { status: "ok"; info: ArtistInfoDto | null };
-
-function ArtistPanel({
-  artistName,
-  artistId,
-  serverId,
-  thumb,
-}: {
-  artistName: string;
-  artistId?: string;
-  serverId?: string;
-  thumb?: string;
-}) {
-  const { dispatch, connectivity } = useApp();
-  const offline = connectivity === "offline";
-  const { closePanel } = usePanel();
-  const monitor = useMonitorAction(artistName);
-  const [fetch, setFetch] = useState<ArtistFetch>({ status: "loading" });
-
-  useEffect(() => {
-    setFetch({ status: "loading" });
-    let cancelled = false;
-    window.musex
-      .artistInfoGet(artistName)
-      .then((info) => {
-        if (!cancelled) setFetch({ status: "ok", info });
-      })
-      .catch(() => {
-        if (!cancelled) setFetch({ status: "ok", info: null });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [artistName]);
-
-  const info = fetch.status === "ok" ? fetch.info : null;
-  // Prefer the library thumb; fall back to the provider image.
-  const heroThumb = thumb ?? info?.imageUrl;
-
-  function browseAlbums() {
-    closePanel();
-    dispatch({ type: "navigate", view: { name: "external-artist", artistName } });
-  }
-
-  return (
-    <PanelShell label="Artist">
-      <AlbumArt
-        thumb={heroThumb}
-        className="detail-art artist-art"
-        label={artistName}
-        kind="artist"
-      />
-
-      <div className="detail-title">{artistName}</div>
-
-      <ActionBar
-        onSimilar={() =>
-          dispatch({
-            type: "navigate",
-            view: { name: "similar", target: { kind: "artist", name: artistName } },
-          })
-        }
-        monitor={
-          monitor.supported
-            ? {
-                on: monitor.on,
-                busy: monitor.busy,
-                disabled: offline,
-                title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
-                onToggle: monitor.onToggle,
-              }
-            : undefined
-        }
-      />
-
-      {fetch.status === "loading" && (
-        <div className="detail-meta-row">
-          <span>Looking up artist…</span>
-        </div>
-      )}
-
-      {(info?.listeners != null || info?.playCount != null) && (
-        <div className="detail-meta">
-          {info?.listeners != null && (
-            <div className="detail-meta-row">
-              <span>Listeners</span>
-              <span>{info.listeners.toLocaleString()}</span>
-            </div>
-          )}
-          {info?.playCount != null && (
-            <div className="detail-meta-row">
-              <span>Plays</span>
-              <span>{info.playCount.toLocaleString()}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {info?.bio && (
-        <div className="detail-meta detail-plugin">
-          <div className="detail-plugin-title">About</div>
-          <p className="artist-info-bio">{info.bio}</p>
-        </div>
-      )}
-
-      {fetch.status === "ok" && !info && (
-        <div className="detail-meta-row">
-          <span>No artist info available.</span>
-        </div>
-      )}
-
-      <div className="artist-info-actions">
-        {/* Owned artists navigate to their detail view; unowned browse the
-            external discography. artistId+serverId present = owned. */}
-        {artistId && serverId ? (
-          <button
-            type="button"
-            className="settings-btn"
-            onClick={() => {
-              closePanel();
-              dispatch({
-                type: "navigate",
-                view: { name: "artist", artist: { id: artistId, serverId, name: artistName } },
-              });
-            }}
-          >
-            Open artist
-          </button>
-        ) : (
-          <button type="button" className="settings-btn" onClick={browseAlbums}>
-            Browse albums
-          </button>
-        )}
-        {info?.url && (
-          <button
-            type="button"
-            className="settings-btn"
-            onClick={() => void window.musex.openExternal(info.url as string)}
-          >
-            <ExternalLink size={14} /> View on last.fm
-          </button>
-        )}
-      </div>
     </PanelShell>
   );
 }

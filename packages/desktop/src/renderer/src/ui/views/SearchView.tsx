@@ -1,14 +1,16 @@
 import type { SearchResults } from "@musex/core";
-import { downloadRecordFor } from "@musex/core";
-import { Download } from "lucide-react";
+import {
+  downloadRecordFor,
+  entityRefForAlbum,
+  entityRefForArtist,
+  externalArtistRef,
+} from "@musex/core";
 import { useEffect, useState } from "react";
 import type { ExternalArtistResultDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
-import { useMonitoring } from "../../state/monitoring";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
 import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
-import { AlbumArt } from "../AlbumArt";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
@@ -27,7 +29,6 @@ export function SearchView() {
   const downloadRecords = useDownloadRecords();
   const { state, playTrackNext } = usePlayer();
   const { selectedTrack, select } = useSelection();
-  const monitoring = useMonitoring();
   const acquisitionAvailable = useAcquisitionAvailable();
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
@@ -111,17 +112,6 @@ export function SearchView() {
     };
   }, [query, acquisitionAvailable, offline]);
 
-  // Monitor via the precise providerRef, then refresh the live monitoring
-  // store so the marker lights up (the plugin itself toasts success/failure).
-  function monitorArtist(artist: ExternalArtistResultDto) {
-    window.musex
-      .acquisitionAcquireArtist({ providerId: artist.providerId, providerRef: artist.providerRef })
-      .then(() => monitoring.refresh())
-      .catch((err: unknown) => {
-        console.error("[acquisition] acquireArtist failed:", err);
-      });
-  }
-
   const playingTrackId =
     state.queue != null ? (state.queue.tracks[state.queue.index]?.id ?? null) : null;
 
@@ -149,22 +139,19 @@ export function SearchView() {
         <div className="browse-section">
           <h3 className="browse-title">Artists</h3>
           <div className="browse-grid">
-            {results.artists.map((artist) => (
-              <button
-                type="button"
-                key={artist.id}
-                className="grid-card"
-                onClick={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
-              >
-                <AlbumArt
+            {results.artists.map((artist) => {
+              const ref = entityRefForArtist(artist);
+              return (
+                <GridCard
+                  key={artist.id}
+                  round
                   thumb={artist.thumb}
-                  className="grid-card-art artist-art"
-                  label={artist.name}
-                  kind="artist"
+                  title={artist.name}
+                  entity={ref}
+                  onOpen={() => dispatch({ type: "navigate", view: { name: "artist", ref } })}
                 />
-                <div className="grid-card-title">{artist.name}</div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -173,23 +160,19 @@ export function SearchView() {
         <div className="browse-section">
           <h3 className="browse-title">Albums</h3>
           <div className="browse-grid">
-            {results.albums.map((album) => (
-              <button
-                type="button"
-                key={album.id}
-                className="grid-card"
-                onClick={() => dispatch({ type: "navigate", view: { name: "album", album } })}
-              >
-                <AlbumArt
+            {results.albums.map((album) => {
+              const ref = entityRefForAlbum(album);
+              return (
+                <GridCard
+                  key={album.id}
                   thumb={album.thumb}
-                  className="grid-card-art"
-                  label={album.title}
-                  kind="album"
+                  title={album.title}
+                  subtitle={album.year != null ? String(album.year) : undefined}
+                  entity={ref}
+                  onOpen={() => dispatch({ type: "navigate", view: { name: "album", ref } })}
                 />
-                <div className="grid-card-title">{album.title}</div>
-                {album.year != null && <div className="grid-card-sub">{album.year}</div>}
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -236,30 +219,24 @@ export function SearchView() {
       {externalArtists.length > 0 && (
         <div className="browse-section">
           <h3 className="browse-title">Not in your library</h3>
-          <div className="browse-sub">via your acquisition plugin — monitor to download</div>
+          <div className="browse-sub">via your acquisition plugin — Follow to acquire</div>
           <div className="browse-grid">
-            {externalArtists.map((artist) => {
-              const monitored = monitoring.isMonitored(artist.name);
-              return (
-                <GridCard
-                  key={`${artist.providerId}:${artist.providerRef}`}
-                  round
-                  thumb={artist.imageUrl}
-                  title={artist.name}
-                  subtitle={artist.disambiguation}
-                  monitored={monitored}
-                  onOpen={() =>
-                    dispatch({
-                      type: "navigate",
-                      view: { name: "external-artist", artistName: artist.name },
-                    })
-                  }
-                  actionIcon={monitored ? undefined : Download}
-                  actionTitle="Monitor artist — download everything"
-                  onAction={monitored ? undefined : () => monitorArtist(artist)}
-                />
-              );
-            })}
+            {externalArtists.map((artist) => (
+              <GridCard
+                key={`${artist.providerId}:${artist.providerRef}`}
+                round
+                thumb={artist.imageUrl}
+                title={artist.name}
+                subtitle={artist.disambiguation}
+                entity={externalArtistRef(artist.name)}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: externalArtistRef(artist.name) },
+                  })
+                }
+              />
+            ))}
           </div>
         </div>
       )}

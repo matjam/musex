@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DownloadJob, Library, Pin, Track } from "@musex/core";
-import { dedupeJobs, isHttpUrl, reconcileRecords, TasteProfile } from "@musex/core";
+import { dedupeJobs, FollowService, isHttpUrl, reconcileRecords, TasteProfile } from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { ProviderHub } from "@musex/plugin-host";
 import { app, shell } from "electron";
@@ -12,6 +12,7 @@ import { DesktopCachingGateway } from "./adapters/caching-plex-gateway.js";
 import { ConnectivityMonitor } from "./adapters/connectivity-monitor.js";
 import { DownloadIndex } from "./adapters/download-index.js";
 import { DownloadStore } from "./adapters/download-store.js";
+import { ElectronFollowStore } from "./adapters/follow-store.js";
 import { LibraryWatcher } from "./adapters/library-watcher.js";
 import { ListCacheStore } from "./adapters/list-cache-store.js";
 import { MediaCache } from "./adapters/media-cache.js";
@@ -19,6 +20,10 @@ import { MpvController } from "./adapters/mpv-controller.js";
 import { resolveMpvPaths } from "./adapters/mpv-paths.js";
 import { getClientId, persistence } from "./adapters/persistence.js";
 import { PlexapiGateway } from "./adapters/plex-gateway.js";
+import {
+  type AcquisitionFacade,
+  ProviderMonitorBackend,
+} from "./adapters/provider-monitor-backend.js";
 import {
   isSecureStorageAvailable,
   secureDecrypt,
@@ -84,6 +89,10 @@ export class Runtime {
   providers!: ProviderHub;
   /** The baked-in Last.fm first-party service (non-plugin). */
   lastfmService: LastfmService | null = null;
+  /** Unified follow facade (SP0): artist follows route through the acquisition
+   *  provider (acquire + monitor) + a local record; album/track are local
+   *  favorites. Constructed in init() once the provider hub exists. */
+  followService!: FollowService;
   /** Constructed + loaded in init() — needs `app` ready (userData paths) and
    *  safeStorage for plugin secrets. */
   plugins!: PluginHost;
@@ -219,6 +228,28 @@ export class Runtime {
     // Provider hub: Runtime-owned registry + fan-out, shared between
     // first-party (core:lastfm) and plugin registrations.
     this.providers = new ProviderHub();
+
+    // Unified follow: the FollowStore persists records (electron-store), the
+    // MonitorBackend routes artist follows through the acquisition provider.
+    // The facade getter returns the hub's acquisition surface only when an
+    // acquisition plugin is installed (else null → follow throws a friendly
+    // error, reads degrade to false/[]).
+    const followStore = new ElectronFollowStore({
+      get: () => persistence.getFollows(),
+      set: (records) => persistence.setFollows(records),
+    });
+    const monitorBackend = new ProviderMonitorBackend(() => {
+      if (!this.providers.acquisitionAvailable()) return null;
+      const facade: AcquisitionFacade = {
+        acquireArtistByName: (name) => this.providers.acquireArtistByName(name),
+        watchNewReleases: (name, enabled) => this.providers.watchNewReleases(name, enabled),
+        listMonitoredArtists: () => this.providers.listMonitoredArtists(),
+        listWatchedArtists: () => this.providers.listWatchedArtists(),
+      };
+      return facade;
+    });
+    this.followService = new FollowService({ store: followStore, monitor: monitorBackend });
+    await followStore.init();
 
     // Last.fm first-party service: registers directly on the hub (no plugin sandbox).
     this.lastfmService = new LastfmService();

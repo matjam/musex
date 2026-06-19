@@ -159,6 +159,9 @@ const api: MusexApi = {
   },
   storageGetQuality: () => ipcRenderer.invoke(IPC.storageGetQuality),
   storageSetQuality: (q: StorageQualityDto) => ipcRenderer.invoke(IPC.storageSetQuality, q),
+  followSet: (ref, value) => ipcRenderer.invoke(IPC.followSet, ref, value),
+  followGet: (ref) => ipcRenderer.invoke(IPC.followGet, ref),
+  followList: (kind) => ipcRenderer.invoke(IPC.followList, kind),
   logsGet: () => ipcRenderer.invoke(IPC.logsGet),
   logsAppend: (entries) => ipcRenderer.invoke(IPC.logsAppend, entries),
   onLogsEvent: (cb) => {

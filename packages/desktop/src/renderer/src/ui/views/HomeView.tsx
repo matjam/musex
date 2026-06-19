@@ -1,6 +1,8 @@
 import type { Album, Artist } from "@musex/core";
 import {
   albumsForMix,
+  entityRefForAlbum,
+  entityRefForArtist,
   listValidator,
   MOOD_MIXES,
   SMART_DESCRIPTIONS,
@@ -14,6 +16,7 @@ import { useEffect, useState } from "react";
 import type { SectionDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { usePlaylists } from "../../state/playlists";
+import { useSmartMixes } from "../../state/smart-mixes";
 import { CardCollage } from "../CardCollage";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
@@ -40,6 +43,7 @@ const RANDOM_COUNT = 12;
 
 export function HomeView() {
   const { library, dispatch } = useApp();
+  const { warm: warmSmartMixes } = useSmartMixes();
   const { playlists } = usePlaylists();
   const { playAlbum, playArtist, playPlaylist } = useCollectionPlay();
   const [artists, setArtists] = useState<Artist[]>([]);
@@ -68,6 +72,13 @@ export function HomeView() {
       cancelled = true;
     };
   }, []);
+
+  // Pre-warm the four smart mixes in the background on Home mount so opening
+  // one is instant. warm() is reentrancy-safe (no-op if already warming) and
+  // runs off the render path — the rail thumbs below render immediately.
+  useEffect(() => {
+    if (library) warmSmartMixes();
+  }, [library, warmSmartMixes]);
 
   useEffect(() => {
     if (!library) return;
@@ -291,7 +302,13 @@ export function HomeView() {
                 title={a.name}
                 subtitle="Added for you"
                 round
-                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist: a } })}
+                entity={entityRefForArtist(a)}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: entityRefForArtist(a) },
+                  })
+                }
                 onPlay={() => void playArtist(a)}
               />
             ))}
@@ -330,7 +347,13 @@ export function HomeView() {
                 thumb={a.thumb}
                 title={a.name}
                 round
-                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist: a } })}
+                entity={entityRefForArtist(a)}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: entityRefForArtist(a) },
+                  })
+                }
                 onPlay={() => void playArtist(a)}
               />
             ))}
@@ -348,7 +371,10 @@ export function HomeView() {
                 thumb={a.thumb}
                 title={a.title}
                 subtitle={a.year != null ? String(a.year) : undefined}
-                onOpen={() => dispatch({ type: "navigate", view: { name: "album", album: a } })}
+                entity={entityRefForAlbum(a)}
+                onOpen={() =>
+                  dispatch({ type: "navigate", view: { name: "album", ref: entityRefForAlbum(a) } })
+                }
                 onPlay={() => void playAlbum(a)}
               />
             ))}

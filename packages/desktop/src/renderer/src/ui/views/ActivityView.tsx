@@ -1,7 +1,8 @@
-import { BellRing, X } from "lucide-react";
+import { externalArtistRef } from "@musex/core";
+import { Heart, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { AcquisitionStatusDto, ExpansionStateDto } from "../../../../shared/ipc-contract";
-import { useMonitoring } from "../../state/monitoring";
+import { useFollow } from "../../state/follow";
 import { EntityLink } from "../discovery/EntityLink";
 import { StateBadge } from "../discovery/StateBadge";
 import type { AcquisitionBadgeState } from "../discovery/state-badge";
@@ -68,9 +69,7 @@ function ExpansionsFeed({
                   {e.albumTitle}
                   <span className="dl-row-artist">
                     {" — "}
-                    <EntityLink entity={{ kind: "artist", name: e.artistName, hasProvider: true }}>
-                      {e.artistName}
-                    </EntityLink>
+                    <EntityLink entity={externalArtistRef(e.artistName)}>{e.artistName}</EntityLink>
                   </span>
                   {e.deepening && <span className="expansion-deepening"> · deepening</span>}
                 </div>
@@ -99,17 +98,18 @@ function ExpansionsFeed({
   );
 }
 
-/** Status of requested/downloading albums across acquisition providers
- *  (e.g. an acquisition plugin queue + monitored-but-missing), the
- *  taste-expansion feed, and the artists watched for new releases.
- *  Auto-refreshes while open. */
-export function AcquiringView() {
-  const monitoring = useMonitoring();
+/** The acquisition activity feed: the in-flight / requested download queue
+ *  across acquisition providers, the taste-expansion bets, and the artists you
+ *  follow for new releases. Reachable from the persistent sidebar "Activity"
+ *  entry and the top-bar activity pill's "View all". Auto-refreshes while open. */
+export function ActivityView() {
+  const { isFollowed, setFollowed } = useFollow();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   const [expansion, setExpansion] = useState<ExpansionStateDto | null>(null);
-  // Names (original casing) for the watched list; visibility is gated live by
-  // the monitoring store so the X button updates optimistically.
-  const [watchedNames, setWatchedNames] = useState<string[]>([]);
+  // Names (original casing) for the followed-for-new-releases list; visibility
+  // is gated live by the follow store so the X button (unfollow) updates
+  // optimistically.
+  const [followedNames, setFollowedNames] = useState<string[]>([]);
 
   const refresh = useCallback(() => {
     window.musex
@@ -134,8 +134,8 @@ export function AcquiringView() {
       .catch((err: unknown) => console.error("[expansion] state failed:", err));
     window.musex
       .newReleaseWatchList()
-      .then(setWatchedNames)
-      .catch((err: unknown) => console.error("[watch] list failed:", err));
+      .then(setFollowedNames)
+      .catch((err: unknown) => console.error("[follow] list failed:", err));
   }, []);
 
   useEffect(() => {
@@ -151,15 +151,15 @@ export function AcquiringView() {
       .catch((err: unknown) => console.error("[expansion] reject failed:", err));
   }
 
-  function unwatch(artistName: string) {
-    void monitoring
-      .setWatched(artistName, false)
-      .catch((err: unknown) => console.error("[watch] unwatch failed:", err));
+  function unfollow(artistName: string) {
+    void setFollowed(externalArtistRef(artistName), false).catch((err: unknown) =>
+      console.error("[follow] unfollow failed:", err),
+    );
   }
 
-  // Live view: hide names the store no longer considers watched (optimistic
-  // unwatch), so the list updates without waiting for the next refresh.
-  const watched = watchedNames.filter((name) => monitoring.isWatched(name));
+  // Live view: hide names the store no longer considers followed (optimistic
+  // unfollow), so the list updates without waiting for the next refresh.
+  const followed = followedNames.filter((name) => isFollowed(externalArtistRef(name)));
 
   return (
     <div className="browse-section downloads-view">
@@ -176,7 +176,7 @@ export function AcquiringView() {
 
       {fetch.status === "ok" && fetch.rows.length === 0 && (
         <div className="content-placeholder">
-          Nothing requested. Add albums from an external artist's page.
+          Nothing requested. Follow an artist to acquire their music.
         </div>
       )}
 
@@ -189,9 +189,7 @@ export function AcquiringView() {
                   {row.title}
                   <span className="dl-row-artist">
                     {" — "}
-                    <EntityLink
-                      entity={{ kind: "artist", name: row.artistName, hasProvider: true }}
-                    >
+                    <EntityLink entity={externalArtistRef(row.artistName)}>
                       {row.artistName}
                     </EntityLink>
                   </span>
@@ -221,25 +219,25 @@ export function AcquiringView() {
         </div>
       )}
 
-      {watched.length > 0 && (
+      {followed.length > 0 && (
         <>
-          <h3 className="browse-title watched-title">Watching for new releases</h3>
+          <h3 className="browse-title watched-title">Following</h3>
           <div className="browse-sub">
             Future albums by these artists are fetched automatically.
           </div>
           <div className="dl-list">
-            {watched.map((name) => (
+            {followed.map((name) => (
               <div className="dl-row" key={name}>
                 <div className="dl-row-main">
                   <div className="dl-row-title">
-                    <BellRing size={13} className="watched-icon" /> {name}
+                    <Heart size={13} className="watched-icon" /> {name}
                   </div>
                 </div>
                 <button
                   type="button"
                   className="expansion-reject"
-                  title={`Stop watching ${name}`}
-                  onClick={() => unwatch(name)}
+                  title={`Unfollow ${name}`}
+                  onClick={() => unfollow(name)}
                 >
                   <X size={13} />
                 </button>

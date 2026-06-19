@@ -1,10 +1,9 @@
 import type { Artist } from "@musex/core";
-import { listValidator } from "@musex/core";
+import { entityRefForArtist, listValidator } from "@musex/core";
 import { ListChecks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
-import { useMonitoring } from "../../state/monitoring";
-import type { AcquisitionBadgeState } from "../discovery/state-badge";
+import { useFollow } from "../../state/follow";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
@@ -18,8 +17,12 @@ type FetchState =
 export function ArtistsView() {
   const { library, connectivity, dispatch } = useApp();
   const { playArtist } = useCollectionPlay();
-  const { isWatched } = useMonitoring();
+  const { isFollowed } = useFollow();
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
+  // An artist is "followed" (acquire + watch for new releases) when followed
+  // via the FollowProvider. Cards mark followed artists; the filter narrows
+  // to them.
+  const followedArtist = (a: Artist) => isFollowed(entityRefForArtist(a));
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   // Artist cards reflect LOCAL download state only: a downloaded artist (≥1
   // track on disk for the artistId) → "downloaded"; else an in-flight (queued/
@@ -30,13 +33,6 @@ export function ArtistsView() {
   const downloaded = useDownloadedSet("artistId");
   const downloading = useDownloadingSet("artistId");
   const offline = connectivity === "offline";
-
-  // Local download state → card badge. Downloaded wins over in-flight.
-  function cardState(artistId: string): AcquisitionBadgeState | undefined {
-    if (downloaded.has(artistId)) return "downloaded";
-    if (downloading.has(artistId)) return "downloading";
-    return undefined;
-  }
 
   useEffect(() => {
     if (!library) return;
@@ -76,14 +72,14 @@ export function ArtistsView() {
   }
 
   // "all" shows everything (offline: un-downloaded cards dimmed, not hidden);
-  // "downloaded" shows only artists with a downloaded track; "watching" shows
-  // only artists watched for new releases, plus a link to the full acquisition
-  // activity feed.
+  // "downloaded" shows only artists with a downloaded track; "watching" (the
+  // internal mode key for "Following") shows only artists you follow, plus a
+  // link to the full acquisition activity feed.
   const visible =
     filter === "downloaded"
       ? artists.filter((a) => downloaded.has(a.id))
       : filter === "watching"
-        ? artists.filter((a) => isWatched(a.name))
+        ? artists.filter(followedArtist)
         : artists;
 
   return (
@@ -103,19 +99,17 @@ export function ArtistsView() {
           <button
             type="button"
             className="acquiring-activity-link"
-            onClick={() => dispatch({ type: "navigate", view: { name: "acquiring" } })}
+            onClick={() => dispatch({ type: "navigate", view: { name: "activity" } })}
           >
             <ListChecks size={14} />
             View acquisition activity
           </button>
           {visible.length === 0 ? (
-            <div className="content-placeholder">
-              No artists are being watched for new releases.
-            </div>
+            <div className="content-placeholder">You're not following any artists yet.</div>
           ) : (
             <>
               <div className="browse-sub">
-                {visible.length} artist{visible.length !== 1 ? "s" : ""} watched
+                Following {visible.length} artist{visible.length !== 1 ? "s" : ""}
               </div>
               <div className="browse-grid">
                 {visible.map((artist) => (
@@ -124,9 +118,15 @@ export function ArtistsView() {
                     thumb={artist.thumb}
                     title={artist.name}
                     round
-                    state={cardState(artist.id)}
-                    monitored={isWatched(artist.name)}
-                    onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                    entity={entityRefForArtist(artist)}
+                    downloaded={downloaded.has(artist.id)}
+                    downloading={downloading.has(artist.id)}
+                    onOpen={() =>
+                      dispatch({
+                        type: "navigate",
+                        view: { name: "artist", ref: entityRefForArtist(artist) },
+                      })
+                    }
                     onPlay={() => void playArtist(artist)}
                   />
                 ))}
@@ -148,10 +148,16 @@ export function ArtistsView() {
                 thumb={artist.thumb}
                 title={artist.name}
                 round
-                state={cardState(artist.id)}
-                monitored={isWatched(artist.name)}
+                entity={entityRefForArtist(artist)}
+                downloaded={downloaded.has(artist.id)}
+                downloading={downloading.has(artist.id)}
                 dim={offline && !downloaded.has(artist.id)}
-                onOpen={() => dispatch({ type: "navigate", view: { name: "artist", artist } })}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "artist", ref: entityRefForArtist(artist) },
+                  })
+                }
                 onPlay={() => void playArtist(artist)}
               />
             ))}

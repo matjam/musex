@@ -1,4 +1,4 @@
-import type { Album, Artist, Library, Playlist } from "@musex/core";
+import type { EntityRef, Library, Playlist } from "@musex/core";
 import {
   EMPTY_HISTORY,
   goBack,
@@ -21,15 +21,14 @@ export type View =
   | { name: "genre"; genre: string }
   | { name: "mix"; mixId: string }
   | { name: "tracks" }
-  | { name: "album"; album: Album }
-  | { name: "artist"; artist: Artist }
+  | { name: "album"; ref: EntityRef }
+  | { name: "artist"; ref: EntityRef }
   | { name: "search" }
   | { name: "playlist"; playlist: Playlist }
   | { name: "smart"; kind: SmartKind }
-  | { name: "external-artist"; artistName: string }
   | { name: "similar"; target: SimilarGetArgs }
   | { name: "on-device" }
-  | { name: "acquiring" };
+  | { name: "activity" };
 
 interface AppState {
   auth: AuthState;

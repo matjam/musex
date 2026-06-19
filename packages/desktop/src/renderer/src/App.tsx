@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { AppProvider, useApp } from "./state/app";
-import { MonitoringProvider } from "./state/monitoring";
+import { FollowProvider } from "./state/follow";
 import { PanelProvider, usePanel } from "./state/panel";
 import { PlayerProvider } from "./state/player";
 import { PlaylistsProvider } from "./state/playlists";
 import { RatingsProvider } from "./state/ratings";
 import { SelectionProvider } from "./state/selection";
+import { SmartMixProvider } from "./state/smart-mixes";
 import { AboutModal } from "./ui/AboutModal";
 import { KeyboardShortcuts } from "./ui/KeyboardShortcuts";
 import { LogsModal } from "./ui/LogsModal";
@@ -69,27 +70,29 @@ function Inner() {
   }
   if (auth === "signed-in") {
     return (
-      <MonitoringProvider>
+      <FollowProvider>
         <PlaylistsProvider>
           <SelectionProvider>
             <RatingsProvider>
-              <KeyboardShortcuts
-                toggleQueue={() => togglePanel("queue")}
-                toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
-                openSettings={() => setSettingsOpen(true)}
-              />
-              <div className="app-root">
-                <TopBar />
-                <Shell />
-                <NowPlayingBar onToggleQueue={() => togglePanel("queue")} />
-                <Toasts />
-                {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
-                {about}
-              </div>
+              <SmartMixProvider>
+                <KeyboardShortcuts
+                  toggleQueue={() => togglePanel("queue")}
+                  toggleShortcutsHelp={() => setShortcutsOpen((o) => !o)}
+                  openSettings={() => setSettingsOpen(true)}
+                />
+                <div className="app-root">
+                  <TopBar />
+                  <Shell />
+                  <NowPlayingBar onToggleQueue={() => togglePanel("queue")} />
+                  <Toasts />
+                  {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+                  {about}
+                </div>
+              </SmartMixProvider>
             </RatingsProvider>
           </SelectionProvider>
         </PlaylistsProvider>
-      </MonitoringProvider>
+      </FollowProvider>
     );
   }
   return (

@@ -7,7 +7,8 @@ export type LibraryFilterMode = "all" | "downloaded" | "watching";
 const LABELS: Record<LibraryFilterMode, string> = {
   all: "All",
   downloaded: "Downloaded",
-  watching: "Watching",
+  // `watching` is the internal mode key; the user-facing vocabulary is "Following".
+  watching: "Following",
 };
 
 const ALL_MODES: LibraryFilterMode[] = ["all", "downloaded", "watching"];

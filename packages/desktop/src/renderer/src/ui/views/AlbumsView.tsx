@@ -1,8 +1,7 @@
 import type { Album, LibrarySort } from "@musex/core";
-import { listValidator } from "@musex/core";
+import { entityRefForAlbum, listValidator } from "@musex/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/app";
-import type { AcquisitionBadgeState } from "../discovery/state-badge";
 import { GridCard } from "../GridCard";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { useDownloadedSet, useDownloadingSet } from "../hooks/useDownloadedSet";
@@ -30,13 +29,6 @@ export function AlbumsView() {
   const downloaded = useDownloadedSet("albumId");
   const downloading = useDownloadingSet("albumId");
   const offline = connectivity === "offline";
-
-  // Local download state → card badge. Downloaded wins over in-flight.
-  function cardState(albumId: string): AcquisitionBadgeState | undefined {
-    if (downloaded.has(albumId)) return "downloaded";
-    if (downloading.has(albumId)) return "downloading";
-    return undefined;
-  }
 
   useEffect(() => {
     if (!library) return;
@@ -103,9 +95,16 @@ export function AlbumsView() {
                 thumb={album.thumb}
                 title={album.title}
                 subtitle={album.year != null ? String(album.year) : undefined}
-                state={cardState(album.id)}
+                entity={entityRefForAlbum(album)}
+                downloaded={downloaded.has(album.id)}
+                downloading={downloading.has(album.id)}
                 dim={offline && !downloaded.has(album.id)}
-                onOpen={() => dispatch({ type: "navigate", view: { name: "album", album } })}
+                onOpen={() =>
+                  dispatch({
+                    type: "navigate",
+                    view: { name: "album", ref: entityRefForAlbum(album) },
+                  })
+                }
                 onPlay={() => void playAlbum(album)}
               />
             ))}

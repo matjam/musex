@@ -299,6 +299,85 @@ html:not([data-platform="darwin"]) .topbar {
   -webkit-app-region: no-drag;
 }
 
+/* Conditional acquisition activity pill — sits just right of the search box,
+   left of the offline pill. Only mounted while items are in flight. */
+.topbar-activity {
+  position: absolute;
+  left: calc(50% + min(19%, 180px) + 18px);
+  -webkit-app-region: no-drag;
+}
+.topbar-activity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(84, 210, 160, 0.15);
+  border: 1px solid var(--green);
+  color: var(--green);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.topbar-activity-popover {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 40;
+  min-width: 260px;
+  max-width: 320px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.topbar-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.topbar-activity-row {
+  display: flex;
+  flex-direction: column;
+}
+.topbar-activity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.topbar-activity-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.topbar-activity-artist {
+  font-size: 11px;
+  color: var(--muted);
+}
+.topbar-activity-viewall {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 0;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.topbar-activity-viewall:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+/* When the activity pill is present, the offline pill shifts right to clear it. */
+.topbar-activity ~ .topbar-offline-pill {
+  left: calc(50% + min(19%, 180px) + 120px);
+}
+
 /* ---- App layout ---- */
 
 .app-root {
@@ -2083,6 +2162,35 @@ img.queue-row-art {
   color: var(--green);
 }
 
+/* ⋯ entity menu: a positioned wrapper at the top-left corner; the inner
+ * action button is static within it, and the dropdown anchors below it. */
+.grid-card-menu {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+.grid-card-menu .grid-card-action {
+  position: static;
+}
+.grid-card-dropdown {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  z-index: 30;
+}
+/* Follow pill as the hover action for unowned entity cards (bottom-right). */
+.grid-card-follow {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.grid-card:hover .grid-card-follow,
+.grid-card-follow:focus-within {
+  opacity: 1;
+}
+
 /* Small chip over the artwork corner (Discover "external" items) */
 .grid-card-badge {
   position: absolute;
@@ -3172,3 +3280,62 @@ img.queue-row-art {
 }
 /* small bell corner-marker on monitored artist cards */
 .card-monitored { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.6); border: 1px solid var(--green); color: var(--green); display: grid; place-items: center; }
+
+/* ---- SP0 unified entity-state badge (rendered from core ENTITY_STATE) ---- */
+/* Color comes from the state's `colorToken` (a real `colors` key); chrome
+ * mirrors .state-badge. Non-default states only — owned/in-library shows none. */
+.entity-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  background: rgba(0,0,0,.5); border: 1px solid var(--line); color: var(--text);
+}
+.entity-badge--green { border-color: var(--green); color: var(--green); }
+.entity-badge--yellow { border-color: var(--yellow); color: var(--yellow); }
+.entity-badge--purple { border-color: var(--purple); color: #b9a8ff; }
+.entity-badge--red { border-color: var(--red); color: #ff8a84; }
+.entity-badge--muted { border-color: var(--line); color: var(--muted); }
+.entity-badge--text { border-color: var(--text); color: var(--text); }
+
+/* ---- Artist About (last.fm bio under the header, above the discography) ---- */
+
+.artist-about {
+  margin-bottom: 22px;
+}
+
+.artist-about .browse-title {
+  margin-bottom: 8px;
+}
+
+/* Clamped to a few lines so a long bio doesn't push the album grid down;
+   `--expanded` lifts the clamp. The toggle below is gated on real overflow. */
+.artist-bio {
+  margin: 0;
+  max-width: 760px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.artist-bio--expanded {
+  display: block;
+  overflow: visible;
+}
+
+.artist-bio-toggle {
+  margin-top: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.artist-bio-toggle:hover {
+  text-decoration: underline;
+}

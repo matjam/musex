@@ -1,6 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRef, useState } from "react";
-import { useApp } from "../state/app";
 import { usePanel } from "../state/panel";
 import { usePlayer } from "../state/player";
 import { useSelection } from "../state/selection";
@@ -26,12 +25,11 @@ function savedWidth(): number {
  *  show (it's clipped to zero width, so it renders nothing visible).
  *
  *  The entity panel is a context surface: while open its content follows the
- *  user's focus via `derivePanelFocus` (override → selection → artist/album
- *  view → now-playing → nothing). It never opens itself. */
+ *  user's focus via `derivePanelFocus` (selection → now-playing → nothing). It
+ *  never opens itself and is never an entity-navigation destination. */
 export function SidePanelHost() {
-  const { panel, focusOverride } = usePanel();
+  const { panel } = usePanel();
   const { selectedTrack } = useSelection();
-  const { view } = useApp();
   const { state } = usePlayer();
   const nowPlaying = state.queue ? (state.queue.tracks[state.queue.index] ?? null) : null;
 
@@ -44,21 +42,15 @@ export function SidePanelHost() {
   const content = panel ?? lastPanelRef.current;
 
   // Derived context-panel content while the entity panel is open.
-  const payload = derivePanelFocus({ override: focusOverride, selectedTrack, view, nowPlaying });
+  const payload = derivePanelFocus({ selectedTrack, nowPlaying });
   // Mirror so the CLOSE animation still has content to show. While the panel is
   // open we show the live payload (or the placeholder when it's null); only
-  // when closed do we fall back to the last shown entity for the exit slide.
+  // when closed do we fall back to the last shown track for the exit slide.
   const lastPayloadRef = useRef<typeof payload>(null);
   if (payload !== null) lastPayloadRef.current = payload;
   const entity = panel === "entity" ? payload : (payload ?? lastPayloadRef.current);
-  // Stable per-entity key so switching entities while open re-runs the slide-in.
-  const entityKey = payload
-    ? payload.kind === "song"
-      ? `song:${payload.track.id}`
-      : payload.kind === "album"
-        ? `album:${payload.album.id}`
-        : `artist:${payload.artistName}`
-    : "empty";
+  // Stable per-track key so switching tracks while open re-runs the slide-in.
+  const entityKey = payload ? `song:${payload.track.id}` : "empty";
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     dragRef.current = { startX: e.clientX, startWidth: width };

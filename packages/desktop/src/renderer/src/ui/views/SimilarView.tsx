@@ -1,9 +1,8 @@
+import { entityRefForArtist, externalArtistRef } from "@musex/core";
 import { useEffect, useState } from "react";
 import type { SectionItemDto, SimilarGetArgs } from "../../../../shared/ipc-contract";
-import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { GridCard } from "../GridCard";
-import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
 import { useEntityNav } from "../hooks/useEntityNav";
 
 type FetchState =
@@ -12,14 +11,13 @@ type FetchState =
   | { status: "ok"; items: SectionItemDto[] };
 
 /** Main-content view: similar artists (artist pages) / similar songs (track
- *  detail), tiled, powered by plugin similar-providers. Owned items navigate
- *  or play; unowned show an external badge and link out (or open the in-app
- *  external-artist discography when an acquisition provider is registered). */
+ *  detail), tiled, powered by plugin similar-providers. Every item — owned or
+ *  unowned — navigates to its unified page via `resolveEntity` (the card shows
+ *  the SP0 badge + Follow affordance for unowned); track-kind items play. No
+ *  external-URL/external-view divergence, no side panel. */
 export function SimilarView({ target }: { target: SimilarGetArgs }) {
-  const { dispatch } = useApp();
   const { playTrackNext } = usePlayer();
-  const { goArtist, goAlbum } = useEntityNav();
-  const acquisitionAvailable = useAcquisitionAvailable();
+  const { goRef, goAlbum } = useEntityNav();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
 
   // Refetched per target. The cancelled flag guards against a stale (slower)
@@ -47,21 +45,18 @@ export function SimilarView({ target }: { target: SimilarGetArgs }) {
   }, [target]);
 
   function openItem(item: SectionItemDto) {
-    if (target.kind === "artist" && item.artistId && item.serverId) {
-      goArtist({ artistId: item.artistId, serverId: item.serverId, artistName: item.name });
-      return;
-    }
     if (target.kind === "track" && item.track) {
+      // A similar SONG navigates to its album page (tracks have no page).
       goAlbum(item.track);
       return;
     }
-    if (target.kind === "artist" && acquisitionAvailable) {
-      // External artist + acquisition provider registered → in-app discography.
-      dispatch({ type: "navigate", view: { name: "external-artist", artistName: item.name } });
-      return;
+    // A similar ARTIST always navigates to the unified artist page — owned
+    // (Plex ref) or unowned (external ref). The path no longer matters.
+    if (item.artistId && item.serverId) {
+      goRef(entityRefForArtist({ id: item.artistId, serverId: item.serverId, name: item.name }));
+    } else {
+      goRef(externalArtistRef(item.name));
     }
-    if (item.externalUrl) void window.musex.openExternal(item.externalUrl);
-    // External item without a URL or acquisition provider: no-op.
   }
 
   const heading =
@@ -92,6 +87,19 @@ export function SimilarView({ target }: { target: SimilarGetArgs }) {
         <div className="browse-grid">
           {fetch.items.map((item) => {
             const track = item.track;
+            // Artist-kind similar items resolve to an artist ref (owned when the
+            // library matched it, else external) so the card shows the SP0
+            // badge + Follow affordance; track-kind items just play.
+            const entity =
+              target.kind === "artist"
+                ? item.artistId && item.serverId
+                  ? entityRefForArtist({
+                      id: item.artistId,
+                      serverId: item.serverId,
+                      name: item.name,
+                    })
+                  : externalArtistRef(item.name)
+                : undefined;
             return (
               <GridCard
                 key={`${item.name}:${item.artistName ?? ""}`}
@@ -99,7 +107,7 @@ export function SimilarView({ target }: { target: SimilarGetArgs }) {
                 title={item.name}
                 subtitle={target.kind === "track" ? item.artistName : undefined}
                 round={target.kind === "artist"}
-                badge={item.external ? "external" : undefined}
+                entity={entity}
                 onOpen={() => openItem(item)}
                 onPlay={track ? () => playTrackNext(track) : undefined}
               />
