@@ -78,6 +78,10 @@ export class MpvController {
   private sink: ((e: EngineEvent) => void) | null = null;
   /** Desired audio filters/replaygain — cached so every (re)spawn applies it. */
   private audioConfig: AudioConfig = { af: "", replaygain: "no" };
+  /** Desired volume (0..1) — cached so every (re)spawn comes up at it. Default
+   *  1 (full) matches mpv's default; a restore-time setVolume before the lazy
+   *  spawn lands here and is applied on doStart. */
+  private cachedVolume = 1;
 
   constructor(private readonly paths: MpvPaths) {}
 
@@ -138,6 +142,9 @@ export class MpvController {
     await this.send((id) => cmdObserve(id, 1, "time-pos"));
     await this.send((id) => cmdObserve(id, 2, "pause"));
     await this.sendAudioConfig();
+    // Apply the cached volume so a lazy spawn / post-crash respawn comes up at
+    // the restored level (a restore-time setVolume before the spawn cached it).
+    await this.send((id) => cmdSetVolume(id, this.cachedVolume));
   }
 
   /** mpv creates the IPC socket shortly after spawn — poll until it accepts. */
@@ -249,9 +256,10 @@ export class MpvController {
     await this.send((id) => cmdAppend(id, url));
   }
 
-  // play/pause/seek/setVolume are no-ops when mpv isn't running: nothing is
-  // playing, so there's nothing to control (and spawning for them would be
-  // wrong — load() owns the lifecycle).
+  // play/pause/seek are no-ops when mpv isn't running: nothing is playing, so
+  // there's nothing to control (and spawning for them would be wrong — load()
+  // owns the lifecycle). setVolume differs: it ALWAYS caches (see below) so a
+  // restore-time call before the lazy spawn survives.
 
   async play(): Promise<void> {
     if (!this.running) return;
@@ -268,7 +276,12 @@ export class MpvController {
     await this.send((id) => cmdSeekAbs(id, sec));
   }
 
+  /** Set the playback volume (0..1). ALWAYS caches the value so a (re)spawn
+   *  applies it (see doStart); sends to mpv immediately only when running. A
+   *  restore-time call before the lazy spawn therefore caches instead of being
+   *  lost — no throw when mpv isn't running. */
   async setVolume(v01: number): Promise<void> {
+    this.cachedVolume = v01;
     if (!this.running) return;
     await this.send((id) => cmdSetVolume(id, v01));
   }
