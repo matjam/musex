@@ -37,12 +37,18 @@ magick "$MASTER" -alpha set -channel RGBA -fuzz 20% -fill none \
   -draw "alpha 0,$Y floodfill" -draw "alpha $X,$Y floodfill" \
   "$TMP/transparent.png"
 
-# --- Desktop (macOS): squircle with transparent corners ---
-magick "$TMP/transparent.png" -resize 1024x1024 "$ROOT/packages/desktop/build/icon.png"
+# --- Desktop (macOS): squircle with transparent corners, INSET per the macOS
+# icon grid (~824px body in a 1024 canvas, transparent padding around it). A
+# full-bleed squircle renders OVERSIZED in the Dock vs other apps, which follow
+# the grid; the inset makes musex match its neighbours. (iOS stays full-bleed.)
+DESKTOP_BODY=824
+magick "$TMP/transparent.png" -resize "${DESKTOP_BODY}x${DESKTOP_BODY}" \
+  -background none -gravity center -extent 1024x1024 "$TMP/desktop.png"
+magick "$TMP/desktop.png" -resize 1024x1024 "$ROOT/packages/desktop/build/icon.png"
 ICONSET="$TMP/musex.iconset"; mkdir -p "$ICONSET"
 for s in 16 32 128 256 512; do
-  magick "$TMP/transparent.png" -resize "${s}x${s}"        "$ICONSET/icon_${s}x${s}.png"
-  magick "$TMP/transparent.png" -resize "$((s * 2))x$((s * 2))" "$ICONSET/icon_${s}x${s}@2x.png"
+  magick "$TMP/desktop.png" -resize "${s}x${s}"        "$ICONSET/icon_${s}x${s}.png"
+  magick "$TMP/desktop.png" -resize "$((s * 2))x$((s * 2))" "$ICONSET/icon_${s}x${s}@2x.png"
 done
 iconutil -c icns "$ICONSET" -o "$ROOT/packages/desktop/build/icon.icns"
 
