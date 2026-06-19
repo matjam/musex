@@ -1,67 +1,21 @@
-import { entityRefForArtist } from "@musex/core";
-import { Download } from "lucide-react";
-import { useEffect, useState } from "react";
+import { entityRefForArtist, externalArtistRef } from "@musex/core";
 import type { SectionDto, SectionItemDto } from "../../../shared/ipc-contract";
-import { useApp } from "../state/app";
-import { usePanel } from "../state/panel";
 import { GridCard } from "./GridCard";
-import { useAcquisitionAvailable } from "./hooks/useAcquisitionAvailable";
+import { useEntityNav } from "./hooks/useEntityNav";
 
-/** Rows of plugin-contributed sections (Discover view + Home). Library-matched
- *  items navigate to their artist page; external items open the artist-info
- *  side panel (with inline monitor) when an acquisition provider is
- *  registered, else link out via externalUrl (when present). */
+/** Rows of plugin-contributed sections (Discover view + Home). Every item — owned
+ *  or unowned — renders the unified card and navigates to the unified artist page
+ *  via `resolveEntity`. Owned items get a Plex ref; unowned an external ref (the
+ *  card shows the SP0 entity-state badge + Follow affordance). No side panel. */
 export function PluginSections({ sections }: { sections: SectionDto[] }) {
-  const { dispatch, connectivity } = useApp();
-  const offline = connectivity === "offline";
-  const { openArtistInfo } = usePanel();
-  const acquisitionAvailable = useAcquisitionAvailable();
-  const [monitored, setMonitored] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!acquisitionAvailable || offline) return;
-    let cancelled = false;
-    window.musex
-      .acquisitionMonitoredArtists()
-      .then((names) => {
-        if (!cancelled) setMonitored(new Set(names.map((n) => n.toLowerCase())));
-      })
-      .catch(() => {
-        // badges only — sections render fine without them
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [acquisitionAvailable, offline]);
+  const { goRef } = useEntityNav();
 
   function open(item: SectionItemDto) {
     if (item.artistId && item.serverId) {
-      dispatch({
-        type: "navigate",
-        view: {
-          name: "artist",
-          ref: entityRefForArtist({ id: item.artistId, serverId: item.serverId, name: item.name }),
-        },
-      });
-    } else if (acquisitionAvailable) {
-      openArtistInfo(item.name);
-    } else if (item.externalUrl) {
-      void window.musex.openExternal(item.externalUrl);
+      goRef(entityRefForArtist({ id: item.artistId, serverId: item.serverId, name: item.name }));
+    } else {
+      goRef(externalArtistRef(item.name));
     }
-    // External item without a URL or acquisition provider: no-op.
-  }
-
-  function monitor(item: SectionItemDto) {
-    // Optimistic badge flip; the plugin toasts success/failure.
-    setMonitored((prev) => new Set(prev).add(item.name.toLowerCase()));
-    window.musex.acquisitionAcquireArtistByName(item.name).catch((err: unknown) => {
-      console.error("[acquisition] acquireArtistByName failed:", err);
-      setMonitored((prev) => {
-        const next = new Set(prev);
-        next.delete(item.name.toLowerCase());
-        return next;
-      });
-    });
   }
 
   return (
@@ -73,11 +27,14 @@ export function PluginSections({ sections }: { sections: SectionDto[] }) {
             <h3 className="browse-title">{s.title}</h3>
             <div className="browse-grid">
               {s.items.map((item) => {
-                const external = Boolean(item.external);
-                const isMonitored = external && monitored.has(item.name.toLowerCase());
-                // Monitoring is an online-only acquire; hidden offline (owned
-                // items in the row stay navigable).
-                const canMonitor = external && acquisitionAvailable && !isMonitored && !offline;
+                const entity =
+                  item.artistId && item.serverId
+                    ? entityRefForArtist({
+                        id: item.artistId,
+                        serverId: item.serverId,
+                        name: item.name,
+                      })
+                    : externalArtistRef(item.name);
                 return (
                   <GridCard
                     key={item.name}
@@ -85,12 +42,8 @@ export function PluginSections({ sections }: { sections: SectionDto[] }) {
                     title={item.name}
                     subtitle={item.artistName}
                     round
-                    badge={isMonitored ? "monitored" : external ? "external" : undefined}
-                    badgeVariant={isMonitored ? "monitored" : undefined}
+                    entity={entity}
                     onOpen={() => open(item)}
-                    actionIcon={canMonitor ? Download : undefined}
-                    actionTitle="Monitor artist — download their music"
-                    onAction={canMonitor ? () => monitor(item) : undefined}
                   />
                 );
               })}

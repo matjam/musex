@@ -11,7 +11,6 @@ import { useApp } from "../../state/app";
 import { usePlayer } from "../../state/player";
 import { useSelection } from "../../state/selection";
 import { OFFLINE_VIEW_MESSAGE } from "../../util/offline";
-import { AlbumArt } from "../AlbumArt";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
@@ -140,27 +139,19 @@ export function SearchView() {
         <div className="browse-section">
           <h3 className="browse-title">Artists</h3>
           <div className="browse-grid">
-            {results.artists.map((artist) => (
-              <button
-                type="button"
-                key={artist.id}
-                className="grid-card"
-                onClick={() =>
-                  dispatch({
-                    type: "navigate",
-                    view: { name: "artist", ref: entityRefForArtist(artist) },
-                  })
-                }
-              >
-                <AlbumArt
+            {results.artists.map((artist) => {
+              const ref = entityRefForArtist(artist);
+              return (
+                <GridCard
+                  key={artist.id}
+                  round
                   thumb={artist.thumb}
-                  className="grid-card-art artist-art"
-                  label={artist.name}
-                  kind="artist"
+                  title={artist.name}
+                  entity={ref}
+                  onOpen={() => dispatch({ type: "navigate", view: { name: "artist", ref } })}
                 />
-                <div className="grid-card-title">{artist.name}</div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -169,28 +160,19 @@ export function SearchView() {
         <div className="browse-section">
           <h3 className="browse-title">Albums</h3>
           <div className="browse-grid">
-            {results.albums.map((album) => (
-              <button
-                type="button"
-                key={album.id}
-                className="grid-card"
-                onClick={() =>
-                  dispatch({
-                    type: "navigate",
-                    view: { name: "album", ref: entityRefForAlbum(album) },
-                  })
-                }
-              >
-                <AlbumArt
+            {results.albums.map((album) => {
+              const ref = entityRefForAlbum(album);
+              return (
+                <GridCard
+                  key={album.id}
                   thumb={album.thumb}
-                  className="grid-card-art"
-                  label={album.title}
-                  kind="album"
+                  title={album.title}
+                  subtitle={album.year != null ? String(album.year) : undefined}
+                  entity={ref}
+                  onOpen={() => dispatch({ type: "navigate", view: { name: "album", ref } })}
                 />
-                <div className="grid-card-title">{album.title}</div>
-                {album.year != null && <div className="grid-card-sub">{album.year}</div>}
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -237,7 +219,7 @@ export function SearchView() {
       {externalArtists.length > 0 && (
         <div className="browse-section">
           <h3 className="browse-title">Not in your library</h3>
-          <div className="browse-sub">via your acquisition plugin — monitor to download</div>
+          <div className="browse-sub">via your acquisition plugin — Follow to acquire</div>
           <div className="browse-grid">
             {externalArtists.map((artist) => (
               <GridCard
