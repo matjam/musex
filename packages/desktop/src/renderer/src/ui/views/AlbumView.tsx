@@ -8,16 +8,20 @@ import {
 } from "@musex/core";
 import { Download, ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
 import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { useSelection } from "../../state/selection";
-import { OFFLINE_ACTION_TOOLTIP } from "../../util/offline";
+import { OFFLINE_ACTION_TOOLTIP, OFFLINE_VIEW_MESSAGE } from "../../util/offline";
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
 import { EntityLink } from "../discovery/EntityLink";
+import { useFollowAction } from "../discovery/FollowButton";
+import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
+import { useEntityNav } from "../hooks/useEntityNav";
 import { NewPlaylistDialog } from "../NewPlaylistDialog";
 import { StarRating } from "../StarRating";
 import type { TrackMenuTarget } from "../TrackContextMenu";
@@ -25,26 +29,36 @@ import { TrackContextMenu } from "../TrackContextMenu";
 import { TrackRow } from "../TrackRow";
 import { VirtualTrackList } from "../VirtualTrackList";
 
+interface Props {
+  /** The album to render — owned (Plex, playable) or external (last.fm-only).
+   *  Ownership is read from `ref.source`. */
+  ref: EntityRef;
+}
+
+/** The one album page: owned (playable track list + favorite + download) and
+ *  unowned (Follow the artist + a quiet Get-just-this-album). Reached
+ *  identically from everywhere via `resolveEntity`. */
+export function AlbumView({ ref }: Props) {
+  if (ref.source === "external") return <ExternalAlbumView entityRef={ref} />;
+  return <OwnedAlbumView entityRef={ref} />;
+}
+
+// ---------------------------------------------------------------------------
+// Owned (Plex) — the playable album page.
+// ---------------------------------------------------------------------------
+
 type FetchState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ok"; tracks: Track[] };
 
-interface Props {
-  /** Owned (Plex) entity ref for the album. Batch-2 prop-adapter: the view
-   *  keeps its existing internals by deriving the old `Album` object from the
-   *  ref (owned refs carry id/serverId/title/thumb; artistId/year come from the
-   *  fetched tracks). Batch 3 extends this into the unified AlbumView. */
-  entity: EntityRef;
-}
-
-export function AlbumDetailView({ entity }: Props) {
+function OwnedAlbumView({ entityRef }: { entityRef: EntityRef }) {
   const album: Album = {
-    id: entity.id ?? "",
-    serverId: entity.serverId ?? "",
+    id: entityRef.id ?? "",
+    serverId: entityRef.serverId ?? "",
     artistId: "",
-    title: entity.albumTitle ?? entity.name,
-    thumb: entity.thumb,
+    title: entityRef.albumTitle ?? entityRef.name,
+    thumb: entityRef.thumb,
   };
   const { library, connectivity, dispatch } = useApp();
   const { state, playTracks, playTracksShuffled, playTrackNext, enqueueNext, enqueueEnd } =
@@ -125,6 +139,9 @@ export function AlbumDetailView({ entity }: Props) {
       unsubscribe();
     };
   }, [fetch, album.serverId]);
+
+  // The album favorite (♥) is a follow on the album ref itself.
+  const favorite = useFollowAction(entityRef);
 
   // Determine the currently-playing track id (if any)
   const playingTrackId =
@@ -221,6 +238,12 @@ export function AlbumDetailView({ entity }: Props) {
                 onPlay={() => playTracks(tracks, 0)}
                 onShuffle={() => playTracksShuffled(tracks)}
                 onInfo={() => openEntity({ kind: "album", album })}
+                follow={{
+                  on: favorite.on,
+                  busy: favorite.busy,
+                  title: favorite.on ? "Favorited — click to remove" : "Favorite this album",
+                  onToggle: () => void favorite.onToggle(),
+                }}
                 overflow={
                   <button
                     type="button"
@@ -355,6 +378,141 @@ export function AlbumDetailView({ entity }: Props) {
 }
 
 // ---------------------------------------------------------------------------
+// Unowned (external / last.fm-only) — Follow the artist + Get just this album.
+// ---------------------------------------------------------------------------
+
+function ExternalAlbumView({ entityRef }: { entityRef: EntityRef }) {
+  const { dispatch, connectivity } = useApp();
+  const offline = connectivity === "offline";
+  const acquisitionAvailable = useAcquisitionAvailable();
+  const { goRef } = useEntityNav();
+  const artistName = entityRef.artistName ?? "";
+  const albumTitle = entityRef.albumTitle ?? entityRef.name;
+  // Follow [artist] is the primary action: acquire the discography + watch.
+  const artistRefForFollow = externalArtistRef(artistName);
+  const follow = useFollowAction(artistRefForFollow);
+  // Get just this album: resolve the album's providerRef from the artist's
+  // discography (the only place the opaque ref lives), then acquire that one.
+  const [match, setMatch] = useState<AcquirableAlbumDto | null>(null);
+  const [getting, setGetting] = useState(false);
+
+  useEffect(() => {
+    if (offline || !acquisitionAvailable || !artistName) {
+      setMatch(null);
+      return;
+    }
+    let cancelled = false;
+    const want = albumTitle.trim().toLowerCase();
+    window.musex
+      .acquisitionDiscography(artistName)
+      .then((albums) => {
+        if (cancelled) return;
+        setMatch(albums.find((a) => a.title.trim().toLowerCase() === want) ?? null);
+      })
+      .catch((err: unknown) => {
+        console.error("[acquisition] acquisitionDiscography failed:", err);
+        if (!cancelled) setMatch(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [artistName, albumTitle, offline, acquisitionAvailable]);
+
+  function getThisAlbum() {
+    if (!match || match.state !== "available") return;
+    const args = { providerId: match.providerId, providerRef: match.providerRef };
+    setGetting(true);
+    window.musex.acquisitionAcquire(args).catch((err: unknown) => {
+      console.error("[acquisition] acquire failed:", err);
+      setGetting(false);
+    });
+  }
+
+  const canGet = !offline && acquisitionAvailable && match?.state === "available" && !getting;
+  const getLabel = getting || match?.state === "requested" ? "Requested" : "Get just this album";
+
+  return (
+    <div className="album-detail">
+      <div className="breadcrumb">
+        <button
+          type="button"
+          className="breadcrumb-link"
+          onClick={() => {
+            if (artistName) goRef(artistRefForFollow);
+            else dispatch({ type: "navigate", view: { name: "artists" } });
+          }}
+        >
+          {artistName || "Artists"}
+        </button>
+        {" › "}
+        <span className="breadcrumb-current">{albumTitle}</span>
+      </div>
+
+      <div className="album-header">
+        <AlbumArt
+          thumb={entityRef.thumb}
+          className="album-header-art"
+          label={albumTitle}
+          kind="album"
+        />
+        <div className="album-header-meta">
+          <div className="album-meta-label">Album · Not in your library</div>
+          <h1 className="album-meta-title">{albumTitle}</h1>
+          <div className="album-meta-by">
+            {artistName && <EntityLink entity={artistRefForFollow}>{artistName}</EntityLink>}
+          </div>
+          <div className="album-actions">
+            {/* Primary: Follow the artist (acquire discography + watch). */}
+            <ActionBar
+              follow={{
+                on: follow.on,
+                busy: follow.busy,
+                disabled: offline,
+                title: offline
+                  ? OFFLINE_ACTION_TOOLTIP
+                  : follow.on
+                    ? "Following — click to unfollow"
+                    : "Follow — acquire + watch for new releases",
+                onToggle: () => void follow.onToggle(),
+              }}
+            />
+            {/* Quiet secondary: acquire just this one album. */}
+            <button
+              type="button"
+              className="action-pill"
+              disabled={!canGet}
+              title={
+                offline
+                  ? OFFLINE_ACTION_TOOLTIP
+                  : !acquisitionAvailable
+                    ? "Needs an acquisition plugin"
+                    : match?.state === "available"
+                      ? "Download just this album"
+                      : "This album isn't available to fetch"
+              }
+              onClick={getThisAlbum}
+            >
+              <Download size={15} />
+              {getLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {offline ? (
+        <div className="content-placeholder">{OFFLINE_VIEW_MESSAGE}</div>
+      ) : (
+        <div className="content-placeholder">
+          {acquisitionAvailable
+            ? "This album isn't in your library. Follow the artist to acquire their discography, or get just this album."
+            : "This album isn't in your library. Connect an acquisition plugin to fetch it."}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 interface MoreMenuProps {
   x: number;
@@ -364,14 +522,14 @@ interface MoreMenuProps {
   onAddToQueue: () => void;
 }
 
-/** Tiny fixed-position dropdown for "Play next" / "Add to queue" on an album or artist. */
+/** Tiny fixed-position dropdown for "Play next" / "Add to queue" on an album. */
 function AlbumMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue }: MoreMenuProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   const MARGIN = 8;
 
   useLayoutEffect(() => {
-    const el = ref.current;
+    const el = menuRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const vw = window.innerWidth;
@@ -387,7 +545,7 @@ function AlbumMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue }: MoreMenuProp
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -402,7 +560,7 @@ function AlbumMoreMenu({ x, y, onClose, onPlayNext, onAddToQueue }: MoreMenuProp
 
   return (
     <div
-      ref={ref}
+      ref={menuRef}
       className="more-dropdown"
       role="menu"
       style={{ left: pos.left, top: pos.top }}

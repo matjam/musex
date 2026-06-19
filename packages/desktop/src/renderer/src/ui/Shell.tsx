@@ -17,8 +17,8 @@ import { usePlaylists } from "../state/playlists";
 import { SidePanelHost } from "./SidePanel";
 import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
 import { AcquiringView } from "./views/AcquiringView";
-import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
+import { AlbumView } from "./views/AlbumView";
 import { ArtistsView } from "./views/ArtistsView";
 import { ArtistView } from "./views/ArtistView";
 import { DiscoverView } from "./views/DiscoverView";
@@ -104,7 +104,8 @@ export function Shell() {
         // One unified page for owned + external artists — no source split.
         return <ArtistView ref={view.ref} />;
       case "album":
-        return <AlbumDetailView entity={view.ref} />;
+        // One unified page for owned + external albums — no source split.
+        return <AlbumView ref={view.ref} />;
       case "albums":
         return <AlbumsView />;
       case "search":

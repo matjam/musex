@@ -14,13 +14,13 @@ interface Props {
  * VirtualTrackList — renders only the visible track rows via @tanstack/react-virtual.
  *
  * The component owns the scroll container (the outer div). All three call sites
- * (PlaylistView, AlbumDetailView, SearchView) replace their `.track-list`
+ * (PlaylistView, AlbumView, SearchView) replace their `.track-list`
  * div + inner `.map()` with this component. They pass a render-prop so each
  * view keeps full control of TrackRow props (onPlay, onMenu, isPlaying, leading,
  * showSubtitle, playlistContext, etc.).
  *
  * The scroll container must have a definite height for the virtualizer to work.
- * PlaylistView and AlbumDetailView gain that from the `.album-detail` flex
+ * PlaylistView and AlbumView gain that from the `.album-detail` flex
  * layout (`.track-list { flex:1; overflow:auto }`). SearchView gives the
  * VirtualTrackList a max-height so it scrolls independently within the page.
  */
