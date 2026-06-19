@@ -2,6 +2,7 @@ import { ArrowDownToLine } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AcquisitionStatusDto } from "../../../shared/ipc-contract";
 import { useApp } from "../state/app";
+import { useAcquisitionAvailable } from "./hooks/useAcquisitionAvailable";
 
 const POLL_MS = 5_000;
 
@@ -18,14 +19,16 @@ function isInFlight(row: AcquisitionStatusDto): boolean {
  *  navigates to the Activity view. */
 export function ActivityPill() {
   const { connectivity, dispatch } = useApp();
+  const acquisitionAvailable = useAcquisitionAvailable();
   const [rows, setRows] = useState<AcquisitionStatusDto[]>([]);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Poll the acquisition feed. Skipped offline (the provider is unreachable);
+  // Poll the acquisition feed. Skipped when no acquisition provider exists (the
+  // feed is always empty) and offline (the provider is unreachable); either way
   // the feed clears so the pill hides.
   useEffect(() => {
-    if (connectivity === "offline") {
+    if (!acquisitionAvailable || connectivity === "offline") {
       setRows([]);
       return;
     }
@@ -47,7 +50,7 @@ export function ActivityPill() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [connectivity]);
+  }, [connectivity, acquisitionAvailable]);
 
   // Close the popover on an outside click.
   useEffect(() => {

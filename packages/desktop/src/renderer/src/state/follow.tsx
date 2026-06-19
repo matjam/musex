@@ -1,4 +1,4 @@
-import type { EntityKind, EntityRef } from "@musex/core";
+import type { EntityRef } from "@musex/core";
 import { followKey } from "@musex/core";
 import {
   createContext,
@@ -51,8 +51,6 @@ interface FollowApi {
   isFollowed(ref: EntityRef): boolean;
   /** Optimistically toggle follow, then persist via follow:set (revert on error). */
   setFollowed(ref: EntityRef, value: boolean): Promise<void>;
-  /** Currently-followed refs of a kind (refreshed live from the cache seed). */
-  following(kind: EntityKind): EntityRef[];
   /** Re-seed from the IPC (e.g. after an out-of-band acquire). */
   refresh(): void;
 }
@@ -67,12 +65,6 @@ export function FollowProvider({ children }: { children: ReactNode }) {
     keys: new Set<string>(),
     names: new Set<string>(),
   });
-  // The list of followed refs (for `following`), kept alongside the sets so the
-  // provider can return refs, not just membership. Re-seeded on refresh.
-  const followedRefs = useMemo(
-    () => ({ artist: [], album: [], track: [] }) as Record<EntityKind, EntityRef[]>,
-    [],
-  );
 
   const refresh = useCallback(() => {
     void Promise.all([
@@ -81,9 +73,6 @@ export function FollowProvider({ children }: { children: ReactNode }) {
       window.musex.followList("track"),
     ])
       .then(([artists, albums, tracks]) => {
-        followedRefs.artist = artists;
-        followedRefs.album = albums;
-        followedRefs.track = tracks;
         const all = [...artists, ...albums, ...tracks];
         dispatch({
           type: "seed",
@@ -92,7 +81,7 @@ export function FollowProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch((err: unknown) => console.error("[follow] seed failed:", err));
-  }, [followedRefs]);
+  }, []);
 
   useEffect(refresh, [refresh]);
 
@@ -109,10 +98,9 @@ export function FollowProvider({ children }: { children: ReactNode }) {
           throw err;
         }
       },
-      following: (kind) => followedRefs[kind],
       refresh,
     }),
-    [state, refresh, followedRefs],
+    [state, refresh],
   );
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;

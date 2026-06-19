@@ -28,7 +28,10 @@ describe("viewForEntity", () => {
     expect(viewForEntity(ref)).toEqual({ name: "album", ref });
   });
 
-  it("track → album view (tracks have no page)", () => {
+  it("owned track → artist view (no album id, never the external placeholder)", () => {
+    // An owned track carries no album id, so it can't reach its OWNED album
+    // page here; falling back to the artist page is safe (the old behaviour
+    // sent it to an external album placeholder — the wrong, unowned page).
     const ref = entityRefForTrack({
       id: "t1",
       serverId: "s1",
@@ -41,6 +44,6 @@ describe("viewForEntity", () => {
       media: { container: "flac", audioCodec: "flac", partId: "p", partKey: "/k" },
     });
     const v = viewForEntity(ref);
-    expect(v.name).toBe("album");
+    expect(v).toEqual({ name: "artist", ref: externalArtistRef("Bonobo") });
   });
 });

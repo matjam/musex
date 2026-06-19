@@ -1,5 +1,5 @@
 import type { Album, Artist, EntityRef, Track } from "@musex/core";
-import { entityRefForArtist, listValidator } from "@musex/core";
+import { listValidator } from "@musex/core";
 import { Download, ListEnd, ListPlus, MoreHorizontal, Radio } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AcquirableAlbumDto, ArtistInfoDto } from "../../../../shared/ipc-contract";
@@ -9,7 +9,11 @@ import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { OFFLINE_ACTION_TOOLTIP, OFFLINE_VIEW_MESSAGE } from "../../util/offline";
 import { ActionBar } from "../discovery/ActionBar";
-import { useFollowAction } from "../discovery/FollowButton";
+import {
+  followNeedsAcquisition,
+  NO_ACQUISITION_FOLLOW_TOOLTIP,
+  useFollowAction,
+} from "../discovery/FollowButton";
 import { MonitorStatusLine } from "../discovery/MonitorStatusLine";
 import { GridCard } from "../GridCard";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
@@ -270,8 +274,15 @@ export function ArtistView({ ref }: Props) {
           follow={{
             on: follow.on,
             busy: follow.busy,
-            disabled: offline,
-            title: offline ? OFFLINE_ACTION_TOOLTIP : undefined,
+            // Following an unowned artist acquires them — needs an acquisition
+            // provider. Disable rather than let the toggle silently revert.
+            disabled:
+              offline || (followNeedsAcquisition(ref) && !follow.on && !acquisitionAvailable),
+            title: offline
+              ? OFFLINE_ACTION_TOOLTIP
+              : followNeedsAcquisition(ref) && !follow.on && !acquisitionAvailable
+                ? NO_ACQUISITION_FOLLOW_TOOLTIP
+                : undefined,
             onToggle: () => void follow.onToggle(),
           }}
           overflow={

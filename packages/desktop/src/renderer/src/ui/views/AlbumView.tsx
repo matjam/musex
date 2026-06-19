@@ -17,7 +17,7 @@ import { OFFLINE_ACTION_TOOLTIP, OFFLINE_VIEW_MESSAGE } from "../../util/offline
 import { AlbumArt } from "../AlbumArt";
 import { ActionBar } from "../discovery/ActionBar";
 import { EntityLink } from "../discovery/EntityLink";
-import { useFollowAction } from "../discovery/FollowButton";
+import { NO_ACQUISITION_FOLLOW_TOOLTIP, useFollowAction } from "../discovery/FollowButton";
 import { useAcquisitionAvailable } from "../hooks/useAcquisitionAvailable";
 import { useDownloadRecords } from "../hooks/useDownloadRecords";
 import { useEntityNav } from "../hooks/useEntityNav";
@@ -464,12 +464,15 @@ function ExternalAlbumView({ entityRef }: { entityRef: EntityRef }) {
               follow={{
                 on: follow.on,
                 busy: follow.busy,
-                disabled: offline,
+                // Following acquires this (unowned) artist — needs a provider.
+                disabled: offline || (!follow.on && !acquisitionAvailable),
                 title: offline
                   ? OFFLINE_ACTION_TOOLTIP
-                  : follow.on
-                    ? "Following — click to unfollow"
-                    : "Follow — acquire + watch for new releases",
+                  : !follow.on && !acquisitionAvailable
+                    ? NO_ACQUISITION_FOLLOW_TOOLTIP
+                    : follow.on
+                      ? "Following — click to unfollow"
+                      : "Follow — acquire this artist and follow their new releases",
                 onToggle: () => void follow.onToggle(),
               }}
             />

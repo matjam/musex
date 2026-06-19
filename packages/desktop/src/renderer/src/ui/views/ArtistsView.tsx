@@ -19,8 +19,9 @@ export function ArtistsView() {
   const { playArtist } = useCollectionPlay();
   const { isFollowed } = useFollow();
   const [filter, setFilter] = useState<LibraryFilterMode>("all");
-  // An artist is "followed" (was: watched for new releases) when followed via
-  // the FollowProvider. Cards mark followed artists; the filter narrows to them.
+  // An artist is "followed" (acquire + watch for new releases) when followed
+  // via the FollowProvider. Cards mark followed artists; the filter narrows
+  // to them.
   const followedArtist = (a: Artist) => isFollowed(entityRefForArtist(a));
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   // Artist cards reflect LOCAL download state only: a downloaded artist (≥1
@@ -71,9 +72,9 @@ export function ArtistsView() {
   }
 
   // "all" shows everything (offline: un-downloaded cards dimmed, not hidden);
-  // "downloaded" shows only artists with a downloaded track; "watching" shows
-  // only artists watched for new releases, plus a link to the full acquisition
-  // activity feed.
+  // "downloaded" shows only artists with a downloaded track; "watching" (the
+  // internal mode key for "Following") shows only artists you follow, plus a
+  // link to the full acquisition activity feed.
   const visible =
     filter === "downloaded"
       ? artists.filter((a) => downloaded.has(a.id))
@@ -104,13 +105,11 @@ export function ArtistsView() {
             View acquisition activity
           </button>
           {visible.length === 0 ? (
-            <div className="content-placeholder">
-              No artists are being watched for new releases.
-            </div>
+            <div className="content-placeholder">You're not following any artists yet.</div>
           ) : (
             <>
               <div className="browse-sub">
-                {visible.length} artist{visible.length !== 1 ? "s" : ""} watched
+                Following {visible.length} artist{visible.length !== 1 ? "s" : ""}
               </div>
               <div className="browse-grid">
                 {visible.map((artist) => (
