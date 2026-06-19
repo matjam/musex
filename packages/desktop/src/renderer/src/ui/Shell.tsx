@@ -19,10 +19,9 @@ import { MIX_ICONS, SMART_ICONS } from "./smart-mix-icons";
 import { AcquiringView } from "./views/AcquiringView";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
-import { ArtistDetailView } from "./views/ArtistDetailView";
 import { ArtistsView } from "./views/ArtistsView";
+import { ArtistView } from "./views/ArtistView";
 import { DiscoverView } from "./views/DiscoverView";
-import { ExternalArtistView } from "./views/ExternalArtistView";
 import { GenresView } from "./views/GenresView";
 import { GenreView } from "./views/GenreView";
 import { HomeView } from "./views/HomeView";
@@ -102,14 +101,8 @@ export function Shell() {
       case "artists":
         return <ArtistsView />;
       case "artist":
-        // Temporary Batch-2 prop-adapter: route external refs to the existing
-        // ExternalArtistView, owned refs to ArtistDetailView. Batch 3 merges
-        // these into one unified ArtistView keyed on the ref.
-        return view.ref.source === "external" ? (
-          <ExternalArtistView entity={view.ref} />
-        ) : (
-          <ArtistDetailView entity={view.ref} />
-        );
+        // One unified page for owned + external artists — no source split.
+        return <ArtistView ref={view.ref} />;
       case "album":
         return <AlbumDetailView entity={view.ref} />;
       case "albums":
