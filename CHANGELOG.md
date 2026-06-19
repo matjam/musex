@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.2](https://github.com/matjam/musex/compare/v0.16.1...v0.16.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* Windows posix $PATH parsing + build all platforms on every PR ([#71](https://github.com/matjam/musex/issues/71)) ([42ac613](https://github.com/matjam/musex/commit/42ac61321b7e20f3163fcbffe99192358f22cd88))
+
 ## [0.16.1](https://github.com/matjam/musex/compare/v0.16.0...v0.16.1) (2026-06-19)
 
 
