@@ -1,12 +1,10 @@
-import { Heart, Info, Play, Shuffle, Sparkles } from "lucide-react";
+import { Heart, Play, Shuffle, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 
 export interface ActionBarProps {
   onPlay?: () => void; // primary; omit to hide
   onShuffle?: () => void;
   onSimilar?: () => void; // labeled "Similar" pill
-  /** Open the entity info/detail side panel for this entity. Omit to hide. */
-  onInfo?: () => void;
   /** Follow pill: omit to hide. `on` lights it green and flips the label
    *  ("Follow" / "Following"). `disabled` (e.g. offline) blocks the toggle and
    *  shows `title` as a tooltip. */
@@ -27,7 +25,6 @@ export function ActionBar({
   onPlay,
   onShuffle,
   onSimilar,
-  onInfo,
   follow,
   overflow,
   children,
@@ -59,17 +56,6 @@ export function ActionBar({
       {onSimilar && (
         <button type="button" className="action-pill" onClick={onSimilar}>
           <Sparkles size={15} /> Similar
-        </button>
-      )}
-      {onInfo && (
-        <button
-          type="button"
-          className="action-icon"
-          title="Info"
-          aria-label="Info"
-          onClick={onInfo}
-        >
-          <Info size={16} />
         </button>
       )}
       {follow && (

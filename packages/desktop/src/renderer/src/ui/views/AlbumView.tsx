@@ -10,7 +10,6 @@ import { Download, ListEnd, ListPlus, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AcquirableAlbumDto } from "../../../../shared/ipc-contract";
 import { useApp } from "../../state/app";
-import { usePanel } from "../../state/panel";
 import { usePlayer } from "../../state/player";
 import { useRatings } from "../../state/ratings";
 import { useSelection } from "../../state/selection";
@@ -65,7 +64,6 @@ function OwnedAlbumView({ entityRef }: { entityRef: EntityRef }) {
     usePlayer();
   const { selectedTrack, select } = useSelection();
   const { ratingFor, rate, seed } = useRatings();
-  const { openEntity } = usePanel();
   const [fetch, setFetch] = useState<FetchState>({ status: "loading" });
   // plexPath (media.partKey) → local presence (downloaded / cached on disk).
   const [availability, setAvailability] = useState<Map<string, LocalPresence>>(() => new Map());
@@ -237,7 +235,6 @@ function OwnedAlbumView({ entityRef }: { entityRef: EntityRef }) {
               <ActionBar
                 onPlay={() => playTracks(tracks, 0)}
                 onShuffle={() => playTracksShuffled(tracks)}
-                onInfo={() => openEntity({ kind: "album", album })}
                 follow={{
                   on: favorite.on,
                   busy: favorite.busy,

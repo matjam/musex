@@ -1,7 +1,5 @@
 import type { Track } from "@musex/core";
-import { entityRefForAlbum, entityRefForArtist } from "@musex/core";
 import { describe, expect, it } from "vitest";
-import type { View } from "../../state/app";
 import { derivePanelFocus } from "./panel-focus";
 
 const track = (id: string): Track => ({
@@ -15,88 +13,27 @@ const track = (id: string): Track => ({
   media: { container: "flac", audioCodec: "flac", partId: "p", partKey: "/k" },
 });
 
-const artistRef = entityRefForArtist({
-  id: "ar1",
-  serverId: "s1",
-  name: "The Artist",
-  thumb: "/art.jpg",
-});
-const albumRef = entityRefForAlbum({
-  id: "al1",
-  serverId: "s1",
-  artistId: "ar1",
-  title: "The Album",
-});
-const homeView: View = { name: "home" };
-const artistView: View = { name: "artist", ref: artistRef };
-const albumView: View = { name: "album", ref: albumRef };
-
+// The context panel is now-playing / track-detail context ONLY (entity
+// navigation goes to the unified pages, never the panel), so focus is a track:
+// selection wins over now-playing; nothing focused → null.
 describe("derivePanelFocus", () => {
-  it("override wins over everything else", () => {
-    const override = { kind: "artist", artistName: "Override" } as const;
-    expect(
-      derivePanelFocus({
-        override,
-        selectedTrack: track("a"),
-        view: artistView,
-        nowPlaying: track("b"),
-      }),
-    ).toBe(override);
-  });
-
-  it("selected track wins over view and now-playing", () => {
+  it("selected track wins over now-playing", () => {
     const selected = track("sel");
-    expect(
-      derivePanelFocus({
-        override: null,
-        selectedTrack: selected,
-        view: artistView,
-        nowPlaying: track("np"),
-      }),
-    ).toEqual({ kind: "song", track: selected });
-  });
-
-  it("artist view → artist payload (when no override/selection)", () => {
-    expect(
-      derivePanelFocus({
-        override: null,
-        selectedTrack: null,
-        view: artistView,
-        nowPlaying: track("np"),
-      }),
-    ).toEqual({
-      kind: "artist",
-      artistName: "The Artist",
-      artistId: "ar1",
-      serverId: "s1",
-      thumb: "/art.jpg",
+    expect(derivePanelFocus({ selectedTrack: selected, nowPlaying: track("np") })).toEqual({
+      kind: "song",
+      track: selected,
     });
   });
 
-  it("album view → album payload (derived from the ref)", () => {
-    expect(
-      derivePanelFocus({
-        override: null,
-        selectedTrack: null,
-        view: albumView,
-        nowPlaying: track("np"),
-      }),
-    ).toEqual({
-      kind: "album",
-      album: { id: "al1", serverId: "s1", artistId: "", title: "The Album", thumb: undefined },
-    });
-  });
-
-  it("falls back to now-playing when view is neither artist nor album", () => {
+  it("falls back to now-playing when nothing is selected", () => {
     const np = track("np");
-    expect(
-      derivePanelFocus({ override: null, selectedTrack: null, view: homeView, nowPlaying: np }),
-    ).toEqual({ kind: "song", track: np });
+    expect(derivePanelFocus({ selectedTrack: null, nowPlaying: np })).toEqual({
+      kind: "song",
+      track: np,
+    });
   });
 
   it("returns null when nothing is focused", () => {
-    expect(
-      derivePanelFocus({ override: null, selectedTrack: null, view: homeView, nowPlaying: null }),
-    ).toBeNull();
+    expect(derivePanelFocus({ selectedTrack: null, nowPlaying: null })).toBeNull();
   });
 });
