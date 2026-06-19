@@ -116,3 +116,24 @@ deb:
     - libuuid1
     - libsecret-1-0
     - mpv
+win:
+  # NSIS installer (auto-updatable via latest.yml) + a portable .exe, x64 only.
+  # Unsigned for now — no Windows Authenticode cert env; SmartScreen shows an
+  # "unknown publisher" warning on first run (accepted). Auto-update works
+  # unsigned. mpv is BUNDLED on Windows (like macOS), not a system dep.
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+  extraResources:
+    # mpv.exe lands at Resources/mpv/mpv.exe (matches mpv-paths.ts win32 branch).
+    - from: ../../vendor/mpv/win32-x64/
+      to: mpv/
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: musex
