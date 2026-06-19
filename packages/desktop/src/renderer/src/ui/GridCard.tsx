@@ -1,7 +1,7 @@
 import type { EntityRef } from "@musex/core";
 import { entityState, resolveEntity } from "@musex/core";
 import type { LucideIcon } from "lucide-react";
-import { Eye, ListPlus, MoreHorizontal, Play } from "lucide-react";
+import { ListPlus, MoreHorizontal, Play } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useFollow } from "../state/follow";
 import { AlbumArt } from "./AlbumArt";
@@ -30,19 +30,13 @@ interface Props {
   onGetAlbum?: () => void;
   /** ⋯ menu: "Play next" → enqueue this collection next. */
   onPlayNext?: () => void;
-  // ── Legacy props (used by not-yet-migrated callers: playlists, smart-mix
-  //    tiles, on-device albums; removed when Batch 4 routes those through the
-  //    unified card). Prefer `entity` + flags for entity cards. ──
-  /** Small chip over the artwork corner (e.g. "external" on Discover items). */
-  badge?: string;
-  /** Color variant suffix for the badge: `grid-card-badge--<variant>`. */
-  badgeVariant?: string;
-  /** Legacy acquisition-state badge — takes precedence over `badge` when set. */
+  // ── Non-entity collection-tile props (playlists, smart-mix tiles, on-device
+  //    albums — tiles that aren't a single library entity). Prefer `entity` +
+  //    flags for entity cards. ──
+  /** Acquisition-state badge for non-entity tiles (e.g. on-device "downloaded"). */
   state?: AcquisitionBadgeState;
   /** Download percent for `state="downloading"`. */
   statePercent?: number;
-  /** Show the watched-for-new-releases corner marker (eye). */
-  monitored?: boolean;
   /** Dim the whole card (e.g. unavailable acquisition albums). */
   dim?: boolean;
   /** Click the card body → open the detail view. */
@@ -72,11 +66,8 @@ export function GridCard({
   acquiring,
   onGetAlbum,
   onPlayNext,
-  badge,
-  badgeVariant,
   state,
   statePercent,
-  monitored = false,
   dim = false,
   onOpen,
   onPlay,
@@ -142,23 +133,12 @@ export function GridCard({
           <span className="grid-card-badge grid-card-badge--state">
             <EntityBadge state={computedState} />
           </span>
-        ) : state ? (
-          <span className="grid-card-badge grid-card-badge--state">
-            <StateBadge state={state} percent={statePercent} />
-          </span>
         ) : (
-          badge && (
-            <span
-              className={`grid-card-badge${badgeVariant ? ` grid-card-badge--${badgeVariant}` : ""}`}
-            >
-              {badge}
+          state && (
+            <span className="grid-card-badge grid-card-badge--state">
+              <StateBadge state={state} percent={statePercent} />
             </span>
           )
-        )}
-        {monitored && (
-          <span className="card-monitored" title="Watched for new releases">
-            <Eye size={12} />
-          </span>
         )}
         {/* Hover primary action: Play when owned/playable, Follow when unowned. */}
         {onPlay ? (
