@@ -418,7 +418,7 @@ function ExternalAlbumView({ entityRef }: { entityRef: EntityRef }) {
   }, [artistName, albumTitle, offline, acquisitionAvailable]);
 
   function getThisAlbum() {
-    if (!match || match.state !== "available") return;
+    if (match?.state !== "available") return;
     const args = { providerId: match.providerId, providerRef: match.providerRef };
     setGetting(true);
     window.musex.acquisitionAcquire(args).catch((err: unknown) => {

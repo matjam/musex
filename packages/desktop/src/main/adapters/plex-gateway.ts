@@ -339,7 +339,7 @@ export class PlexapiGateway implements PlexGateway {
         const t = new PlexTrackCls(server, raw, undefined, undefined);
         return {
           track: toTrackSafe(t as PlexTrack, serverId),
-          playlistItemId: String((raw["playlistItemID"] as number | undefined) ?? ""),
+          playlistItemId: String((raw.playlistItemID as number | undefined) ?? ""),
         };
       });
       return { items, total };

@@ -47,7 +47,7 @@ type SimilarTracksResponse = {
     track?: { name: string; url?: string; artist?: { name?: string }; image?: LastfmImage[] }[];
   };
 };
-type LastfmImage = { size?: string; ["#text"]?: string };
+type LastfmImage = { size?: string; "#text"?: string };
 type TopAlbumsResponse = {
   topalbums?: { album?: { name?: string; image?: LastfmImage[] }[] };
 };
@@ -127,7 +127,7 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : String(e
  *  non-empty. The dead placeholder image counts as no artwork. */
 function pickImageUrl(images: LastfmImage[] | undefined): string | null {
   const usable = (Array.isArray(images) ? images : []).filter(
-    (i): i is LastfmImage & { ["#text"]: string } =>
+    (i): i is LastfmImage & { "#text": string } =>
       typeof i["#text"] === "string" &&
       i["#text"].length > 0 &&
       !i["#text"].includes(ART_PLACEHOLDER_HASH),

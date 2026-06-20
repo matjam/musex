@@ -16,11 +16,11 @@ function validate(raw: unknown): StorageQuality {
   if (!raw || typeof raw !== "object") return DEFAULT_STORAGE_QUALITY;
   const obj = raw as Record<string, unknown>;
   const mode =
-    obj["mode"] === "original" || obj["mode"] === "aac"
-      ? (obj["mode"] as "original" | "aac")
+    obj.mode === "original" || obj.mode === "aac"
+      ? (obj.mode as "original" | "aac")
       : DEFAULT_STORAGE_QUALITY.mode;
-  const bitrateKbps = (TRANSCODE_BITRATES as readonly number[]).includes(Number(obj["bitrateKbps"]))
-    ? Number(obj["bitrateKbps"])
+  const bitrateKbps = (TRANSCODE_BITRATES as readonly number[]).includes(Number(obj.bitrateKbps))
+    ? Number(obj.bitrateKbps)
     : DEFAULT_STORAGE_QUALITY.bitrateKbps;
   return { mode, bitrateKbps };
 }

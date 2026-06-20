@@ -11,7 +11,7 @@ import {
 } from "@musex/core";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { FlatList, Pressable, Text, useWindowDimensions } from "react-native";
 import { artUrl } from "../logic/art-url";
 import { useStore } from "../state/store";
 import { Collage } from "./Collage";
