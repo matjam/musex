@@ -1,0 +1,7 @@
+# makepkg build outputs — never commit these
+/pkg/
+/src/
+*.pkg.tar.zst
+*.pkg.tar.zst.sig
+*.AppImage
+*.log
