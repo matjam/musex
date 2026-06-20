@@ -81,7 +81,14 @@ linux:
       arch: [x64]
     - target: deb
       arch: [x64]
-  icon: build/icon.png
+  # Point at a DIRECTORY of NxN.png icons, NOT a single PNG. With a single
+  # build/icon.png, app-builder-lib 26's "set" converter returns it AS-IS (a lone
+  # 1024x1024), and 1024x1024 is not in the freedesktop hicolor theme index
+  # (which tops out at 512x512) — so icon-name lookup for the .desktop's
+  # `Icon=musex` finds nothing and the launcher shows no icon. A directory makes
+  # electron-builder bake the full standard hicolor size set. Regenerate with
+  # scripts/gen-icon.sh (committed; CI has no ImageMagick).
+  icon: build/icons
   category: AudioVideo
   maintainer: Nathan Ollerenshaw <nathan@ollerenshaw.org>
   synopsis: Spotify-style desktop player for your Plex music library
