@@ -19,7 +19,7 @@
 
 pkgname=musex-bin
 _appname=musex
-pkgver=0.7.0
+pkgver=0.16.4
 pkgrel=1
 pkgdesc="Spotify-style desktop player for your Plex music library (streams from Plex, plays via mpv)"
 arch=('x86_64')
@@ -31,10 +31,18 @@ depends=('mpv' 'gtk3' 'nss' 'alsa-lib' 'libnotify' 'libxss' 'libsecret')
 optdepends=('libappindicator-gtk3: system tray icon support')
 provides=('musex')
 conflicts=('musex')
+# imagemagick: synthesize the standard hicolor icon sizes when the AppImage
+# ships only an oversized one (see the icon block in package()).
+makedepends=('imagemagick')
 options=('!strip')  # never strip the prebuilt Electron/Chromium binaries
+# No install= scriptlet: pacman's global hooks (gtk-update-icon-cache.hook +
+# update-desktop-database.hook) refresh the icon/desktop caches automatically
+# when a package installs under usr/share/icons/ or usr/share/applications/.
+# Keeping this self-contained also lets the release CI publish PKGBUILD as a
+# single downloadable asset (see .github/workflows/release-please.yml).
 source=("${_appname}-${pkgver}-x86_64.AppImage::${url}/releases/download/v${pkgver}/${_appname}-${pkgver}-x86_64.AppImage")
-# SKIP until the matching release is published; pin it with `updpkgsums`.
-sha256sums=('SKIP')
+# Pinned to the v0.16.4 x86_64 AppImage (re-pin with `updpkgsums` on bump).
+sha256sums=('e6225b619496d69d7caf8d13603de25443d0fe9d19d2eef41ef303f58cf2b017')
 
 package() {
   cd "$srcdir"
@@ -70,13 +78,31 @@ package() {
   sed -i "s|^Exec=.*|Exec=$_appname %U|" \
     "$pkgdir/usr/share/applications/$_appname.desktop"
 
-  # Hicolor icons electron-builder bakes into the AppImage. The size set
-  # varies (currently just 1024x1024), so install whatever is present rather
-  # than guessing fixed sizes — otherwise the app-menu launcher gets no icon.
-  local icon size
+  # Hicolor icons electron-builder bakes into the AppImage. Install whatever
+  # sizes are present...
+  local icon size dim biggest=0 biggest_file=""
   for icon in squashfs-root/usr/share/icons/hicolor/*/apps/"$_appname".png; do
     [ -f "$icon" ] || continue
     size="${icon#squashfs-root/usr/share/icons/hicolor/}"  # e.g. 1024x1024/apps/musex.png
     install -Dm644 "$icon" "$pkgdir/usr/share/icons/hicolor/$size"
+    dim="${size%%x*}"  # e.g. 1024
+    if [ "$dim" -gt "$biggest" ]; then biggest=$dim; biggest_file=$icon; fi
   done
+  # ...then synthesize any MISSING standard sizes. Older AppImages shipped a
+  # lone 1024x1024 icon, but 1024x1024 is not in the freedesktop hicolor theme
+  # index (max 512x512), so on its own it gives the launcher no icon. Downscale
+  # the largest available PNG to fill the standard sizes. (Newer AppImages
+  # already ship the full set, so this loop is a no-op for them.)
+  if [ -n "$biggest_file" ]; then
+    local magick
+    magick=$(command -v magick || command -v convert)
+    for dim in 16 32 48 64 128 256 512; do
+      local dst="$pkgdir/usr/share/icons/hicolor/${dim}x${dim}/apps/$_appname.png"
+      [ -f "$dst" ] && continue
+      [ "$dim" -gt "$biggest" ] && continue  # never upscale past the source
+      install -dm755 "$(dirname "$dst")"
+      "$magick" "$biggest_file" -resize "${dim}x${dim}" "$dst"  # convert (IM6) / magick (IM7) — same syntax
+      chmod 644 "$dst"
+    done
+  fi
 }

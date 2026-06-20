@@ -58,6 +58,16 @@ iconutil -c icns "$ICONSET" -o "$ROOT/packages/desktop/build/icon.icns"
 magick "$TMP/transparent.png" -define icon:auto-resize=256,128,64,48,32,16 \
   "$ROOT/packages/desktop/build/icon.ico"
 
+# --- Linux: multi-size hicolor PNG set (committed; CI has no ImageMagick) ---
+# electron-builder's linux.icon points at this DIRECTORY. A single PNG would be
+# baked into the AppImage/deb as a lone 1024x1024, which is NOT in the freedesktop
+# hicolor theme index (max 512x512) → no launcher icon. Linux draws the icon
+# as-is (no macOS-grid inset), so use the full-bleed transparent-corner squircle.
+LINUX_ICONS="$ROOT/packages/desktop/build/icons"; mkdir -p "$LINUX_ICONS"
+for s in 16 32 48 64 128 256 512; do
+  magick "$TMP/transparent.png" -resize "${s}x${s}" "$LINUX_ICONS/${s}x${s}.png"
+done
+
 # --- Mobile (iOS): full-bleed opaque (fill corners with the gradient) ---
 # Background = the master scaled up + blurred so the gradient covers the frame;
 # composite the transparent-corner squircle over it, then drop the alpha.
@@ -68,4 +78,5 @@ magick "$TMP/bg.png" "$TMP/transparent.png" -gravity center -composite \
 echo "icons generated:"
 echo "  desktop: packages/desktop/build/icon.icns + icon.png (transparent squircle)"
 echo "  windows: packages/desktop/build/icon.ico (multi-size transparent squircle)"
+echo "  linux  : packages/desktop/build/icons/NxN.png (hicolor set, transparent squircle)"
 echo "  mobile : packages/mobile/assets/icon.png (full-bleed opaque)"
