@@ -32,6 +32,15 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Immediately convert the new release to a draft so it isn't visible to
+      # users until all platform builds succeed and finalize publishes it.
+      # gh is pre-installed on ubuntu-latest; GITHUB_TOKEN has contents:write.
+      - name: Mark release as draft while builds run
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ steps.release.outputs.tag_name }}" --repo matjam/musex --draft
+
   build-macos:
     needs: release-please
     # Runs when release-please just cut a release, or on manual dispatch for an
@@ -263,22 +272,33 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas submit --platform ios --profile production --path "$RUNNER_TEMP/musex.ipa" --non-interactive
 
-  # If release-please cut a release but one or more platform builds failed,
-  # delete the release + tag so the repo isn't left with a partial release
-  # (missing artifacts). The next commit that triggers a fix will recreate it.
-  # Only runs on release events (not workflow_dispatch rebuilds of existing tags).
-  cleanup-failed-release:
+  # Runs after all platform builds complete (always, so it fires even on failure).
+  # - All builds succeeded → publish the draft release so it becomes visible.
+  # - Any build failed     → delete the draft + tag; next fix commit recreates it.
+  # Skipped on workflow_dispatch (release_created is falsy — rebuilding an
+  # existing published release, not cutting a new one).
+  finalize:
     needs: [release-please, build-macos, build-linux, build-windows, build-ios]
-    if: >-
-      ${{ always() &&
-          needs.release-please.outputs.release_created == 'true' &&
-          (needs.build-macos.result   == 'failure' ||
-           needs.build-linux.result   == 'failure' ||
-           needs.build-windows.result == 'failure' ||
-           needs.build-ios.result     == 'failure') }}
+    if: ${{ always() && needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Delete partial release and tag
+      - name: Publish release
+        if: >-
+          ${{ needs.build-macos.result   == 'success' &&
+              needs.build-linux.result   == 'success' &&
+              needs.build-windows.result == 'success' &&
+              needs.build-ios.result     == 'success' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release edit "$TAG_NAME" --repo matjam/musex --draft=false
+
+      - name: Delete draft (one or more builds failed)
+        if: >-
+          ${{ needs.build-macos.result   == 'failure' ||
+              needs.build-linux.result   == 'failure' ||
+              needs.build-windows.result == 'failure' ||
+              needs.build-ios.result     == 'failure' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
