@@ -85,6 +85,74 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build-ios:
+    # Build the iOS app on every PR so iOS/native breakage (expo prebuild, pod
+    # install, the ExpoModulesJSI xcframework / Swift-toolchain version, native
+    # module compile) is caught pre-merge — the same class of failure that
+    # blocked a release before. This is a SIMULATOR build: no code-signing, so
+    # it needs NO distribution cert / provisioning profile and is NOT submitted
+    # to TestFlight. The real signed TestFlight build stays in
+    # release-please.yml; this just proves the app compiles.
+    #
+    # Skip release-please PRs, same as the desktop build job above.
+    if: >-
+      ${{ !(
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'release-please--')
+      ) }}
+    # iOS builds REQUIRE macOS (Xcode is macOS-only). macos-latest is free +
+    # unlimited on this PUBLIC repo, and `eas build --local` runs ON the runner
+    # (no EAS cloud build credits consumed).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        # version read from package.json "packageManager"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Full workspace install: `eas build --local` runs Metro, which resolves
+      # @musex/core from source through the hoisted pnpm layout.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      # ExpoModulesJSI's apple/Package.swift declares `swift-tools-version: 6.2`,
+      # which needs Swift 6.2 = Xcode 26+. The runner's DEFAULT Xcode is 16.4
+      # (Swift 6.1), so SwiftPM can't parse the manifest and the ExpoModulesJSI
+      # xcframework build fails ("Could not resolve package dependencies"). Force
+      # the newest installed Xcode; build-xcframework.sh forwards DEVELOPER_DIR
+      # into its nested `env -i` xcodebuild, so the whole build uses it.
+      - name: Select newest Xcode (need >= 26 for swift-tools 6.2)
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "DEVELOPER_DIR=$newest/Contents/Developer" >> "$GITHUB_ENV"
+          echo "Selected Xcode: $newest"
+
+      # Simulator build: prebuild + pod install + xcodebuild for the iOS
+      # simulator. NO signing credentials are fetched (simulator builds aren't
+      # signed), so there's nothing sensitive in the eas-cli-local-build-plugin
+      # payload to leak — but the same 200+ char base64 redaction is kept as
+      # defense-in-depth, and the real exit code is propagated past the sed pipe.
+      # EXPO_TOKEN authenticates eas-cli to resolve the project (no creds pulled).
+      - name: Build iOS app (simulator, unsigned, not submitted)
+        working-directory: packages/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build --local --platform ios --profile ci-simulator --non-interactive --output "$RUNNER_TEMP/musex-sim.tar.gz" 2>&1 \
+            | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g'
+          test "${PIPESTATUS[0]}" -eq 0
+          test -f "$RUNNER_TEMP/musex-sim.tar.gz"
+
   comment:
     # On a PR where all three builds succeeded, post (or update) a single
     # comment linking the artifacts. Same-repo only — fork PRs get a read-only
