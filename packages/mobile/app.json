@@ -4,7 +4,7 @@
     "slug": "musex",
     "owner": "stupendous-net",
     "scheme": "musex",
-    "version": "0.17.0",
+    "version": "0.18.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "ios": {
