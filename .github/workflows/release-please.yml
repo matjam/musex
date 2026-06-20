@@ -199,3 +199,66 @@ jobs:
             (Get-Item packages/desktop/release/*.blockmap) `
             packages/desktop/release/latest.yml `
             --clobber
+
+  build-ios:
+    needs: release-please
+    # Same gating as the desktop jobs: a new release-please release, or a manual
+    # dispatch to (re)build TestFlight from main HEAD.
+    if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
+    # iOS builds REQUIRE macOS (Xcode is macOS-only). macos-latest is free +
+    # unlimited on this PUBLIC repo (no 10x Actions-minute multiplier), and
+    # `eas build --local` runs the build ON the runner — it does NOT consume EAS
+    # cloud build credits.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        # version read from package.json "packageManager"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Full workspace install: `eas build --local` runs Metro, which resolves
+      # @musex/core from source through the hoisted pnpm layout.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      # Build number (CFBundleVersion) = the monotonically-increasing GitHub run
+      # number. The marketing version (CFBundleShortVersionString) comes from
+      # app.json's expo.version, which release-please keeps in sync with the
+      # release version — so TestFlight shows e.g. 0.16.5 and the build number
+      # just has to be unique + increasing for Apple to accept each upload.
+      # (appVersionSource is "local" with no autoIncrement: remote versioning /
+      # autoIncrement don't reliably bump for `eas build --local`, so the build
+      # number is set deterministically here instead.)
+      - name: Set iOS build number to the run number
+        working-directory: packages/mobile
+        run: |
+          tmp=$(mktemp)
+          jq --arg bn "$GITHUB_RUN_NUMBER" '.expo.ios.buildNumber = $bn' app.json > "$tmp"
+          mv "$tmp" app.json
+
+      # `eas build --local` runs prebuild + pod install + xcodebuild on the
+      # runner. Signing credentials (Distribution cert + provisioning profile)
+      # are pulled from EAS via EXPO_TOKEN — created once during bootstrap.
+      - name: Build iOS app (.ipa)
+        working-directory: packages/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/musex.ipa"
+
+      # Upload to App Store Connect -> TestFlight. The App Store Connect API key
+      # is stored on EAS servers (generated during bootstrap), so EXPO_TOKEN is
+      # the ONLY secret needed; the target app (ascAppId) is set in eas.json.
+      # iOS isn't a downloadable artifact, so there is no `gh release upload`.
+      - name: Submit to TestFlight
+        working-directory: packages/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas submit --platform ios --profile production --path "$RUNNER_TEMP/musex.ipa" --non-interactive
