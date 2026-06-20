@@ -28,7 +28,7 @@ import { GridCard } from "../GridCard";
 import { useAlbumPlayActions } from "../hooks/useAlbumPlayActions";
 import { useCollectionPlay } from "../hooks/useCollectionPlay";
 import { PluginSections } from "../PluginSections";
-import { MIX_ICONS, smartIcon } from "../smart-mix-icons";
+import { smartIcon } from "../smart-mix-icons";
 
 /** Home-card order for the rule-based smart playlists (collage art needs the
  *  taste snapshot via smartMixThumbs, so they're handled together). */
