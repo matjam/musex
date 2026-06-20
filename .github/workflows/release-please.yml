@@ -49,6 +49,11 @@ jobs:
     if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     # macos-latest is arm64 — matches the darwin-arm64 mpv vendor pin.
     runs-on: macos-latest
+    # See ci.yml's build job: redirect the Electron + electron-builder download
+    # caches into the workspace so the cache step below can capture them.
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
     steps:
       - uses: actions/checkout@v6
 
@@ -59,6 +64,18 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      # Cache vendored mpv + Electron/electron-builder downloads (see ci.yml).
+      - name: Cache mpv + Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/mpv
+            ${{ github.workspace }}/.cache/electron
+            ${{ github.workspace }}/.cache/electron-builder
+          key: build-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/fetch-mpv.mjs') }}
+          restore-keys: |
+            build-cache-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -100,6 +117,10 @@ jobs:
     # Same gating as build-macos: fires on a new release or manual dispatch.
     if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
+    # Linux bundles no mpv, but still downloads the Electron binary — cache it.
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
     steps:
       - uses: actions/checkout@v6
 
@@ -110,6 +131,16 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.cache/electron
+            ${{ github.workspace }}/.cache/electron-builder
+          key: build-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/fetch-mpv.mjs') }}
+          restore-keys: |
+            build-cache-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -168,6 +199,11 @@ jobs:
     # Same gating as build-macos/build-linux: fires on a new release or dispatch.
     if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: windows-latest
+    # Windows downloads the most via electron-builder (NSIS + winCodeSign) — the
+    # cache below saves re-fetching those + Electron + mpv each release.
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
     steps:
       - uses: actions/checkout@v6
 
@@ -178,6 +214,18 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      # Cache vendored mpv + Electron/electron-builder downloads (see ci.yml).
+      - name: Cache mpv + Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/mpv
+            ${{ github.workspace }}/.cache/electron
+            ${{ github.workspace }}/.cache/electron-builder
+          key: build-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/fetch-mpv.mjs') }}
+          restore-keys: |
+            build-cache-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
