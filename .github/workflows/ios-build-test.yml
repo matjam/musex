@@ -7,6 +7,11 @@ name: iOS Build Test
 # real release pipeline (release-please.yml's build-ios job).
 on:
   workflow_dispatch:
+  # TEMPORARY: run automatically on this fix branch so the build can be verified
+  # without merging to main first. REMOVE this push trigger before merging.
+  push:
+    branches:
+      - fix/ios-build-from-source-and-redact-logs
 
 permissions:
   contents: read
