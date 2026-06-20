@@ -11,6 +11,11 @@
           "type": "json",
           "path": "packages/desktop/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/mobile/app.json",
+          "jsonpath": "$.expo.version"
         }
       ]
     }
