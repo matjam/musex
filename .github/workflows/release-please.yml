@@ -253,6 +253,18 @@ jobs:
           jq --arg bn "$GITHUB_RUN_NUMBER" '.expo.ios.buildNumber = $bn' app.json > "$tmp"
           mv "$tmp" app.json
 
+      # ExpoModulesJSI's apple/Package.swift declares `swift-tools-version: 6.2`,
+      # which needs Swift 6.2 = Xcode 26+. The runner's DEFAULT Xcode is 16.4
+      # (Swift 6.1), so SwiftPM can't parse the manifest and the ExpoModulesJSI
+      # xcframework build fails ("Could not resolve package dependencies"). Force
+      # the newest installed Xcode; build-xcframework.sh forwards DEVELOPER_DIR
+      # into its nested `env -i` xcodebuild, so the whole build uses it.
+      - name: Select newest Xcode (need >= 26 for swift-tools 6.2)
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "DEVELOPER_DIR=$newest/Contents/Developer" >> "$GITHUB_ENV"
+          echo "Selected Xcode: $newest"
+
       # `eas build --local` runs prebuild + pod install + xcodebuild on the
       # runner. Signing credentials (Distribution cert + provisioning profile)
       # are pulled from EAS via EXPO_TOKEN — created once during bootstrap.
