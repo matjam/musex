@@ -1,0 +1,57 @@
+name: iOS Build Test
+
+# Manually-triggered iOS build for verifying the build works WITHOUT cutting a
+# release or submitting to TestFlight. Run it from the Actions tab → "iOS Build
+# Test" → "Run workflow". It builds the .ipa with `eas build --local` and stops
+# — no `eas submit`. Use this to confirm a build fix before relying on it in the
+# real release pipeline (release-please.yml's build-ios job).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Set iOS build number to the run number
+        working-directory: packages/mobile
+        run: |
+          tmp=$(mktemp)
+          jq --arg bn "$GITHUB_RUN_NUMBER" '.expo.ios.buildNumber = $bn' app.json > "$tmp"
+          mv "$tmp" app.json
+
+      # Build only — NOT submitted. EXPO_USE_SOURCE=1 builds Expo modules from
+      # source (avoids the ExpoModulesJSI xcframework "Could not resolve package
+      # dependencies" failure). The sed filter redacts the base64 job payload
+      # (which embeds signing credentials) so it can't leak into this PUBLIC
+      # repo's logs; pipefail keeps eas's non-zero exit fatal.
+      - name: Build iOS app (.ipa) — build only, not submitted
+        working-directory: packages/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_USE_SOURCE: "1"
+        run: |
+          eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/musex.ipa" 2>&1 \
+            | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g'
+
+      - name: Confirm IPA was produced
+        run: |
+          ls -la "$RUNNER_TEMP/musex.ipa"
+          echo "iOS build succeeded (not submitted)."
