@@ -60,3 +60,21 @@ jobs:
         run: |
           ls -la "$RUNNER_TEMP/musex.ipa"
           echo "iOS build succeeded (not submitted)."
+
+      # DIAGNOSTIC: eas runs the archive as `xcodebuild ... | tee musex-*.log >
+      # /dev/null`, so the detailed xcodebuild output (the real reason behind
+      # "Could not resolve package dependencies") is written to a file and never
+      # printed. On failure, find that log and print the relevant lines
+      # (redacted) so we can see the actual error instead of the summary.
+      - name: Dump detailed xcodebuild log on failure (redacted)
+        if: failure()
+        run: |
+          echo "Locating eas-build-local detailed log(s)..."
+          logs=$(find /private/var/folders /var/folders "${RUNNER_TEMP}" -type f -name '*.log' 2>/dev/null | grep -i 'eas-build-local' || true)
+          echo "candidates:"; echo "$logs"
+          for f in $logs; do
+            echo "================= $f ================="
+            grep -niE 'could not resolve|error:|cannot|unable to|denied|sandbox|no such file|missing|package|\.swift|\.podspec|http|timed out|fatal' "$f" 2>/dev/null \
+              | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g' \
+              | tail -150
+          done
