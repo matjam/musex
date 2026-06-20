@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.5](https://github.com/matjam/musex/compare/v0.16.4...v0.16.5) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ci:** only run builds on PRs, not on every push to main ([#84](https://github.com/matjam/musex/issues/84)) ([2d539ee](https://github.com/matjam/musex/commit/2d539ee143a63837824f60b3b790e740bf4aba65))
+* linux launcher icon (ship full hicolor set, not lone 1024px) ([#79](https://github.com/matjam/musex/issues/79)) ([1e979f3](https://github.com/matjam/musex/commit/1e979f3efe62d5b9e89d43e4f4e18d13bd32a640))
+* reconnect to Plex via the remote address after leaving the LAN ([#81](https://github.com/matjam/musex/issues/81)) ([e78ae4f](https://github.com/matjam/musex/commit/e78ae4f9568852ca8b3acdb90b3608f3892f466a))
+
 ## [0.16.4](https://github.com/matjam/musex/compare/v0.16.3...v0.16.4) (2026-06-19)
 
 
