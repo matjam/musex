@@ -373,3 +373,61 @@ describe("playlist CRUD", () => {
     expect(url).toContain("/playlists/pl1");
   });
 });
+
+describe("base-url re-resolution on network transition", () => {
+  const twoConn = {
+    id: "srv",
+    name: "Tower",
+    connections: [
+      { uri: "https://lan.plex.direct:32400", local: true, relay: false },
+      { uri: "https://wan.plex.direct:32400", local: false, relay: false },
+    ],
+  };
+
+  it("probe switches to the remote connection when the cached local one goes unreachable", async () => {
+    let lanUp = true;
+    const fetchFn = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const u = String(args[0]);
+      if (u.startsWith("https://lan.plex.direct:32400")) {
+        if (!lanUp) throw new TypeError("Network request failed");
+        return jsonResponse({ MediaContainer: { Directory: [] } });
+      }
+      return jsonResponse({ MediaContainer: { Directory: [] } });
+    });
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+
+    // On the LAN: resolves + caches the local connection.
+    await gw.listMusicLibraries(twoConn, "TOK");
+    expect(gw.baseUrlFor("srv")).toBe("https://lan.plex.direct:32400");
+
+    // Left the LAN: the cached local connection now fails.
+    lanUp = false;
+    // The connectivity probe must re-resolve to the remote connection rather
+    // than throw, and the cached base URL must switch so browse/stream follow.
+    await gw.probe("srv", "TOK");
+    expect(gw.baseUrlFor("srv")).toBe("https://wan.plex.direct:32400");
+  });
+
+  it("probe rejects when no connection is reachable (genuinely offline)", async () => {
+    let up = true;
+    const fetchFn = vi.fn(async () => {
+      if (!up) throw new TypeError("Network request failed");
+      return jsonResponse({ MediaContainer: { Directory: [] } });
+    });
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(twoConn, "TOK");
+    up = false;
+    await expect(gw.probe("srv", "TOK")).rejects.toBeTruthy();
+  });
+
+  it("probe surfaces PlexAuthError when the token is rejected (sign-in owns auth)", async () => {
+    let authOk = true;
+    const fetchFn = vi.fn(async () =>
+      authOk ? jsonResponse({ MediaContainer: { Directory: [] } }) : jsonResponse({}, 401),
+    );
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+    await gw.listMusicLibraries(twoConn, "TOK"); // caches local while authorized
+    authOk = false;
+    await expect(gw.probe("srv", "TOK")).rejects.toBeInstanceOf(PlexAuthError);
+  });
+});

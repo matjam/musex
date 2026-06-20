@@ -32,6 +32,10 @@ type FetchFn = typeof fetch;
  *  throw so the type is satisfied without pretending to support them yet. */
 export class PlexGatewayImpl implements PlexGateway {
   private baseUrlByServer = new Map<string, string>();
+  // The last-seen Server (its connection list) per id, captured on resolve so
+  // the base URL can be re-resolved later — when the cached connection stops
+  // working (e.g. leaving the LAN) — without the caller re-supplying it.
+  private serverById = new Map<string, Server>();
 
   constructor(
     private readonly fetchFn: FetchFn,
@@ -107,17 +111,25 @@ export class PlexGatewayImpl implements PlexGateway {
   // --- internals ---
 
   private async resolveBaseUrl(server: Server, token: string): Promise<string> {
+    this.serverById.set(server.id, server); // remember for later re-resolution
     const cached = this.baseUrlByServer.get(server.id);
     if (cached) return cached;
-    // Preference: local, then remote (non-relay), then relay.
+    const uri = await this.probeConnections(server, token);
+    if (!uri) throw new Error(`No reachable connection for server ${server.name}`);
+    this.baseUrlByServer.set(server.id, uri);
+    return uri;
+  }
+
+  /** Probe a server's connections in preference order (local, then remote
+   *  non-relay, then relay) and return the first that responds OK, or null if
+   *  none are reachable. Does not touch the cache. Throws PlexAuthError if a
+   *  connection rejects the token. */
+  private async probeConnections(server: Server, token: string): Promise<string | null> {
     const ordered = [...server.connections].sort((a, b) => score(a) - score(b));
     for (const conn of ordered) {
-      if (await this.reachable(conn.uri, token)) {
-        this.baseUrlByServer.set(server.id, conn.uri);
-        return conn.uri;
-      }
+      if (await this.reachable(conn.uri, token)) return conn.uri;
     }
-    throw new Error(`No reachable connection for server ${server.name}`);
+    return null;
   }
 
   private async reachable(uri: string, token: string): Promise<boolean> {
@@ -312,18 +324,22 @@ export class PlexGatewayImpl implements PlexGateway {
     );
   }
 
-  /** Cheap liveness probe: GET the server root and throw PlexAuthError on 401,
-   *  else resolve. Used by ConnectivityMonitor to distinguish "server offline"
-   *  from "bad token" (auth errors are not treated as connectivity failures). */
+  /** Liveness probe used by ConnectivityMonitor. Tries the cached connection
+   *  first; if it's unreachable (e.g. we left the LAN and the cached address is
+   *  the local one), re-resolves across ALL the server's connections and
+   *  switches the cached base URL to a working one — typically the remote
+   *  .plex.direct address — so browse + streaming transparently follow off-LAN.
+   *  Only when NO connection is reachable does it reject, which the monitor
+   *  treats as offline. A 401 propagates as PlexAuthError (sign-in owns auth;
+   *  it is not a connectivity failure). */
   async probe(serverId: string, token: string): Promise<void> {
-    const base = this.requireBase(serverId);
-    const res = await this.fetchFn(`${base}/identity`, {
-      headers: plexHeaders(this.clientId, { "X-Plex-Token": token }),
-    });
-    if (res.status === 401) throw new PlexAuthError();
-    // any other status (including non-OK) counts as reachable-but-unhappy,
-    // which is not an auth failure; only a network error (fetch throws) or 401
-    // propagates as a probe failure.
+    // reachable() throws PlexAuthError on 401, returns true on an OK response,
+    // and false on a network error / non-OK status.
+    if (await this.reachable(this.requireBase(serverId), token)) return;
+    const server = this.serverById.get(serverId);
+    const uri = server ? await this.probeConnections(server, token) : null;
+    if (!uri) throw new Error(`Server ${serverId} unreachable on all connections`);
+    this.baseUrlByServer.set(serverId, uri);
   }
 
   async getUserRating(serverId: string, itemId: string, token: string): Promise<number | null> {
