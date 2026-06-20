@@ -8,6 +8,33 @@ permissions:
   pull-requests: write # the build-artifacts comment
 
 jobs:
+  # Detect whether this PR touches anything that can affect the NATIVE iOS build
+  # (dependencies, native config, or local native modules). A pure-JS/TS change
+  # can't break the native build — RN JS is bundled by Metro at runtime, not
+  # compiled into the binary — so the expensive native build-ios job below only
+  # runs when this is true. The cheap bundle-ios job runs on every PR regardless.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # need the PR base commit to diff against
+      - id: filter
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          files=$(git diff --name-only "$base...$head")
+          echo "Changed files:"; echo "$files"
+          if echo "$files" | grep -qE '^(pnpm-lock\.yaml|package\.json|packages/mobile/(package\.json|app\.json|eas\.json|modules/)|\.github/workflows/ci\.yml)'; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+            echo "-> native inputs changed: full iOS build WILL run"
+          else
+            echo "native=false" >> "$GITHUB_OUTPUT"
+            echo "-> no native changes: full iOS build skipped (bundle-ios still runs)"
+          fi
+
   build:
     # Build the app on all three platforms on every PR:
     # runs the full electron-builder package UNSIGNED and WITHOUT publishing,
@@ -110,18 +137,53 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  build-ios:
-    # Build the iOS app on every PR so iOS/native breakage (expo prebuild, pod
-    # install, the ExpoModulesJSI xcframework / Swift-toolchain version, native
-    # module compile) is caught pre-merge — the same class of failure that
-    # blocked a release before. This is a SIMULATOR build: no code-signing, so
-    # it needs NO distribution cert / provisioning profile and is NOT submitted
-    # to TestFlight. The real signed TestFlight build stays in
-    # release-please.yml; this just proves the app compiles.
+  bundle-ios:
+    # Cheap iOS compile gate on EVERY PR: bundle the JS for iOS with Metro +
+    # Hermes (runs on ubuntu — no Xcode, no native build, ~2 min). Catches
+    # import/resolver/Hermes/syntax breakage that tsc misses (e.g. the Metro
+    # .js->.ts core-resolver shim). The full native build-ios job only runs when
+    # native inputs change; this proves the app's JS still bundles on every PR.
     #
-    # Skip release-please PRs, same as the desktop build job above.
+    # Skip release-please PRs, same gate as the build job.
     if: >-
       ${{ !(
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'release-please--')
+      ) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        # version read from package.json "packageManager"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Metro + Hermes bundle for iOS. A bundling / module-resolution / syntax
+      # error fails this step. No native toolchain involved.
+      - name: Bundle iOS JS (Metro + Hermes)
+        run: pnpm --filter @musex/mobile exec expo export --platform ios --output-dir "$RUNNER_TEMP/expo-export-ios"
+
+  build-ios:
+    # Full native iOS simulator build — the only check that catches NATIVE
+    # breakage (expo prebuild, pod install, the ExpoModulesJSI xcframework /
+    # Swift-toolchain version, native module compile). It only runs when this PR
+    # changes native inputs (deps / app.json / eas.json / native modules) — a
+    # pure-JS change can't affect the native build, and bundle-ios already covers
+    # the JS. SIMULATOR build: no code-signing, no creds, not submitted.
+    #
+    # Gate: native inputs changed AND not a release-please PR.
+    needs: changes
+    if: >-
+      ${{ needs.changes.outputs.native == 'true' && !(
       github.event_name == 'pull_request' &&
       github.event.pull_request.user.login == 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
