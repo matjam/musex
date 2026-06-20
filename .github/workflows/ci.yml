@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
 
 permissions:
@@ -12,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    # Build the app on all three platforms on every PR (and push to main):
+    # Build the app on all three platforms on every PR:
     # runs the full electron-builder package UNSIGNED and WITHOUT publishing,
     # so packaging breakage (the win block, mpv bundling, icons, nsis/dmg) and
     # platform-specific test/lint/typecheck failures are caught pre-merge — not
@@ -23,8 +20,7 @@ jobs:
     # release build — so a full 3-platform build there is pure redundancy (and a
     # bot-authored PR that would otherwise sit awaiting Actions approval). Gate
     # on the BOT IDENTITY + same-repo, not just the branch name (which anyone
-    # could spoof to skip CI on their own PR). Push to main has an empty
-    # head_ref / no pull_request, so it still builds.
+    # could spoof to skip CI on their own PR).
     if: >-
       ${{ !(
       github.event_name == 'pull_request' &&
