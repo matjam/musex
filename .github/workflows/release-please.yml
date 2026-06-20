@@ -253,24 +253,55 @@ jobs:
           jq --arg bn "$GITHUB_RUN_NUMBER" '.expo.ios.buildNumber = $bn' app.json > "$tmp"
           mv "$tmp" app.json
 
+      # ExpoModulesJSI's apple/Package.swift declares `swift-tools-version: 6.2`,
+      # which needs Swift 6.2 = Xcode 26+. The runner's DEFAULT Xcode is 16.4
+      # (Swift 6.1), so SwiftPM can't parse the manifest and the ExpoModulesJSI
+      # xcframework build fails ("Could not resolve package dependencies"). Force
+      # the newest installed Xcode; build-xcframework.sh forwards DEVELOPER_DIR
+      # into its nested `env -i` xcodebuild, so the whole build uses it.
+      - name: Select newest Xcode (need >= 26 for swift-tools 6.2)
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "DEVELOPER_DIR=$newest/Contents/Developer" >> "$GITHUB_ENV"
+          echo "Selected Xcode: $newest"
+
       # `eas build --local` runs prebuild + pod install + xcodebuild on the
       # runner. Signing credentials (Distribution cert + provisioning profile)
       # are pulled from EAS via EXPO_TOKEN — created once during bootstrap.
+      #
+      # SECURITY — output is redacted: `eas build --local` echoes the build job
+      # as a base64 argv to eas-cli-local-build-plugin, and that payload embeds
+      # the iOS signing credentials (distribution cert .p12 + password). On this
+      # PUBLIC repo that would leak into the Actions log. The sed filter replaces
+      # any 200+ char base64-ish token with ***REDACTED*** before it's logged.
       - name: Build iOS app (.ipa)
         working-directory: packages/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/musex.ipa"
+        run: |
+          eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/musex.ipa" 2>&1 \
+            | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g'
+          # Propagate eas's real exit code — the sed pipe would otherwise mask a
+          # build failure as success.
+          test "${PIPESTATUS[0]}" -eq 0
+          # Belt-and-suspenders: a green eas exit with no IPA is still a failure.
+          test -f "$RUNNER_TEMP/musex.ipa"
 
       # Upload to App Store Connect -> TestFlight. The App Store Connect API key
       # is stored on EAS servers (generated during bootstrap), so EXPO_TOKEN is
       # the ONLY secret needed; the target app (ascAppId) is set in eas.json.
       # iOS isn't a downloadable artifact, so there is no `gh release upload`.
+      # Same base64-payload redaction as the build step (eas submit serializes
+      # the ASC API key the same way). Only runs on a real release — a manual
+      # workflow_dispatch builds but does not submit.
       - name: Submit to TestFlight
+        if: ${{ needs.release-please.outputs.release_created == 'true' }}
         working-directory: packages/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit --platform ios --profile production --path "$RUNNER_TEMP/musex.ipa" --non-interactive
+        run: |
+          eas submit --platform ios --profile production --path "$RUNNER_TEMP/musex.ipa" --non-interactive 2>&1 \
+            | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g'
 
   # Runs after all platform builds complete (always, so it fires even on failure).
   # - All builds succeeded → publish the draft release so it becomes visible.
