@@ -27,15 +27,7 @@
       "expo-audio",
       "expo-secure-store",
       "expo-image",
-      "expo-web-browser",
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "buildReactNativeFromSource": true
-          }
-        }
-      ]
+      "expo-web-browser"
     ],
     "extra": {
       "router": {},

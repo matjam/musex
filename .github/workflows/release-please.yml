@@ -257,26 +257,15 @@ jobs:
       # runner. Signing credentials (Distribution cert + provisioning profile)
       # are pulled from EAS via EXPO_TOKEN — created once during bootstrap.
       #
-      # EXPO_USE_SOURCE=1: compile Expo modules FROM SOURCE instead of as
-      # precompiled xcframeworks. The default (SDK 54+) prebuilt path adds a
-      # "[CP-User] Build ExpoModulesJSI xcframework" archive script phase whose
-      # nested xcodebuild does its own SPM resolution and fails on the CI runner
-      # with "Could not resolve package dependencies", aborting the archive.
-      # Building from source removes that phase. Must be set at pod-install time,
-      # which `eas build --local` runs internally, so it's a job env var.
-      #
       # SECURITY — output is redacted: `eas build --local` echoes the build job
       # as a base64 argv to eas-cli-local-build-plugin, and that payload embeds
       # the iOS signing credentials (distribution cert .p12 + password). On this
       # PUBLIC repo that would leak into the Actions log. The sed filter replaces
       # any 200+ char base64-ish token with ***REDACTED*** before it's logged.
-      # The default shell runs with `pipefail`, so eas's non-zero exit still
-      # fails the step. Short error lines (e.g. xcodebuild errors) are untouched.
       - name: Build iOS app (.ipa)
         working-directory: packages/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_USE_SOURCE: "1"
         run: |
           eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/musex.ipa" 2>&1 \
             | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g'
