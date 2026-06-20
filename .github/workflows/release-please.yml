@@ -262,3 +262,24 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas submit --platform ios --profile production --path "$RUNNER_TEMP/musex.ipa" --non-interactive
+
+  # If release-please cut a release but one or more platform builds failed,
+  # delete the release + tag so the repo isn't left with a partial release
+  # (missing artifacts). The next commit that triggers a fix will recreate it.
+  # Only runs on release events (not workflow_dispatch rebuilds of existing tags).
+  cleanup-failed-release:
+    needs: [release-please, build-macos, build-linux, build-windows, build-ios]
+    if: >-
+      ${{ always() &&
+          needs.release-please.outputs.release_created == 'true' &&
+          (needs.build-macos.result   == 'failure' ||
+           needs.build-linux.result   == 'failure' ||
+           needs.build-windows.result == 'failure' ||
+           needs.build-ios.result     == 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete partial release and tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release delete "$TAG_NAME" --repo matjam/musex --yes --cleanup-tag
