@@ -42,39 +42,47 @@ jobs:
           jq --arg bn "$GITHUB_RUN_NUMBER" '.expo.ios.buildNumber = $bn' app.json > "$tmp"
           mv "$tmp" app.json
 
-      # Build only — NOT submitted. EXPO_USE_SOURCE=1 builds Expo modules from
-      # source (avoids the ExpoModulesJSI xcframework "Could not resolve package
-      # dependencies" failure). The sed filter redacts the base64 job payload
-      # (which embeds signing credentials) so it can't leak into this PUBLIC
-      # repo's logs; pipefail keeps eas's non-zero exit fatal.
+      # Build only — NOT submitted.
+      # - buildReactNativeFromSource (app.json expo-build-properties) + EXPO_USE_SOURCE=1
+      #   compile RN core AND Expo modules from source, removing the prebuilt
+      #   "Build ExpoModulesJSI xcframework" archive phase that failed with
+      #   "Could not resolve package dependencies".
+      # - EAS_LOCAL_BUILD_SKIP_CLEANUP=1 + EAS_LOCAL_BUILD_WORKINGDIR keep eas's
+      #   working dir (with the detailed xcodebuild log) after exit, so the dump
+      #   step below can read it if the build still fails.
+      # - sed redacts the base64 job payload (embeds signing creds) so it can't
+      #   leak into this PUBLIC repo's logs.
+      # - `exit ${PIPESTATUS[0]}` propagates eas's real exit code (the sed pipe
+      #   would otherwise mask a failure as success).
       - name: Build iOS app (.ipa) — build only, not submitted
         working-directory: packages/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_USE_SOURCE: "1"
+          EAS_LOCAL_BUILD_SKIP_CLEANUP: "1"
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-local
         run: |
           eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/musex.ipa" 2>&1 \
             | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g'
+          exit ${PIPESTATUS[0]}
 
       - name: Confirm IPA was produced
         run: |
           ls -la "$RUNNER_TEMP/musex.ipa"
           echo "iOS build succeeded (not submitted)."
 
-      # DIAGNOSTIC: eas runs the archive as `xcodebuild ... | tee musex-*.log >
-      # /dev/null`, so the detailed xcodebuild output (the real reason behind
-      # "Could not resolve package dependencies") is written to a file and never
-      # printed. On failure, find that log and print the relevant lines
-      # (redacted) so we can see the actual error instead of the summary.
+      # DIAGNOSTIC (only matters if the build still fails): eas runs the archive
+      # as `xcodebuild ... | tee musex-*.log > /dev/null`, so the detailed output
+      # (the real reason behind a failure) is written to a file, not printed.
+      # SKIP_CLEANUP keeps that file under EAS_LOCAL_BUILD_WORKINGDIR; print the
+      # tail (redacted) so we see the actual error instead of the summary.
       - name: Dump detailed xcodebuild log on failure (redacted)
         if: failure()
         run: |
-          echo "Locating eas-build-local detailed log(s)..."
-          logs=$(find /private/var/folders /var/folders "${RUNNER_TEMP}" -type f -name '*.log' 2>/dev/null | grep -i 'eas-build-local' || true)
+          echo "Searching ${RUNNER_TEMP}/eas-local for the detailed xcodebuild log..."
+          logs=$(find "${RUNNER_TEMP}/eas-local" -type f -name '*.log' 2>/dev/null || true)
           echo "candidates:"; echo "$logs"
           for f in $logs; do
-            echo "================= $f ================="
-            grep -niE 'could not resolve|error:|cannot|unable to|denied|sandbox|no such file|missing|package|\.swift|\.podspec|http|timed out|fatal' "$f" 2>/dev/null \
-              | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g' \
-              | tail -150
+            echo "================= $f (tail 200, redacted) ================="
+            sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g' "$f" | tail -200
           done
