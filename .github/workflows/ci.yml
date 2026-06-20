@@ -47,6 +47,14 @@ jobs:
             artifacts: |
               packages/desktop/release/*.exe
     runs-on: ${{ matrix.os }}
+    # Redirect the two big download caches into the workspace so one cache step
+    # (below) can capture them on every OS: @electron/get's Electron binary zip
+    # (ELECTRON_CACHE, used by electron's install postinstall) and
+    # electron-builder's tool downloads (ELECTRON_BUILDER_CACHE — NSIS +
+    # winCodeSign on Windows, ~100MB+).
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
     steps:
       - uses: actions/checkout@v6
 
@@ -57,6 +65,23 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      # Cache the heavy, deterministic downloads that don't change between runs:
+      # the vendored mpv binary (`pnpm vendor` is idempotent — a hit no-ops) and
+      # the Electron + electron-builder tool downloads. Keyed on the lockfile +
+      # the mpv pin script, so a dep bump or mpv-version change busts it; the
+      # restore-keys fall back to the newest same-OS cache otherwise. pnpm's own
+      # store is already cached by setup-node above.
+      - name: Cache mpv + Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/mpv
+            ${{ github.workspace }}/.cache/electron
+            ${{ github.workspace }}/.cache/electron-builder
+          key: build-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/fetch-mpv.mjs') }}
+          restore-keys: |
+            build-cache-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
