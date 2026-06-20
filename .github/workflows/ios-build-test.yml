@@ -3,15 +3,10 @@ name: iOS Build Test
 # Manually-triggered iOS build for verifying the build works WITHOUT cutting a
 # release or submitting to TestFlight. Run it from the Actions tab → "iOS Build
 # Test" → "Run workflow". It builds the .ipa with `eas build --local` and stops
-# — no `eas submit`. Use this to confirm a build fix before relying on it in the
-# real release pipeline (release-please.yml's build-ios job).
+# — no `eas submit`. Use this to confirm an iOS build before relying on it in
+# the real release pipeline (release-please.yml's build-ios job).
 on:
   workflow_dispatch:
-  # TEMPORARY: run automatically on this fix branch so the build can be verified
-  # without merging to main first. REMOVE this push trigger before merging.
-  push:
-    branches:
-      - fix/ios-build-from-source-and-redact-logs
 
 permissions:
   contents: read
@@ -52,23 +47,16 @@ jobs:
         run: |
           newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
           echo "DEVELOPER_DIR=$newest/Contents/Developer" >> "$GITHUB_ENV"
-          echo "Available: $(ls -d /Applications/Xcode_*.app | tr '\n' ' ')"
-          echo "Selected:  $newest"
-          DEVELOPER_DIR="$newest/Contents/Developer" xcodebuild -version
-          DEVELOPER_DIR="$newest/Contents/Developer" swift --version
+          echo "Selected Xcode: $newest"
 
-      # Build only — NOT submitted. EAS_LOCAL_BUILD_SKIP_CLEANUP=1 +
-      # EAS_LOCAL_BUILD_WORKINGDIR keep eas's working dir (with the detailed
-      # xcodebuild log) after exit so the dump step can read it on failure. sed
-      # redacts the base64 job payload (signing creds) from this PUBLIC repo's
-      # logs. `exit ${PIPESTATUS[0]}` propagates eas's real exit code (the sed
-      # pipe would otherwise mask a failure as success).
+      # Build only — NOT submitted. The sed filter redacts the base64 job payload
+      # (which embeds signing credentials) so it can't leak into this PUBLIC
+      # repo's logs. `exit ${PIPESTATUS[0]}` propagates eas's real exit code (the
+      # sed pipe would otherwise mask a failure as success).
       - name: Build iOS app (.ipa) — build only, not submitted
         working-directory: packages/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EAS_LOCAL_BUILD_SKIP_CLEANUP: "1"
-          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-local
         run: |
           eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/musex.ipa" 2>&1 \
             | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g'
@@ -78,20 +66,3 @@ jobs:
         run: |
           ls -la "$RUNNER_TEMP/musex.ipa"
           echo "iOS build succeeded (not submitted)."
-
-      # DIAGNOSTIC: the real failure (the ExpoModulesJSI xcframework SPM error)
-      # is mid-archive in the detailed log, which eas writes but doesn't print.
-      # SKIP_CLEANUP keeps it under EAS_LOCAL_BUILD_WORKINGDIR. GREP the whole
-      # file (with context) for resolution/error lines — a tail misses it.
-      - name: Dump detailed xcodebuild error on failure (redacted)
-        if: failure()
-        run: |
-          echo "Searching ${RUNNER_TEMP}/eas-local for detailed logs..."
-          logs=$(find "${RUNNER_TEMP}/eas-local" -type f -name '*.log' 2>/dev/null || true)
-          echo "candidates:"; echo "$logs"
-          for f in $logs; do
-            echo "================= $f (matches + context, redacted) ================="
-            grep -niE -A12 -B3 'could not resolve|error:|cannot |unable to|denied|sandbox|no such|missing|because:|fatal|swift package|resolvepackage|computing|fetching|cloning|xcframework' "$f" 2>/dev/null \
-              | sed -E 's|[A-Za-z0-9+/=_-]{200,}|***REDACTED***|g' \
-              | head -400
-          done
