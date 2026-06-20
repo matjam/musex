@@ -17,7 +17,12 @@
         "simulator": false
       }
     },
-    "production": {}
+    "production": {},
+    "ci-simulator": {
+      "ios": {
+        "simulator": true
+      }
+    }
   },
   "submit": {
     "production": {
