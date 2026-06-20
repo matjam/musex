@@ -9,6 +9,14 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 const server = {
   id: "srv",
   name: "Tower",
@@ -429,5 +437,71 @@ describe("base-url re-resolution on network transition", () => {
     await gw.listMusicLibraries(twoConn, "TOK"); // caches local while authorized
     authOk = false;
     await expect(gw.probe("srv", "TOK")).rejects.toBeInstanceOf(PlexAuthError);
+  });
+});
+
+describe("parallel connection probing", () => {
+  const twoConn = {
+    id: "srv",
+    name: "Tower",
+    connections: [
+      { uri: "https://lan.plex.direct:32400", local: true, relay: false },
+      { uri: "https://wan.plex.direct:32400", local: false, relay: false },
+    ],
+  };
+
+  it("races all connections — a faster one wins, we don't wait for a slower higher-preference one", async () => {
+    // The local connection is preferred but SLOW to answer (e.g. off-LAN, where
+    // the old sequential probe blocked on it until timeout). The remote answers
+    // immediately and must win without waiting for the local one.
+    const lan = deferred<Response>();
+    const fetchFn = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const u = String(args[0]);
+      if (u.startsWith("https://lan.plex.direct:32400")) return lan.promise;
+      return jsonResponse({ MediaContainer: { Directory: [] } });
+    });
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+
+    await gw.listMusicLibraries(twoConn, "TOK");
+    expect(gw.baseUrlFor("srv")).toBe("https://wan.plex.direct:32400");
+
+    lan.resolve(jsonResponse({ MediaContainer: { Directory: [] } })); // release the pending probe
+  });
+
+  it("never picks a relay connection over a reachable direct one, even if the relay answers first", async () => {
+    const relayFirst = {
+      id: "srv",
+      name: "Tower",
+      connections: [
+        { uri: "https://relay.plex.direct:32400", local: false, relay: true },
+        { uri: "https://wan.plex.direct:32400", local: false, relay: false },
+      ],
+    };
+    const fetchFn = vi.fn(async () => jsonResponse({ MediaContainer: { Directory: [] } }));
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+
+    await gw.listMusicLibraries(relayFirst, "TOK");
+    expect(gw.baseUrlFor("srv")).toBe("https://wan.plex.direct:32400");
+  });
+
+  it("falls back to a relay connection when no direct connection is reachable", async () => {
+    const relayOnly = {
+      id: "srv",
+      name: "Tower",
+      connections: [
+        { uri: "https://wan.plex.direct:32400", local: false, relay: false },
+        { uri: "https://relay.plex.direct:32400", local: false, relay: true },
+      ],
+    };
+    const fetchFn = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const u = String(args[0]);
+      if (u.startsWith("https://wan.plex.direct:32400"))
+        throw new TypeError("Network request failed");
+      return jsonResponse({ MediaContainer: { Directory: [] } });
+    });
+    const gw = new PlexGatewayImpl(fetchFn, "CID");
+
+    await gw.listMusicLibraries(relayOnly, "TOK");
+    expect(gw.baseUrlFor("srv")).toBe("https://relay.plex.direct:32400");
   });
 });

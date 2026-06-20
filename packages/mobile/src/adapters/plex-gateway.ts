@@ -120,16 +120,55 @@ export class PlexGatewayImpl implements PlexGateway {
     return uri;
   }
 
-  /** Probe a server's connections in preference order (local, then remote
-   *  non-relay, then relay) and return the first that responds OK, or null if
-   *  none are reachable. Does not touch the cache. Throws PlexAuthError if a
-   *  connection rejects the token. */
-  private async probeConnections(server: Server, token: string): Promise<string | null> {
-    const ordered = [...server.connections].sort((a, b) => score(a) - score(b));
-    for (const conn of ordered) {
-      if (await this.reachable(conn.uri, token)) return conn.uri;
-    }
-    return null;
+  /** Probe ALL of a server's connections SIMULTANEOUSLY and resolve to the first
+   *  reachable one — so we never wait for a dead connection (e.g. the LAN address
+   *  when we're off-network) to time out before trying the others. A direct
+   *  connection (local or remote) wins as soon as it responds; a relay connection
+   *  is only used as a fallback when no direct connection is reachable (relay is
+   *  slower + bandwidth-limited, so we don't want to pick it over a working direct
+   *  one just because it answered first). Resolves null if none respond. Throws
+   *  PlexAuthError only if the token is rejected and nothing else succeeds. Does
+   *  not touch the cache. */
+  private probeConnections(server: Server, token: string): Promise<string | null> {
+    const conns = server.connections;
+    if (conns.length === 0) return Promise.resolve(null);
+    return new Promise<string | null>((resolve, reject) => {
+      let pending = conns.length;
+      let relayFallback: string | null = null;
+      let authError: PlexAuthError | null = null;
+      let settled = false;
+      const win = (uri: string): void => {
+        if (!settled) {
+          settled = true;
+          resolve(uri);
+        }
+      };
+      for (const conn of conns) {
+        this.reachable(conn.uri, token)
+          .then(
+            (ok) => {
+              if (!ok) return;
+              if (conn.relay)
+                relayFallback ??= conn.uri; // keep as a fallback, don't win on it
+              else win(conn.uri); // direct connection — first to respond wins
+            },
+            (err) => {
+              if (err instanceof PlexAuthError) authError = err;
+            },
+          )
+          .finally(() => {
+            pending -= 1;
+            if (pending === 0 && !settled) {
+              settled = true;
+              // Prefer a working relay over throwing: a reachable relay means the
+              // token is fine, so an auth error from a dead direct connection is moot.
+              if (relayFallback) resolve(relayFallback);
+              else if (authError) reject(authError);
+              else resolve(null);
+            }
+          });
+      }
+    });
   }
 
   private async reachable(uri: string, token: string): Promise<boolean> {
@@ -354,10 +393,4 @@ export class PlexGatewayImpl implements PlexGateway {
     const rating = typeof meta?.userRating === "number" ? meta.userRating : null;
     return rating;
   }
-}
-
-function score(c: { local: boolean; relay: boolean }): number {
-  if (c.local) return 0;
-  if (!c.relay) return 1;
-  return 2;
 }
