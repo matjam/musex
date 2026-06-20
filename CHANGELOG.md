@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.6](https://github.com/matjam/musex/compare/v0.16.5...v0.16.6) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ci:** fix biome format error in app.json and gate releases on build success ([#85](https://github.com/matjam/musex/issues/85)) ([856f030](https://github.com/matjam/musex/commit/856f03042ef54f114d1ec4fa55df6ae1f331d098))
+
 ## [0.16.5](https://github.com/matjam/musex/compare/v0.16.4...v0.16.5) (2026-06-20)
 
 

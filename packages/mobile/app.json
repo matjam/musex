@@ -4,14 +4,16 @@
     "slug": "musex",
     "owner": "stupendous-net",
     "scheme": "musex",
-    "version": "0.16.5",
+    "version": "0.16.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "net.stupendous.musex",
       "supportsTablet": false,
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocalNetworkUsageDescription": "musex connects to Plex Media Servers on your local network to stream your music library.",
         "NSAppTransportSecurity": {
@@ -20,7 +22,13 @@
       },
       "buildNumber": "2"
     },
-    "plugins": ["expo-router", "expo-audio", "expo-secure-store", "expo-image", "expo-web-browser"],
+    "plugins": [
+      "expo-router",
+      "expo-audio",
+      "expo-secure-store",
+      "expo-image",
+      "expo-web-browser"
+    ],
     "extra": {
       "router": {},
       "eas": {
