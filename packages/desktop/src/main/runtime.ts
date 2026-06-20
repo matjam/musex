@@ -1,7 +1,16 @@
+import { statfs } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DownloadJob, Library, Pin, Track } from "@musex/core";
-import { dedupeJobs, FollowService, isHttpUrl, reconcileRecords, TasteProfile } from "@musex/core";
+import type { DownloadJob, DownloadOrigin, Library, Pin, SyncPorts, Track } from "@musex/core";
+import {
+  dedupeJobs,
+  estimateSyncBytes,
+  FollowService,
+  isHttpUrl,
+  reconcileRecords,
+  runLibrarySync,
+  TasteProfile,
+} from "@musex/core";
 import type { TrackInfo } from "@musex/plugin-api";
 import { ProviderHub } from "@musex/plugin-host";
 import { app, shell } from "electron";
@@ -365,13 +374,19 @@ export class Runtime {
         persistence.setLibrary(fresh);
         this.libraries = this.libraries.map((l) => (l.id === fresh.id ? fresh : l));
         this.libraryChangedSink?.(fresh);
+        // The library changed → mirror it (download new, remove departed). No-op
+        // when sync is off.
+        void this.runLibrarySync();
       },
     });
 
     // Connectivity: gateway calls feed the monitor success/failure (see
     // ensureProxyEndpoint); a periodic probe recovers it automatically. Flips
     // are pushed to the renderer through the per-window sink.
-    this.connectivityMonitor.onChange((online) => this.connectivitySink?.(online));
+    this.connectivityMonitor.onChange((online) => {
+      this.connectivitySink?.(online);
+      if (online) void this.runLibrarySync(); // reconnected → catch the mirror up
+    });
     this.connectivityMonitor.start(() => this.probeReachability(), CONNECTIVITY_PROBE_INTERVAL_MS);
   }
 
@@ -410,6 +425,8 @@ export class Runtime {
   async restore(): Promise<void> {
     this.token = await this.tokenStore.load();
     this.libraryWatcher.setLibrary(persistence.getLibrary());
+    // Catch the mirror up on launch (no-op when sync is off / offline).
+    void this.runLibrarySync();
   }
 
   /** Debounced taste-profile persist: collapses bursts of plays/ratings into
@@ -480,12 +497,13 @@ export class Runtime {
    *  IDENTICALLY to what the stream proxy computes when the track streams
    *  (`cacheKey(serverId, media.partKey)`) — that's what makes the proxy serve
    *  the downloaded file first. Already-present/queued keys are dropped. */
-  async enqueueDownloads(tracks: Track[]): Promise<void> {
+  async enqueueDownloads(tracks: Track[], origin: DownloadOrigin = "manual"): Promise<void> {
     const jobs: DownloadJob[] = tracks.map((track) => ({
       key: cacheKey(track.serverId, track.media.partKey),
       serverId: track.serverId,
       plexPath: track.media.partKey,
       trackId: track.id,
+      origin,
       meta: {
         title: track.title,
         artistName: track.artistName,
@@ -505,6 +523,83 @@ export class Runtime {
     }));
     const fresh = dedupeJobs(jobs, new Set(this.downloadIndex.list().map((r) => r.key)));
     await this.downloadManager.enqueue(fresh);
+  }
+
+  // --- library sync (download-all mirror) ---
+
+  private syncInFlight: Promise<void> | null = null;
+
+  private syncPorts(): SyncPorts {
+    return {
+      isEnabled: () => persistence.getSyncEnabled(),
+      // Throws when offline (OfflineUnavailable / auth) or no library → runLibrarySync
+      // treats a rejection as "don't reconcile", so it never removes on a blip.
+      listAllTracks: async () => {
+        const lib = persistence.getLibrary();
+        if (!lib) throw new Error("no library");
+        return this.gateway.listAllTracks(lib, "title", this.requireToken());
+      },
+      downloadedRecords: () => this.downloadIndex.list(),
+      enqueue: (tracks) => this.enqueueDownloads(tracks, "sync"),
+      remove: (key) => this.downloadManager.removeDownload(key),
+    };
+  }
+
+  /** One reconcile pass; serialized so overlapping triggers (library change +
+   *  reconnect) don't run concurrently. No-ops when sync is disabled or the
+   *  library fetch fails (never deletes on a failed/offline fetch). */
+  runLibrarySync(): Promise<void> {
+    if (!persistence.getSyncEnabled()) return Promise.resolve();
+    if (this.syncInFlight) return this.syncInFlight;
+    const p = runLibrarySync(this.syncPorts())
+      .then(() => undefined)
+      .catch((err) => {
+        console.error("[musex sync] reconcile failed:", err);
+      })
+      .finally(() => {
+        this.syncInFlight = null;
+      });
+    this.syncInFlight = p;
+    return p;
+  }
+
+  getSyncEnabled(): boolean {
+    return persistence.getSyncEnabled();
+  }
+
+  /** Turn sync on (starts a reconcile) or off (deletes only sync-origin downloads). */
+  async setSyncEnabled(enabled: boolean): Promise<void> {
+    persistence.setSyncEnabled(enabled);
+    if (enabled) {
+      await this.runLibrarySync();
+    } else {
+      const syncKeys = this.downloadIndex
+        .list()
+        .filter((r) => r.origin === "sync")
+        .map((r) => r.key);
+      for (const key of syncKeys) await this.downloadManager.removeDownload(key);
+    }
+  }
+
+  /** Estimate download bytes + free disk for the confirm dialog; null if offline/unavailable. */
+  async estimateSync(): Promise<{ bytes: number; freeBytes: number; trackCount: number } | null> {
+    const lib = persistence.getLibrary();
+    if (!lib) return null;
+    let tracks: Track[];
+    try {
+      tracks = await this.gateway.listAllTracks(lib, "title", this.requireToken());
+    } catch {
+      return null;
+    }
+    const bytes = estimateSyncBytes(tracks, persistence.getStorageQuality());
+    let freeBytes = Number.POSITIVE_INFINITY;
+    try {
+      const fs = await statfs(app.getPath("userData"));
+      freeBytes = fs.bavail * fs.bsize;
+    } catch {
+      // statfs unsupported → leave Infinity (don't block the user on an estimate)
+    }
+    return { bytes, freeBytes, trackCount: tracks.length };
   }
 
   // ── Last.fm secret helpers (base64 safeStorage blobs in plugin-secrets dir) ─

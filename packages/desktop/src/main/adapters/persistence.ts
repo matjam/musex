@@ -64,6 +64,8 @@ export interface PersistedState {
   // Offline-download storage quality: keep the original file, or transcode to
   // MP3 at a chosen bitrate. Records live in their own store (downloadsStore).
   storageQuality: StorageQuality;
+  // "Sync entire library to this device" toggle (download-all mirror).
+  librarySyncEnabled: boolean;
   // Per-device follows / favorites (artists routed through the acquisition
   // provider; album/track are local-only). Backs the SP0 FollowStore.
   follows: FollowRecord[];
@@ -97,6 +99,7 @@ const store = new Store<PersistedState>({
     pluginSources: {},
     lastfm: DEFAULT_LASTFM_CONFIG,
     storageQuality: DEFAULT_STORAGE_QUALITY,
+    librarySyncEnabled: false,
     follows: [],
   },
 });
@@ -282,6 +285,12 @@ export const persistence = {
   },
   setStorageQuality(q: StorageQuality): void {
     store.set("storageQuality", q);
+  },
+  getSyncEnabled(): boolean {
+    return store.get("librarySyncEnabled") ?? false;
+  },
+  setSyncEnabled(enabled: boolean): void {
+    store.set("librarySyncEnabled", enabled);
   },
   getFollows(): FollowRecord[] {
     return store.get("follows") ?? [];

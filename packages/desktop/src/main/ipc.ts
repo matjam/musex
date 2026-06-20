@@ -214,6 +214,7 @@ export function registerIpc(rt: Runtime): void {
     const lib = rt.findLibrary(libraryId);
     persistence.setLibrary(lib);
     rt.libraryWatcher.setLibrary(lib);
+    void rt.runLibrarySync(); // mirror the newly-selected library (no-op when sync is off)
   });
 
   // Browse handlers also register the stream-proxy endpoint for the server, because
@@ -1188,6 +1189,14 @@ export function registerIpc(rt: Runtime): void {
     }
     persistence.setStorageQuality(q as StorageQuality);
   });
+
+  // ── Library sync (download-all mirror) ─────────────────────────────────────
+  ipcMain.handle(IPC.syncGetEnabled, () => rt.getSyncEnabled());
+  ipcMain.handle(IPC.syncSetEnabled, async (_e, enabled: unknown) => {
+    if (typeof enabled !== "boolean") throw new Error("invalid sync enabled flag");
+    await rt.setSyncEnabled(enabled);
+  });
+  ipcMain.handle(IPC.syncEstimate, () => rt.estimateSync());
 
   // ── Follow (= acquire + monitor for artists; local favorite otherwise) ─────
   ipcMain.handle(IPC.followSet, async (_e, ref: unknown, value: unknown) => {

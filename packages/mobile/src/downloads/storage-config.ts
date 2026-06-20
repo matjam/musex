@@ -3,13 +3,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "musex.storage-quality";
 
+// iOS defaults to AAC 256: a whole-library sync to a phone in lossless would be
+// hundreds of GB, so the on-device default is the space-efficient transcode. A
+// user can still switch to Original in Settings; that persisted choice wins.
 const DEFAULT_STORAGE_QUALITY: StorageQuality = {
-  mode: "original",
+  mode: "aac",
   bitrateKbps: 256,
 };
 
 /** Validate and clamp a raw storage-quality object.
- *  - mode must be "original" or "aac"; falls back to "original"
+ *  - mode must be "original" or "aac"; falls back to the default ("aac")
  *  - bitrateKbps must be in TRANSCODE_BITRATES; falls back to 256
  */
 function validate(raw: unknown): StorageQuality {

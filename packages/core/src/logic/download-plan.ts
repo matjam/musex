@@ -1,3 +1,5 @@
+import type { DownloadOrigin } from "./download-state.js";
+
 /** Metadata snapshot kept with a download so it's browsable AND playable
  *  offline. The media fields (container/audioCodec/partId/bitrate) carry the
  *  rest of a Track's MediaInfo so a record can be reconstructed into a fully
@@ -27,6 +29,9 @@ export interface DownloadJob {
   plexPath: string;
   trackId: string;
   meta: DownloadMeta;
+  /** Who requested this download. Absent ⇒ "manual" (a user pin). The
+   *  library-sync mirror sets "sync" so disabling sync only removes its own. */
+  origin?: DownloadOrigin;
 }
 
 /** Drop jobs already present (by key) and de-duplicate within the batch, preserving order. */

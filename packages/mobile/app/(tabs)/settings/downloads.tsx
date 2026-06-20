@@ -1,7 +1,7 @@
 import type { StorageQuality } from "@musex/core";
 import { formatBytes, TRANSCODE_BITRATES } from "@musex/core";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { useStore } from "../../../src/state/store";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { theme } from "../../../src/ui/theme";
@@ -13,7 +13,69 @@ export default function DownloadsSettings() {
     downloadsList,
     removeDownload,
     totalDownloadBytes,
+    syncEnabled,
+    estimateSync,
+    setSyncEnabled,
+    connectivity,
   } = useStore();
+
+  const [syncBusy, setSyncBusy] = useState(false);
+
+  function handleSyncToggle(next: boolean) {
+    if (syncBusy) return;
+    if (!next) {
+      Alert.alert(
+        "Turn off library sync",
+        "This deletes all music downloaded by sync from this device. Tracks you pinned manually are kept.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Turn off & delete",
+            style: "destructive",
+            onPress: () => {
+              setSyncBusy(true);
+              void setSyncEnabled(false).finally(() => setSyncBusy(false));
+            },
+          },
+        ],
+      );
+      return;
+    }
+    if (connectivity !== "online") {
+      Alert.alert("You're offline", "Connect to the internet to start syncing your library.");
+      return;
+    }
+    setSyncBusy(true);
+    void estimateSync()
+      .then((est) => {
+        if (!est) {
+          Alert.alert("Couldn't estimate", "Unable to read your library right now. Try again.");
+          return;
+        }
+        if (est.bytes > est.freeBytes) {
+          Alert.alert(
+            "Not enough space",
+            `Syncing your library needs about ${formatBytes(est.bytes)}, but only ${formatBytes(est.freeBytes)} is free. Free up space or switch to AAC at a lower bitrate.`,
+          );
+          return;
+        }
+        Alert.alert(
+          "Sync entire library?",
+          `Download ${est.trackCount} tracks (about ${formatBytes(est.bytes)}). ${formatBytes(est.freeBytes)} free. New music added to Plex will download automatically; music removed from Plex will be deleted here.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Download",
+              onPress: () => {
+                setSyncBusy(true);
+                void setSyncEnabled(true).finally(() => setSyncBusy(false));
+              },
+            },
+          ],
+        );
+      })
+      .finally(() => setSyncBusy(false));
+  }
 
   const current = getStorageQuality();
   const [mode, setMode] = useState<StorageQuality["mode"]>(current.mode);
@@ -58,6 +120,51 @@ export default function DownloadsSettings() {
           textTransform: "uppercase",
           paddingHorizontal: theme.space(2),
           paddingTop: theme.space(2),
+          paddingBottom: 6,
+        }}
+      >
+        Library Sync
+      </Text>
+      <View
+        style={{
+          backgroundColor: theme.surface,
+          borderRadius: 10,
+          marginHorizontal: theme.space(2),
+          marginBottom: theme.space(2),
+          borderWidth: 1,
+          borderColor: theme.border,
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: theme.space(2),
+            paddingVertical: theme.space(1.5),
+          }}
+        >
+          <View style={{ flex: 1, paddingRight: theme.space(1.5) }}>
+            <Text style={{ color: theme.text, fontSize: 15 }}>Sync entire library</Text>
+            <Text style={{ color: theme.textDim, fontSize: 12, marginTop: 2 }}>
+              Keep every track on this device, in sync with Plex.
+            </Text>
+          </View>
+          {syncBusy ? (
+            <ActivityIndicator color={theme.textDim} />
+          ) : (
+            <Switch value={syncEnabled} onValueChange={handleSyncToggle} />
+          )}
+        </View>
+      </View>
+
+      <Text
+        style={{
+          color: theme.textDim,
+          fontSize: 12,
+          textTransform: "uppercase",
+          paddingHorizontal: theme.space(2),
+          paddingTop: theme.space(1),
           paddingBottom: 6,
         }}
       >
