@@ -187,6 +187,8 @@ interface Store {
   /** Reconstruct playable Tracks from downloaded records with re-baked art URLs. */
   downloadedTracks: () => Track[];
   downloadsList: () => DownloadRecord[];
+  /** Increments as downloads progress — read it to re-render download-derived UI live. */
+  downloadsVersion: number;
   getStorageQuality: () => StorageQuality;
   setStorageQuality: (q: StorageQuality) => Promise<void>;
   totalDownloadBytes: () => number;
@@ -266,6 +268,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSyncEnabledState(enabled);
   }, []);
 
+  // Bumped (throttled) on every download progress event so the Downloaded list
+  // and album "downloaded" badges re-render as tracks land — no polling, no
+  // waiting for the whole sync to finish.
+  const [downloadsVersion, setDownloadsVersion] = useState(0);
+  const dlVersionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bumpDownloadsVersion = useCallback(() => {
+    if (dlVersionTimer.current) return;
+    dlVersionTimer.current = setTimeout(() => {
+      dlVersionTimer.current = null;
+      setDownloadsVersion((v) => v + 1);
+    }, 400);
+  }, []);
+
   const downloadManager = useMemo(
     () =>
       new DownloadManager({
@@ -278,11 +293,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
         clientId: CLIENT_ID,
         getQuality: () => storageQualityRef.current,
-        onProgress: () => {
-          // Progress updates trigger no state change here; UI polls downloadsList().
-        },
+        onProgress: () => bumpDownloadsVersion(),
       }),
-    [downloadStore, downloadIndex, gateway],
+    [downloadStore, downloadIndex, gateway, bumpDownloadsVersion],
   );
 
   // Ref so the connectivity probe always sees the current library without
@@ -526,7 +539,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSyncEnabledLocal(storedSync);
       // Load the download index and reconcile with what's actually on disk.
       await downloadIndex.load();
-      await downloadIndex.reconcile(downloadStore.presentNonEmptyKeys());
+      const presentKeys = downloadStore.presentNonEmptyKeys();
+      await downloadIndex.reconcile(presentKeys);
+      // Resume an interrupted sync: records stuck "queued"/"downloading" from a
+      // previous launch are resolved against disk (present → downloaded, else
+      // dropped so the next sync re-queues them) — never re-download a finished track.
+      downloadIndex.resolveStaleInFlight(presentKeys);
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
       const token = await tokenStore.load();
@@ -748,9 +766,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") void runSync();
+      // Leaving the foreground: flush any debounced index write so progress isn't
+      // lost if iOS suspends/kills the app.
+      else void downloadIndex.flush();
     });
     return () => sub.remove();
-  }, [runSync]);
+  }, [runSync, downloadIndex]);
 
   /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
    *  with the current server base URL and token so stale baked proxy URLs from
@@ -819,6 +840,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     removeDownload,
     downloadedTracks,
     downloadsList: () => downloadIndex.all(),
+    downloadsVersion,
     getStorageQuality,
     setStorageQuality,
     totalDownloadBytes,

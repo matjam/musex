@@ -44,6 +44,7 @@ export default function LibraryBrowse() {
     playTracks,
     downloadedTracks,
     downloadsList,
+    downloadsVersion,
     removeDownload,
   } = useStore();
   const router = useRouter();
@@ -159,6 +160,14 @@ export default function LibraryBrowse() {
       }
     };
   }, [segment, refreshDownloads]);
+
+  // Live-refresh as tracks land (each progress event bumps downloadsVersion), so
+  // the Downloaded list + active strip populate during a sync without waiting on
+  // the 1s poll.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
+  useEffect(() => {
+    if (segment === "Downloaded") refreshDownloads();
+  }, [downloadsVersion, segment, refreshDownloads]);
 
   const { letters, indexOf } = useMemo(
     () =>
