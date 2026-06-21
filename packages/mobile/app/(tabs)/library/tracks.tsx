@@ -18,13 +18,22 @@ import { theme } from "../../../src/ui/theme";
 
 export default function AlbumTracks() {
   const { albumId, updatedAt } = useLocalSearchParams<{ albumId: string; updatedAt?: string }>();
-  const { state, gateway, session, playTracks, artBaseFor, token, downloadsList, connectivity } =
-    useStore();
+  const {
+    state,
+    gateway,
+    session,
+    playTracks,
+    artBaseFor,
+    token,
+    downloadsList,
+    downloadsVersion,
+    connectivity,
+  } = useStore();
   const offline = connectivity === "offline";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate re-render trigger (recompute as downloads land), not referenced in the body.
   const downloadLookup = useMemo(
     () => buildDownloadLookup(downloadsList()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [downloadsList],
+    [downloadsList, downloadsVersion],
   );
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);

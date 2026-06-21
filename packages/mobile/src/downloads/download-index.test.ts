@@ -41,6 +41,7 @@ describe("DownloadIndex", () => {
     await idx.upsert(rec("a"));
     expect(idx.get("a")?.state).toBe("downloaded");
     expect(idx.all()).toHaveLength(1);
+    await idx.flush(); // persistence is debounced; force the write before reloading
     const idx2 = new DownloadIndex();
     await idx2.load();
     expect(idx2.get("a")?.trackId).toBe("a");
@@ -53,5 +54,17 @@ describe("DownloadIndex", () => {
     await idx.reconcile(new Set(["a"])); // only "a" present on disk
     expect(idx.get("a")?.state).toBe("downloaded");
     expect(idx.get("b")?.state).toBe("missing");
+  });
+
+  it("resolveStaleInFlight: committed file → downloaded, otherwise dropped", async () => {
+    const idx = new DownloadIndex();
+    await idx.load();
+    await idx.upsert(rec("done", "downloading")); // finished, state never advanced
+    await idx.upsert(rec("partial", "queued")); // never finished, no file
+    await idx.upsert(rec("keep", "downloaded")); // already complete
+    idx.resolveStaleInFlight(new Set(["done", "keep"])); // "done"+"keep" on disk
+    expect(idx.get("done")?.state).toBe("downloaded");
+    expect(idx.get("partial")).toBeUndefined();
+    expect(idx.get("keep")?.state).toBe("downloaded");
   });
 });
