@@ -221,6 +221,98 @@ function AppSection() {
 
 /** Download storage quality: original file or AAC at a chosen bitrate.
  *  Optimistic update — reverts on rejection, shows error-text. */
+function LibrarySyncSection() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.musex
+      .syncGetEnabled()
+      .then((e) => {
+        if (!cancelled) setEnabled(e);
+      })
+      .catch(() => {
+        if (!cancelled) setEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function enable() {
+    setBusy(true);
+    setError(null);
+    try {
+      const est = await window.musex.syncEstimate();
+      if (!est) {
+        setError("Couldn't read your library right now. Try again when you're online.");
+        return;
+      }
+      if (est.bytes > est.freeBytes) {
+        setError(
+          `Syncing your library needs about ${formatBytes(est.bytes)}, but only ${formatBytes(est.freeBytes)} is free. Free up space or switch to AAC.`,
+        );
+        return;
+      }
+      const ok = window.confirm(
+        `Download ${est.trackCount} tracks (about ${formatBytes(est.bytes)})? ${formatBytes(est.freeBytes)} free.\n\nNew music added to Plex will download automatically; music removed from Plex will be deleted here.`,
+      );
+      if (!ok) return;
+      await window.musex.syncSetEnabled(true);
+      setEnabled(true);
+    } catch (err) {
+      setError(`Couldn't start sync: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disable() {
+    const ok = window.confirm(
+      "Turn off library sync? This deletes all music downloaded by sync from this device. Tracks you pinned manually are kept.",
+    );
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await window.musex.syncSetEnabled(false);
+      setEnabled(false);
+    } catch (err) {
+      setError(`Couldn't turn off sync: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (enabled === null) return null;
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Library Sync</div>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-label">Sync entire library</div>
+          <div className="settings-row-desc">
+            Keep every track on this device, in sync with Plex. New music downloads automatically;
+            music removed from Plex is deleted here.
+          </div>
+        </div>
+        <button
+          type="button"
+          className={enabled ? "settings-btn danger" : "settings-btn"}
+          disabled={busy}
+          onClick={() => void (enabled ? disable() : enable())}
+        >
+          {busy ? "Working…" : enabled ? "Turn off" : "Sync library"}
+        </button>
+      </div>
+      {error ? <div className="settings-row-desc error-text">{error}</div> : null}
+    </div>
+  );
+}
+
 function StorageQualitySection() {
   const [quality, setQuality] = useState<StorageQualityDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1557,6 +1649,7 @@ export function SettingsView({ initialCategory }: { initialCategory?: string } =
           {category === "playback" && <AudioSection />}
           {category === "library" && (
             <>
+              <LibrarySyncSection />
               <StorageQualitySection />
               <DownloadsSizeSection />
               <CacheSection />

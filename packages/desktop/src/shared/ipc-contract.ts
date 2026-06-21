@@ -141,6 +141,10 @@ export const IPC = {
   // Storage quality (download transcoding)
   storageGetQuality: "musex:storage:getQuality", // -> StorageQualityDto
   storageSetQuality: "musex:storage:setQuality", // (StorageQualityDto) -> void
+  // Library sync (download-all mirror)
+  syncGetEnabled: "musex:sync:getEnabled", // -> boolean
+  syncSetEnabled: "musex:sync:setEnabled", // (enabled: boolean) -> void
+  syncEstimate: "musex:sync:estimate", // -> { bytes, freeBytes, trackCount } | null
   // Follow (= acquire + monitor for artists; local favorite for album/track)
   followSet: "musex:follow:set", // (ref: EntityRefDto, value: boolean) -> void
   followGet: "musex:follow:get", // (ref: EntityRefDto) -> boolean
@@ -662,6 +666,12 @@ export interface MusexApi {
   storageGetQuality(): Promise<StorageQualityDto>;
   /** Set the storage quality for offline downloads. Validated in main; rejects on invalid input. */
   storageSetQuality(q: StorageQualityDto): Promise<void>;
+  /** Is "sync entire library to this device" on? */
+  syncGetEnabled(): Promise<boolean>;
+  /** Turn library sync on (starts a reconcile) or off (deletes sync-origin downloads). */
+  syncSetEnabled(enabled: boolean): Promise<void>;
+  /** Estimate download bytes + free disk for the confirm dialog (null if offline/unavailable). */
+  syncEstimate(): Promise<{ bytes: number; freeBytes: number; trackCount: number } | null>;
   /** Follow / unfollow an entity. For artists this routes through the
    *  acquisition provider (acquire + monitor) plus a local record; for
    *  album/track it's a local favorite. value=true follows, false unfollows. */

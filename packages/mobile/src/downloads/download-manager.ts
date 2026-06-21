@@ -70,6 +70,7 @@ export class DownloadManager {
       addedAt: this.deps.index.get(job.key)?.addedAt ?? Date.now(),
       error,
       meta: job.meta,
+      origin: job.origin ?? "manual",
     };
     await this.deps.index.upsert(rec);
     this.deps.onProgress({ key: job.key, state, bytes, error });

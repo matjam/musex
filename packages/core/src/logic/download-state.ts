@@ -4,6 +4,12 @@ import type { DownloadMeta } from "./download-plan.js";
 export type DownloadStatus = "queued" | "downloading" | "downloaded" | "failed" | "missing";
 export type DownloadFormat = "original" | "aac";
 
+/** Who created a download: a user's explicit pin ("manual") vs the library-sync
+ *  mirror ("sync"). Records written before this field existed have it undefined,
+ *  which every reader treats as "manual" (so disabling sync never touches a
+ *  pre-existing pin). */
+export type DownloadOrigin = "manual" | "sync";
+
 export interface StorageQuality {
   mode: "original" | "aac";
   bitrateKbps: number;
@@ -20,6 +26,8 @@ export interface DownloadRecord {
   addedAt: number;
   error?: string;
   meta: DownloadMeta;
+  /** Defaults to "manual" when absent (older records). */
+  origin?: DownloadOrigin;
 }
 
 /** On launch, mark any 'downloaded' record whose file vanished as 'missing'. Records

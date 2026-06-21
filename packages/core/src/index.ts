@@ -24,6 +24,7 @@ export * from "./logic/group-tracks-by-album";
 export * from "./logic/lastfm-protocol";
 export * from "./logic/library-select";
 export * from "./logic/library-sort";
+export * from "./logic/library-sync";
 export * from "./logic/library-watch";
 export * from "./logic/list-cache-keys";
 export * from "./logic/list-validator";

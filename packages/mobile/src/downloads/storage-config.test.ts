@@ -72,7 +72,7 @@ describe("storage-config", () => {
       JSON.stringify({ mode: "mp3", bitrateKbps: 192 }),
     );
     const q = await loadStorageQuality();
-    expect(q.mode).toBe("original"); // clamped to default
+    expect(q.mode).toBe("aac"); // invalid mode → default ("aac")
     expect(q.bitrateKbps).toBe(192); // valid bitrate preserved
   });
 });

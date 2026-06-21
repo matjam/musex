@@ -4,10 +4,12 @@ import {
   buildDownloadLookup,
   buildQueue,
   type DownloadJob,
+  type DownloadOrigin,
   type DownloadRecord,
   discoverMusicLibraries,
   downloadKey,
   downloadRecordFor,
+  estimateSyncBytes,
   PlaybackSession,
   PlayMonitor,
   pickDefaultLibrary,
@@ -15,9 +17,12 @@ import {
   type RadioState,
   radioKey,
   recordsToTracks,
+  runLibrarySync,
   type StorageQuality,
+  type SyncPorts,
   shouldTopUp,
 } from "@musex/core";
+import { Paths } from "expo-file-system";
 import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
@@ -30,6 +35,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppState } from "react-native";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
 import {
   clearSession,
@@ -58,6 +64,7 @@ import { DownloadIndex } from "../downloads/download-index";
 import { DownloadManager } from "../downloads/download-manager";
 import { DownloadStore } from "../downloads/download-store";
 import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-config";
+import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
 import { TasteService } from "../taste/taste-service";
@@ -183,6 +190,13 @@ interface Store {
   getStorageQuality: () => StorageQuality;
   setStorageQuality: (q: StorageQuality) => Promise<void>;
   totalDownloadBytes: () => number;
+  // --- library sync (download-all mirror) ---
+  /** Is "sync entire library to this device" on? */
+  syncEnabled: boolean;
+  /** Estimate the download + free space for the confirm dialog (null if unavailable/offline). */
+  estimateSync: () => Promise<{ bytes: number; freeBytes: number; trackCount: number } | null>;
+  /** Turn library sync on (starts a reconcile) or off (deletes sync-origin downloads). */
+  setSyncEnabled: (enabled: boolean) => Promise<void>;
   connectivity: Connectivity;
   /** Clear the persisted list cache (called on sign-out). */
   clearListCache: () => Promise<void>;
@@ -240,7 +254,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // --- download infrastructure ---
   const downloadStore = useMemo(() => new DownloadStore(), []);
   const downloadIndex = useMemo(() => new DownloadIndex(), []);
-  const storageQualityRef = useRef<StorageQuality>({ mode: "original", bitrateKbps: 256 });
+  const storageQualityRef = useRef<StorageQuality>({ mode: "aac", bitrateKbps: 256 });
+
+  // Library-sync toggle. syncEnabledRef is read by the coordinator (sync, no
+  // re-render); syncEnabled drives the Settings toggle. Kept in lockstep by
+  // setSyncEnabledLocal. Declared here (before the bootstrap effect that loads it).
+  const syncEnabledRef = useRef(false);
+  const [syncEnabled, setSyncEnabledState] = useState(false);
+  const setSyncEnabledLocal = useCallback((enabled: boolean) => {
+    syncEnabledRef.current = enabled;
+    setSyncEnabledState(enabled);
+  }, []);
 
   const downloadManager = useMemo(
     () =>
@@ -492,9 +516,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await taste.init();
       await listCache.init();
       // Load last.fm config + secret into the in-memory ref before the service is used.
-      const [lfmCfg, storedQuality] = await Promise.all([loadLastfmConfig(), loadStorageQuality()]);
+      const [lfmCfg, storedQuality, storedSync] = await Promise.all([
+        loadLastfmConfig(),
+        loadStorageQuality(),
+        loadSyncEnabled(),
+      ]);
       lastfmConfigRef.current = lfmCfg;
       storageQualityRef.current = storedQuality;
+      setSyncEnabledLocal(storedSync);
       // Load the download index and reconcile with what's actually on disk.
       await downloadIndex.load();
       await downloadIndex.reconcile(downloadStore.presentNonEmptyKeys());
@@ -522,6 +551,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     downloadStore,
     connectivityMonitor,
     listCache,
+    setSyncEnabledLocal,
   ]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
@@ -565,13 +595,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // --- download helpers ---
 
-  /** Build a DownloadJob from a Track. */
+  /** Build a DownloadJob from a Track. `origin` tags whether this is a user pin
+   *  ("manual", default) or the library-sync mirror ("sync"). */
   const buildJob = useCallback(
-    (track: Track): DownloadJob => ({
+    (track: Track, origin: DownloadOrigin = "manual"): DownloadJob => ({
       key: downloadKey(track.serverId, track.media.partKey),
       serverId: track.serverId,
       plexPath: track.media.partKey,
       trackId: track.id,
+      origin,
       meta: {
         title: track.title,
         artistName: track.artistName,
@@ -592,7 +624,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const downloadTracks = useCallback(
     async (tracks: Track[]) => {
-      await downloadManager.enqueue(tracks.map(buildJob));
+      await downloadManager.enqueue(tracks.map((t) => buildJob(t)));
     },
     [downloadManager, buildJob],
   );
@@ -609,7 +641,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } catch {
         return;
       }
-      await downloadManager.enqueue(tracks.map(buildJob));
+      await downloadManager.enqueue(tracks.map((t) => buildJob(t)));
     },
     [gateway, downloadManager, buildJob],
   );
@@ -625,7 +657,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } catch {
         return;
       }
-      await downloadManager.enqueue(tracks.map(buildJob));
+      await downloadManager.enqueue(tracks.map((t) => buildJob(t)));
     },
     [gateway, downloadManager, buildJob],
   );
@@ -636,6 +668,89 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [downloadManager],
   );
+
+  // The full-library track list, behind the cached gateway. Throws
+  // OfflineUnavailable when offline + uncached — which runLibrarySync treats as
+  // "don't reconcile" (never removes), so a Plex blip can't wipe the device.
+  const fetchAllTracks = useCallback(async (): Promise<Track[]> => {
+    const tok = tokenRef.current;
+    const lib = libraryRef.current;
+    if (!tok || !lib) throw new Error("not signed in");
+    return gateway.listAllTracks(lib, "title", tok);
+  }, [gateway]);
+
+  const syncPorts = useMemo<SyncPorts>(
+    () => ({
+      isEnabled: () => syncEnabledRef.current,
+      listAllTracks: fetchAllTracks,
+      downloadedRecords: () => downloadIndex.all(),
+      enqueue: (tracks) => downloadManager.enqueue(tracks.map((t) => buildJob(t, "sync"))),
+      remove: (key) => downloadManager.removeDownload(key),
+    }),
+    [fetchAllTracks, downloadIndex, downloadManager, buildJob],
+  );
+
+  // One reconcile pass; serialized so overlapping triggers (foreground +
+  // connectivity + library change) don't run concurrently.
+  const syncInFlight = useRef<Promise<void> | null>(null);
+  const runSync = useCallback(() => {
+    if (!syncEnabledRef.current) return Promise.resolve();
+    if (syncInFlight.current) return syncInFlight.current;
+    const p = runLibrarySync(syncPorts)
+      .catch((err) => {
+        console.warn("[sync] reconcile failed", err);
+      })
+      .finally(() => {
+        syncInFlight.current = null;
+      });
+    syncInFlight.current = p.then(() => undefined);
+    return syncInFlight.current;
+  }, [syncPorts]);
+
+  const estimateSync = useCallback(async () => {
+    let tracks: Track[];
+    try {
+      tracks = await fetchAllTracks();
+    } catch {
+      return null;
+    }
+    const bytes = estimateSyncBytes(tracks, storageQualityRef.current);
+    return { bytes, freeBytes: Paths.availableDiskSpace, trackCount: tracks.length };
+  }, [fetchAllTracks]);
+
+  const setSyncEnabled = useCallback(
+    async (enabled: boolean) => {
+      setSyncEnabledLocal(enabled);
+      await saveSyncEnabled(enabled);
+      if (enabled) {
+        await runSync();
+      } else {
+        // Delete only sync-origin downloads; manual pins stay.
+        const syncKeys = downloadIndex
+          .all()
+          .filter((r) => r.origin === "sync")
+          .map((r) => r.key);
+        await Promise.allSettled(syncKeys.map((k) => downloadManager.removeDownload(k)));
+      }
+    },
+    [setSyncEnabledLocal, runSync, downloadIndex, downloadManager],
+  );
+
+  // Sync triggers. runLibrarySync no-ops when disabled, so these stay cheap when
+  // sync is off. Fires on: launch + library change + regained connectivity (this
+  // effect), and app foreground (the AppState effect below). enable triggers a
+  // reconcile directly in setSyncEnabled. No background work, no timers.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: library id is a deliberate trigger (re-sync when the selected library changes), not used in the body.
+  useEffect(() => {
+    if (state.connectivity === "online") void runSync();
+  }, [state.connectivity, state.library?.id, runSync]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") void runSync();
+    });
+    return () => sub.remove();
+  }, [runSync]);
 
   /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
    *  with the current server base URL and token so stale baked proxy URLs from
@@ -707,6 +822,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     getStorageQuality,
     setStorageQuality,
     totalDownloadBytes,
+    syncEnabled,
+    estimateSync,
+    setSyncEnabled,
     connectivity: state.connectivity,
     clearListCache: () => listCache.clear(),
   };
