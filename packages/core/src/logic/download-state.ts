@@ -4,11 +4,12 @@ import type { DownloadMeta } from "./download-plan.js";
 export type DownloadStatus = "queued" | "downloading" | "downloaded" | "failed" | "missing";
 export type DownloadFormat = "original" | "aac";
 
-/** Who created a download: a user's explicit pin ("manual") vs the library-sync
- *  mirror ("sync"). Records written before this field existed have it undefined,
- *  which every reader treats as "manual" (so disabling sync never touches a
- *  pre-existing pin). */
-export type DownloadOrigin = "manual" | "sync";
+/** Who created a download: a user's explicit pin ("manual"), the library-sync
+ *  mirror ("sync"), or auto-saved because the track was played ("cache").
+ *  manual/sync are PINNED (never evicted); cache evicts LRU under the cap.
+ *  Records written before this field existed have it undefined, which every
+ *  reader treats as "manual" (so eviction/disable never touches a legacy pin). */
+export type DownloadOrigin = "manual" | "sync" | "cache";
 
 export interface StorageQuality {
   mode: "original" | "aac";
@@ -28,6 +29,9 @@ export interface DownloadRecord {
   meta: DownloadMeta;
   /** Defaults to "manual" when absent (older records). */
   origin?: DownloadOrigin;
+  /** Epoch ms the track was last played; drives LRU cache eviction. Falls back
+   *  to addedAt when absent. */
+  lastAccessMs?: number;
 }
 
 /** On launch, mark any 'downloaded' record whose file vanished as 'missing'. Records

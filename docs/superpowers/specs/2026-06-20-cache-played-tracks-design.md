@@ -1,7 +1,11 @@
 # Cache played tracks (offline library by listening) — design
 
 **Date:** 2026-06-20
-**Status:** approved — build (stacked on the incremental-sync fixes).
+**Status:** approved. **Mobile shipped first** (no cache exists there today); the
+desktop section is a focused follow-up — desktop already caches on play via
+`MediaCache` and shows cached availability at the track level, so doing it right
+(superseding `MediaCache` to avoid double-storing every played track) is its own
+change rather than a rushed addition here.
 **Surfaces:** iOS + desktop, shared logic in `@musex/core`.
 
 ## Goal

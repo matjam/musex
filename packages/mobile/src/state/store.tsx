@@ -3,6 +3,7 @@ import {
   advanceRadio,
   buildDownloadLookup,
   buildQueue,
+  type CacheConfig,
   type DownloadJob,
   type DownloadOrigin,
   type DownloadRecord,
@@ -14,6 +15,7 @@ import {
   PlayMonitor,
   pickDefaultLibrary,
   pickDefaultServer,
+  planCacheEviction,
   type RadioState,
   radioKey,
   recordsToTracks,
@@ -58,6 +60,7 @@ import { MobileListCache } from "../cache/mobile-list-cache";
 import { ExpoListCacheFs } from "../cache/mobile-list-cache-fs";
 import { sha256hex } from "../cache/sha256";
 import { CLIENT_ID } from "../config-client-id";
+import { DEFAULT_CACHE_CONFIG, loadCacheConfig, saveCacheConfig } from "../downloads/cache-config";
 import type { Connectivity } from "../downloads/connectivity-monitor";
 import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
 import { DownloadIndex } from "../downloads/download-index";
@@ -68,6 +71,9 @@ import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
 import { TasteService } from "../taste/taste-service";
+
+// Cache a track once it has played this long — a real listen, not a skip.
+const CACHE_PLAY_THRESHOLD_SEC = 20;
 
 function safeBaseUrl(gateway: MobileCachingGateway, serverId: string): string | null {
   try {
@@ -199,6 +205,10 @@ interface Store {
   estimateSync: () => Promise<{ bytes: number; freeBytes: number; trackCount: number } | null>;
   /** Turn library sync on (starts a reconcile) or off (deletes sync-origin downloads). */
   setSyncEnabled: (enabled: boolean) => Promise<void>;
+  // --- cache played tracks ---
+  /** "Keep played tracks offline" config (toggle + size cap). */
+  cacheConfig: CacheConfig;
+  setCacheConfig: (config: CacheConfig) => Promise<void>;
   connectivity: Connectivity;
   /** Clear the persisted list cache (called on sign-out). */
   clearListCache: () => Promise<void>;
@@ -281,6 +291,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, 400);
   }, []);
 
+  // "Keep played tracks offline" config. cacheConfigRef is read on the hot play
+  // path (no re-render); cacheConfig drives the Settings UI.
+  const cacheConfigRef = useRef<CacheConfig>(DEFAULT_CACHE_CONFIG);
+  const [cacheConfig, setCacheConfigState] = useState<CacheConfig>(DEFAULT_CACHE_CONFIG);
+  // The cache-on-play handler is assigned later (it needs buildJob); the play
+  // loop calls it through this ref so it stays out of that effect's deps.
+  const cacheOnPlayRef = useRef<((s: PlaybackState) => void) | null>(null);
+
   const downloadManager = useMemo(
     () =>
       new DownloadManager({
@@ -293,7 +311,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
         clientId: CLIENT_ID,
         getQuality: () => storageQualityRef.current,
-        onProgress: () => bumpDownloadsVersion(),
+        onProgress: (e) => {
+          bumpDownloadsVersion();
+          // When a cache track finishes, trim the cache to its cap (LRU). Uses
+          // the store/index directly (the manager isn't constructed yet here).
+          if (e.state === "downloaded") {
+            for (const k of planCacheEviction(
+              downloadIndex.all(),
+              cacheConfigRef.current.capBytes,
+            )) {
+              downloadStore.remove(k);
+              void downloadIndex.remove(k);
+            }
+          }
+        },
       }),
     [downloadStore, downloadIndex, gateway, bumpDownloadsVersion],
   );
@@ -480,10 +511,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
         dispatch({ type: "playback", state: s });
+        // Cache-on-play: save the current track once it's been listened to.
+        cacheOnPlayRef.current?.(s);
         const cur = s.queue ? s.queue.tracks[s.queue.index] : undefined;
         if (cur && cur.id !== lastTrackId.current) {
           lastTrackId.current = cur.id;
           startedAtRef.current = Date.now();
+          // Bump LRU recency for a cached copy of the track now playing.
+          const ckey = downloadKey(cur.serverId, cur.media.partKey);
+          const crec = downloadIndex.get(ckey);
+          if (crec?.origin === "cache" && crec.state === "downloaded") {
+            void downloadIndex.upsert({ ...crec, lastAccessMs: Date.now() });
+          }
           const tok = tokenRef.current;
           const base = tok ? safeBaseUrl(gateway, cur.serverId) : null;
           engine.setNowPlaying({
@@ -507,7 +546,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
       }),
-    [session, engine, gateway, taste, monitor, lastfm, doTopUp],
+    [session, engine, gateway, taste, monitor, lastfm, doTopUp, downloadIndex],
   );
 
   // Lock-screen / Control-Center next & previous -> queue navigation.
@@ -529,14 +568,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await taste.init();
       await listCache.init();
       // Load last.fm config + secret into the in-memory ref before the service is used.
-      const [lfmCfg, storedQuality, storedSync] = await Promise.all([
+      const [lfmCfg, storedQuality, storedSync, storedCache] = await Promise.all([
         loadLastfmConfig(),
         loadStorageQuality(),
         loadSyncEnabled(),
+        loadCacheConfig(),
       ]);
       lastfmConfigRef.current = lfmCfg;
       storageQualityRef.current = storedQuality;
       setSyncEnabledLocal(storedSync);
+      cacheConfigRef.current = storedCache;
+      setCacheConfigState(storedCache);
       // Load the download index and reconcile with what's actually on disk.
       await downloadIndex.load();
       const presentKeys = downloadStore.presentNonEmptyKeys();
@@ -645,6 +687,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await downloadManager.enqueue(tracks.map((t) => buildJob(t)));
     },
     [downloadManager, buildJob],
+  );
+
+  // Cache-on-play: once the current track has played past the threshold, enqueue
+  // it as a cache-origin download (deduped). Skips when disabled, offline, or the
+  // track is already downloaded/queued. Wired into the play loop via cacheOnPlayRef.
+  const maybeCacheCurrent = useCallback(
+    (s: PlaybackState) => {
+      if (!cacheConfigRef.current.enabled) return;
+      if (connectivityRef.current !== "online") return;
+      if (s.positionSec < CACHE_PLAY_THRESHOLD_SEC) return;
+      const cur = s.queue ? s.queue.tracks[s.queue.index] : undefined;
+      if (!cur) return;
+      const key = downloadKey(cur.serverId, cur.media.partKey);
+      const existing = downloadIndex.get(key);
+      if (existing && existing.state !== "failed" && existing.state !== "missing") return;
+      void downloadManager.enqueue([buildJob(cur, "cache")]);
+    },
+    [downloadIndex, downloadManager, buildJob],
+  );
+  useEffect(() => {
+    cacheOnPlayRef.current = maybeCacheCurrent;
+  }, [maybeCacheCurrent]);
+
+  const setCacheConfig = useCallback(
+    async (config: CacheConfig) => {
+      cacheConfigRef.current = config;
+      setCacheConfigState(config);
+      await saveCacheConfig(config);
+      // Apply a tightened cap right away (disabling does NOT delete existing
+      // cache — it just stops adding; the cap still bounds it).
+      for (const k of planCacheEviction(downloadIndex.all(), config.capBytes)) {
+        downloadStore.remove(k);
+        void downloadIndex.remove(k);
+      }
+    },
+    [downloadIndex, downloadStore],
   );
 
   const downloadAlbum = useCallback(
@@ -847,6 +925,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     syncEnabled,
     estimateSync,
     setSyncEnabled,
+    cacheConfig,
+    setCacheConfig,
     connectivity: state.connectivity,
     clearListCache: () => listCache.clear(),
   };
