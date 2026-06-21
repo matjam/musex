@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.0](https://github.com/matjam/musex/compare/v0.19.0...v0.20.0) (2026-06-21)
+
+
+### Features
+
+* **mobile:** cache played tracks — offline library by listening ([#100](https://github.com/matjam/musex/issues/100)) ([b15eaa8](https://github.com/matjam/musex/commit/b15eaa80084d326a6f06d1ba31834cfcf150ee79))
+
+
+### Bug Fixes
+
+* **mobile:** incremental library sync — live populate, resume, no storm ([#99](https://github.com/matjam/musex/issues/99)) ([2e498b7](https://github.com/matjam/musex/commit/2e498b76cc7555d92b2964327d9fef94e1922a3b))
+
 ## [0.19.0](https://github.com/matjam/musex/compare/v0.18.0...v0.19.0) (2026-06-21)
 
 
