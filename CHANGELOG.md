@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.19.0](https://github.com/matjam/musex/compare/v0.18.0...v0.19.0) (2026-06-21)
+
+
+### Features
+
+* download-all library sync (mirror to device) + iOS AAC 256 default ([#98](https://github.com/matjam/musex/issues/98)) ([d79bf9b](https://github.com/matjam/musex/commit/d79bf9b6bf624b676a9bc19be29b7882523b970e))
+
+
+### Bug Fixes
+
+* probe Plex connections in parallel instead of waiting for local to fail ([#96](https://github.com/matjam/musex/issues/96)) ([b002e0b](https://github.com/matjam/musex/commit/b002e0be3700397513db34802ae5efa363621b64))
+
 ## [0.18.0](https://github.com/matjam/musex/compare/v0.17.0...v0.18.0) (2026-06-20)
 
 
