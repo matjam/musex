@@ -2,6 +2,7 @@ import type { StorageQuality } from "@musex/core";
 import { formatBytes, TRANSCODE_BITRATES } from "@musex/core";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { CACHE_CAP_OPTIONS } from "../../../src/downloads/cache-config";
 import { useStore } from "../../../src/state/store";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { theme } from "../../../src/ui/theme";
@@ -16,6 +17,8 @@ export default function DownloadsSettings() {
     syncEnabled,
     estimateSync,
     setSyncEnabled,
+    cacheConfig,
+    setCacheConfig,
     connectivity,
   } = useStore();
 
@@ -156,6 +159,72 @@ export default function DownloadsSettings() {
             <Switch value={syncEnabled} onValueChange={handleSyncToggle} />
           )}
         </View>
+      </View>
+
+      <Text
+        style={{
+          color: theme.textDim,
+          fontSize: 12,
+          textTransform: "uppercase",
+          paddingHorizontal: theme.space(2),
+          paddingTop: theme.space(1),
+          paddingBottom: 6,
+        }}
+      >
+        Keep Played Tracks
+      </Text>
+      <View
+        style={{
+          backgroundColor: theme.surface,
+          borderRadius: 10,
+          marginHorizontal: theme.space(2),
+          marginBottom: theme.space(2),
+          borderWidth: 1,
+          borderColor: theme.border,
+          overflow: "hidden",
+          padding: theme.space(1.5),
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ flex: 1, paddingRight: theme.space(1.5) }}>
+            <Text style={{ color: theme.text, fontSize: 15 }}>Keep played tracks offline</Text>
+            <Text style={{ color: theme.textDim, fontSize: 12, marginTop: 2 }}>
+              Tracks you listen to are saved automatically, up to the limit below.
+            </Text>
+          </View>
+          <Switch
+            value={cacheConfig.enabled}
+            onValueChange={(v) => void setCacheConfig({ ...cacheConfig, enabled: v })}
+          />
+        </View>
+        {cacheConfig.enabled ? (
+          <View style={{ marginTop: theme.space(1.5) }}>
+            <Text style={{ color: theme.textDim, fontSize: 12, marginBottom: 6 }}>Cache limit</Text>
+            <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+              {CACHE_CAP_OPTIONS.map((opt) => {
+                const selected = cacheConfig.capBytes === opt.bytes;
+                return (
+                  <Pressable
+                    key={opt.label}
+                    onPress={() => void setCacheConfig({ ...cacheConfig, capBytes: opt.bytes })}
+                    style={{
+                      paddingVertical: 7,
+                      paddingHorizontal: 12,
+                      borderRadius: 6,
+                      backgroundColor: selected ? theme.border : "transparent",
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <Text style={{ color: selected ? theme.text : theme.textDim, fontSize: 13 }}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <Text
