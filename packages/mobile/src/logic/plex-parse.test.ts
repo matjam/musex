@@ -45,7 +45,7 @@ describe("parseTracks", () => {
                 audioCodec: "flac",
                 container: "flac",
                 bitrate: 900,
-                Part: [{ id: "9", key: "/library/parts/9/file.flac" }],
+                Part: [{ id: "9", key: "/library/parts/9/file.flac", size: 31415926 }],
               },
             ],
           },
@@ -68,8 +68,23 @@ describe("parseTracks", () => {
         audioCodec: "flac",
         partId: "9",
         partKey: "/library/parts/9/file.flac",
+        sizeBytes: 31415926,
       },
     });
+  });
+  it("leaves sizeBytes undefined when the Part has no size", () => {
+    const json = {
+      MediaContainer: {
+        Metadata: [
+          {
+            ratingKey: "101",
+            title: "x",
+            Media: [{ container: "flac", Part: [{ id: "9", key: "/p/9" }] }],
+          },
+        ],
+      },
+    };
+    expect(parseTracks(json, "srv")[0]?.media.sizeBytes).toBeUndefined();
   });
   it("skips tracks with no playable Part", () => {
     const json = { MediaContainer: { Metadata: [{ ratingKey: "1", title: "x", Media: [] }] } };

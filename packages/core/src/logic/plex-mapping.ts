@@ -24,6 +24,7 @@ interface RawPart {
   id: string | number;
   key: string;
   container?: string;
+  size?: number;
 }
 interface RawMedia {
   audioCodec?: string;
@@ -108,6 +109,7 @@ export function toTrack(raw: RawTrack, serverId: string): Track {
     bitrate: media.bitrate,
     partId: String(part.id),
     partKey: part.key,
+    sizeBytes: part.size,
   };
   return {
     id: raw.ratingKey,

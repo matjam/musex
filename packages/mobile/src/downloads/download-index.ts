@@ -1,4 +1,4 @@
-import { type DownloadRecord, reconcileRecords } from "@musex/core";
+import { type DownloadRecord, isInFlight, reconcileRecords } from "@musex/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "musex.downloads-index";
@@ -40,27 +40,45 @@ export class DownloadIndex {
     this.schedulePersist();
   }
 
-  /** Mark downloaded-but-vanished records missing (core reconcile). */
-  async reconcile(presentKeys: ReadonlySet<string>): Promise<void> {
-    const next = reconcileRecords(this.all(), presentKeys);
+  /** Mark downloaded-but-vanished records missing (core reconcile). When
+   *  `sizes` is supplied, a downloaded record whose on-disk size mismatches its
+   *  expectedBytes is also demoted (partial/corrupt — the next sync re-queues it). */
+  async reconcile(
+    presentKeys: ReadonlySet<string>,
+    sizes?: ReadonlyMap<string, number>,
+  ): Promise<void> {
+    const next = reconcileRecords(this.all(), presentKeys, sizes);
     this.map = new Map(next.map((r) => [r.key, r]));
     this.schedulePersist();
   }
 
   /** Resolve records left mid-flight by a previous run (nothing is actually
-   *  downloading them on a fresh launch): a committed file present → mark
-   *  downloaded; otherwise drop it so the next sync re-queues it. This is what
-   *  makes an interrupted sync resume without ever re-downloading a finished
-   *  track. */
-  resolveStaleInFlight(presentKeys: ReadonlySet<string>): void {
+   *  downloading them on a fresh launch), SIZE-verified — mere file presence
+   *  never promotes: a present file matching the record's expectedBytes (or a
+   *  record with none) → downloaded, with bytes/expectedBytes set to the actual
+   *  size (delivered size is authoritative, consistent with commit); a
+   *  present-but-mismatched file is a partial — the record is dropped and the
+   *  key RETURNED so the caller deletes the file; absent → dropped so the next
+   *  sync re-queues it. This is what makes an interrupted sync resume without
+   *  ever re-downloading a finished track — or trusting a half-committed one. */
+  resolveStaleInFlight(sizes: ReadonlyMap<string, number>): string[] {
+    const corrupt: string[] = [];
     let changed = false;
     for (const r of this.all()) {
-      if (r.state !== "queued" && r.state !== "downloading") continue;
+      if (!isInFlight(r)) continue;
       changed = true;
-      if (presentKeys.has(r.key)) this.map.set(r.key, { ...r, state: "downloaded" });
-      else this.map.delete(r.key);
+      const size = sizes.get(r.key);
+      if (size === undefined) {
+        this.map.delete(r.key); // no file — drop; the next sync re-queues it
+      } else if (r.expectedBytes === undefined || size === r.expectedBytes) {
+        this.map.set(r.key, { ...r, state: "downloaded", bytes: size, expectedBytes: size });
+      } else {
+        this.map.delete(r.key);
+        corrupt.push(r.key); // partial file on disk — caller deletes it
+      }
     }
     if (changed) this.schedulePersist();
+    return corrupt;
   }
 
   /** Force any pending write to disk now (e.g. before teardown). */

@@ -1,8 +1,8 @@
-import type { Album, Artist } from "@musex/core";
+import type { Album, Artist, DownloadRecord } from "@musex/core";
 import { listValidator, OfflineUnavailable } from "@musex/core";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Radio } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,8 +15,10 @@ import {
 import type { ArtistInfo } from "../../../src/lastfm/lastfm-service";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
+import { useRecordsProgress } from "../../../src/state/use-download-progress";
 import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
+import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
 import { Tile } from "../../../src/ui/Tile";
 import { theme } from "../../../src/ui/theme";
 
@@ -44,6 +46,12 @@ export default function ArtistAlbums() {
   const [bioExpanded, setBioExpanded] = useState(false);
   const tileSize = (width - 8) / 2;
   const similarTileSize = 80;
+
+  // This artist's download progress, keyed by its index records (the screen
+  // never loads the artist's full track list, so the record set IS the
+  // container: bar shows while any of this artist's tracks are in flight).
+  const artistFilter = useCallback((r: DownloadRecord) => r.meta.artistId === artistId, [artistId]);
+  const artistProgress = useRecordsProgress(artistFilter);
 
   useEffect(() => {
     let alive = true;
@@ -319,6 +327,7 @@ export default function ArtistAlbums() {
                 : []
             }
           />
+          <DownloadProgressBar progress={artistProgress} />
           {SimilarRail}
         </View>
       }

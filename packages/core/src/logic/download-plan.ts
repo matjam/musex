@@ -32,6 +32,11 @@ export interface DownloadJob {
   /** Who requested this download. Absent ⇒ "manual" (a user pin). The
    *  library-sync mirror sets "sync" so disabling sync only removes its own. */
   origin?: DownloadOrigin;
+  /** Plex catalog size of the original file (Track.media.sizeBytes) when known —
+   *  meaningful for original-format transfers only, as a truncation guard (a
+   *  smaller delivery fails; a differing one is accepted — delivered size wins).
+   *  Undefined for AAC transcodes (no predetermined size). */
+  expectedBytes?: number;
 }
 
 /** Drop jobs already present (by key) and de-duplicate within the batch, preserving order. */

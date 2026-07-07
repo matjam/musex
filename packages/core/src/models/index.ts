@@ -55,6 +55,9 @@ export interface MediaInfo {
   bitrate?: number;
   partId: string;
   partKey: string; // e.g. /library/parts/12345/file.flac
+  /** Size of the original media file in bytes (Plex part `size`). Drives
+   *  download integrity verification (expectedBytes). */
+  sizeBytes?: number;
 }
 
 export interface Track {

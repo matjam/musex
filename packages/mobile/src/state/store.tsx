@@ -66,6 +66,7 @@ import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
 import { DownloadIndex } from "../downloads/download-index";
 import { DownloadManager } from "../downloads/download-manager";
 import { DownloadStore } from "../downloads/download-store";
+import { JsTransferEngine } from "../downloads/js-transfer-engine";
 import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-config";
 import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
@@ -299,12 +300,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // loop calls it through this ref so it stays out of that effect's deps.
   const cacheOnPlayRef = useRef<((s: PlaybackState) => void) | null>(null);
 
+  const transferEngine = useMemo(
+    () => new JsTransferEngine({ store: downloadStore, fetch }),
+    [downloadStore],
+  );
+
   const downloadManager = useMemo(
     () =>
       new DownloadManager({
         store: downloadStore,
         index: downloadIndex,
-        fetch,
+        engine: transferEngine,
         endpoint: async (serverId: string) => ({
           baseUrl: gateway.baseUrlFor(serverId),
           token: tokenRef.current ?? "",
@@ -326,7 +332,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         },
       }),
-    [downloadStore, downloadIndex, gateway, bumpDownloadsVersion],
+    [downloadStore, downloadIndex, transferEngine, gateway, bumpDownloadsVersion],
   );
 
   // Ref so the connectivity probe always sees the current library without
@@ -579,14 +585,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSyncEnabledLocal(storedSync);
       cacheConfigRef.current = storedCache;
       setCacheConfigState(storedCache);
-      // Load the download index and reconcile with what's actually on disk.
+      // Load the download index and reconcile with what's actually on disk —
+      // size-verified: a downloaded record whose file doesn't match its
+      // committed expectedBytes is demoted to missing (size verification
+      // applies to records committed under v2+; pre-v2 records have no
+      // expectedBytes, so presence remains their only check).
       await downloadIndex.load();
-      const presentKeys = downloadStore.presentNonEmptyKeys();
-      await downloadIndex.reconcile(presentKeys);
+      const fileSizes = downloadStore.presentFileSizes();
+      const presentKeys = new Set(fileSizes.keys());
+      // Corrupt = a still-`downloaded` record whose PRESENT file mismatches its
+      // committed size. Computed BEFORE reconcile so a record already `missing`
+      // from a prior session (with a present file) is left alone — exactly the
+      // demoted-this-boot files get deleted, nothing else.
+      const corruptKeys = downloadIndex
+        .all()
+        .filter(
+          (r) =>
+            r.state === "downloaded" &&
+            r.expectedBytes !== undefined &&
+            fileSizes.get(r.key) !== undefined &&
+            fileSizes.get(r.key) !== r.expectedBytes,
+        )
+        .map((r) => r.key);
+      await downloadIndex.reconcile(presentKeys, fileSizes);
+      for (const k of corruptKeys) downloadStore.remove(k);
       // Resume an interrupted sync: records stuck "queued"/"downloading" from a
-      // previous launch are resolved against disk (present → downloaded, else
-      // dropped so the next sync re-queues them) — never re-download a finished track.
-      downloadIndex.resolveStaleInFlight(presentKeys);
+      // previous launch are resolved against disk, size-gated (a matching file
+      // promotes to downloaded; a mismatched partial is dropped and its file
+      // deleted; absent is dropped so the next sync re-queues it) — never
+      // re-download a finished track, never trust a half-committed one.
+      for (const k of downloadIndex.resolveStaleInFlight(fileSizes)) downloadStore.remove(k);
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
       const token = await tokenStore.load();
@@ -664,6 +692,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       plexPath: track.media.partKey,
       trackId: track.id,
       origin,
+      // Integrity truth for Original downloads (AAC ignores it — no
+      // predetermined transcode size).
+      expectedBytes: track.media.sizeBytes,
       meta: {
         title: track.title,
         artistName: track.artistName,
@@ -878,6 +909,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [downloadIndex, gateway]);
 
+  // Stable identity: the provider value is rebuilt per render, so an inline
+  // closure here would defeat every useMemo keyed on it (recompute per render
+  // instead of per downloadsVersion bump).
+  const downloadsList = useCallback(() => downloadIndex.all(), [downloadIndex]);
+
   const getStorageQuality = useCallback((): StorageQuality => storageQualityRef.current, []);
 
   const setStorageQuality = useCallback(async (q: StorageQuality) => {
@@ -917,7 +953,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     downloadArtist,
     removeDownload,
     downloadedTracks,
-    downloadsList: () => downloadIndex.all(),
+    downloadsList,
     downloadsVersion,
     getStorageQuality,
     setStorageQuality,

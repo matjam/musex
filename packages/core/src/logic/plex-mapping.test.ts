@@ -145,7 +145,9 @@ describe("plex-mapping", () => {
             audioCodec: "flac",
             bitrate: 900,
             container: "flac",
-            parts: [{ id: 99, key: "/library/parts/99/file.flac", container: "flac" }],
+            parts: [
+              { id: 99, key: "/library/parts/99/file.flac", container: "flac", size: 31415926 },
+            ],
           },
         ],
       },
@@ -168,8 +170,10 @@ describe("plex-mapping", () => {
         bitrate: 900,
         partId: "99",
         partKey: "/library/parts/99/file.flac",
+        sizeBytes: 31415926,
       },
     });
+    expect(t.media.sizeBytes).toBe(31415926);
   });
   it("maps a track with a thumb, stripping the token from a full URL", () => {
     const t = toTrack(
@@ -195,6 +199,7 @@ describe("plex-mapping", () => {
     );
     expect(t.thumb).toBe("/library/metadata/32/thumb/99");
     expect(t.userRating).toBeUndefined(); // no raw userRating -> stays undefined
+    expect(t.media.sizeBytes).toBeUndefined(); // no part size -> stays undefined
   });
   it("maps track genres and moods to tag strings, omitting when absent", () => {
     const media = [

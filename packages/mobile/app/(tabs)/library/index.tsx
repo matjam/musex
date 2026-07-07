@@ -3,6 +3,7 @@ import {
   buildLetterIndex,
   downloadKey,
   groupTracksByAlbum,
+  isInFlight,
   listValidator,
   OfflineUnavailable,
 } from "@musex/core";
@@ -19,9 +20,11 @@ import {
 } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
+import { useRecordsProgress } from "../../../src/state/use-download-progress";
 import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { AZScrubber } from "../../../src/ui/AZScrubber";
+import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { Tile } from "../../../src/ui/Tile";
 import { theme } from "../../../src/ui/theme";
@@ -56,10 +59,8 @@ export default function LibraryBrowse() {
   // error, which keeps the prior items).
   const [offlineEmpty, setOfflineEmpty] = useState(false);
   const listRef = useRef<FlatList<Item>>(null);
-  // Downloaded segment state: track-grouped albums (re-baked thumbs) + active-strip keys
+  // Downloaded segment state: track-grouped albums (re-baked thumbs).
   const [dlTrackGroups, setDlTrackGroups] = useState<TrackAlbumGroup[]>([]);
-  const [activeKeys, setActiveKeys] = useState<string[]>([]);
-  const dlPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Tracks render as single-column rows; artists/albums/downloaded as a 2-col tile grid.
   const numCols = segment === "Tracks" ? 1 : 2;
@@ -124,50 +125,29 @@ export default function LibraryBrowse() {
     }, [segment, state.library, state.token, gateway, items.length]),
   );
 
-  // Refresh the Downloaded segment. Stable via useCallback so the effect dep is safe.
+  // Refresh the Downloaded segment tiles. Stable via useCallback so the effect dep is safe.
   const refreshDownloads = useCallback(() => {
-    const records = downloadsList();
     // Group re-baked tracks (from downloadedTracks) for correct tile art.
     setDlTrackGroups(groupTracksByAlbum(downloadedTracks()));
-    const inFlight = records.filter((r) => r.state === "queued" || r.state === "downloading");
-    setActiveKeys(inFlight.map((r) => r.key));
-    return inFlight.length > 0;
-  }, [downloadsList, downloadedTracks]);
+  }, [downloadedTracks]);
 
-  useEffect(() => {
-    if (segment !== "Downloaded") {
-      if (dlPollRef.current) {
-        clearInterval(dlPollRef.current);
-        dlPollRef.current = null;
-      }
-      return;
-    }
-    // Initial load
-    const hasInFlight = refreshDownloads();
-    if (hasInFlight) {
-      dlPollRef.current = setInterval(() => {
-        const still = refreshDownloads();
-        if (!still && dlPollRef.current) {
-          clearInterval(dlPollRef.current);
-          dlPollRef.current = null;
-        }
-      }, 1000);
-    }
-    return () => {
-      if (dlPollRef.current) {
-        clearInterval(dlPollRef.current);
-        dlPollRef.current = null;
-      }
-    };
-  }, [segment, refreshDownloads]);
-
-  // Live-refresh as tracks land (each progress event bumps downloadsVersion), so
-  // the Downloaded list + active strip populate during a sync without waiting on
-  // the 1s poll.
+  // Refresh tiles on segment entry and as tracks land — every progress event
+  // bumps downloadsVersion (throttled in the store), so no poll is needed.
   // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
   useEffect(() => {
     if (segment === "Downloaded") refreshDownloads();
   }, [downloadsVersion, segment, refreshDownloads]);
+
+  // Whole-collection progress for the Downloaded header bar ("n/total tracks")
+  // + header gating (inFlight > 0), recomputed per downloadsVersion bump.
+  const wholeProgress = useRecordsProgress();
+  // Albums with in-flight records (tile downloading badge).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
+  const downloadingAlbumIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of downloadsList()) if (isInFlight(r)) ids.add(r.meta.albumId);
+    return ids;
+  }, [downloadsList, downloadsVersion]);
 
   const { letters, indexOf } = useMemo(
     () =>
@@ -221,19 +201,15 @@ export default function LibraryBrowse() {
           keyExtractor={(g) => g.albumId}
           ListHeaderComponent={
             <View>
-              {activeKeys.length > 0 ? (
+              {wholeProgress.inFlight > 0 ? (
                 <View
                   style={{
                     backgroundColor: theme.surface,
-                    paddingHorizontal: theme.space(2),
-                    paddingVertical: theme.space(1),
                     borderBottomWidth: 1,
                     borderBottomColor: theme.border,
                   }}
                 >
-                  <Text style={{ color: theme.textDim, fontSize: 12 }}>
-                    Downloading {activeKeys.length} track{activeKeys.length !== 1 ? "s" : ""}…
-                  </Text>
+                  <DownloadProgressBar progress={wholeProgress} />
                 </View>
               ) : null}
               {dlTrackGroups.length > 0 ? (
@@ -242,7 +218,7 @@ export default function LibraryBrowse() {
             </View>
           }
           ListEmptyComponent={
-            activeKeys.length === 0 ? (
+            wholeProgress.inFlight === 0 ? (
               <View style={{ flex: 1, alignItems: "center", paddingTop: theme.space(6) }}>
                 <Text style={{ color: theme.textDim, fontSize: 15 }}>No downloads yet.</Text>
               </View>
@@ -257,7 +233,23 @@ export default function LibraryBrowse() {
                     if (group.tracks.length) void playTracks(group.tracks, 0);
                   }}
                 >
-                  <AlbumArt url={art} size={tileSize - 12} />
+                  <View>
+                    <AlbumArt url={art} size={tileSize - 12} />
+                    {downloadingAlbumIds.has(group.albumId) ? (
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: 6,
+                          right: 6,
+                          backgroundColor: "#000a",
+                          borderRadius: 12,
+                          padding: 4,
+                        }}
+                      >
+                        <ActivityIndicator size="small" color={theme.accent} />
+                      </View>
+                    ) : null}
+                  </View>
                   <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, marginTop: 6 }}>
                     {group.albumTitle}
                   </Text>

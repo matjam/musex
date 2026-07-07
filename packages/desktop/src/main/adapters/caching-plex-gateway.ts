@@ -6,7 +6,7 @@ import type { PlexapiGateway } from "./plex-gateway.js";
 /** Desktop's caching gateway: the shared `@musex/core` `CachingPlexGateway`
  *  (validator-keyed list caching + mutation eviction) wired with desktop's fs
  *  `ListCacheStore`, always-online (`isOnline: () => true` — the offline branch
- *  never runs on desktop) and the unchanged schema version `v6`. Adds the two
+ *  never runs on desktop) and the schema version `v7`. Adds the two
  *  non-port extras Runtime/IPC rely on (`endpoint`, `listPlaylistTracksPage`),
  *  delegating to the concrete `PlexapiGateway`. */
 export class DesktopCachingGateway extends CachingPlexGateway {
@@ -14,7 +14,8 @@ export class DesktopCachingGateway extends CachingPlexGateway {
     private readonly desktopInner: PlexapiGateway,
     cache: ListCacheStore,
   ) {
-    super(desktopInner, cache, { isOnline: () => true, schemaVersion: "v6" });
+    // v7: MediaInfo.sizeBytes added to the mapped Track shape (downloads v2 integrity).
+    super(desktopInner, cache, { isOnline: () => true, schemaVersion: "v7" });
   }
 
   endpoint(serverId: string, token: string): Promise<{ baseUrl: string; token: string }> {

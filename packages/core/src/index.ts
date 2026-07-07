@@ -14,6 +14,7 @@ export * from "./logic/collect-pages";
 export * from "./logic/discography-merge";
 export * from "./logic/download-lookup";
 export * from "./logic/download-plan";
+export * from "./logic/download-progress";
 export * from "./logic/download-state";
 export * from "./logic/entity-ref";
 export * from "./logic/external-url";
@@ -43,6 +44,7 @@ export * from "./logic/smart-playlists";
 export * from "./logic/taste-expansion";
 export * from "./logic/taste-profile";
 export * from "./logic/transcode-url";
+export * from "./logic/transfer-job";
 export * from "./models/entity-ref";
 export type {
   Album,

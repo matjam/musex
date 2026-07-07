@@ -1,15 +1,14 @@
 import {
-  buildHlsStartUrl,
+  buildTransferJob,
+  type DownloadFormat,
   type DownloadJob,
   type DownloadRecord,
-  parseHlsMaster,
-  parseHlsMedia,
+  isInFlight,
   type StorageQuality,
-  stopSessionUrl,
-  TRANSCODE_PROFILE_EXTRA,
 } from "@musex/core";
 import type { DownloadIndex } from "./download-index";
-import type { FileStore, StoreWriter } from "./download-store";
+import type { FileStore } from "./download-store";
+import type { TransferEngine } from "./transfer-engine";
 
 export interface DownloadProgress {
   key: string;
@@ -21,30 +20,52 @@ export interface DownloadProgress {
 export interface DownloadManagerDeps {
   store: FileStore;
   index: DownloadIndex;
-  fetch: typeof fetch;
+  /** Executes transfers (JS today; PR2 adds the native background engine). */
+  engine: TransferEngine;
   endpoint: (serverId: string) => Promise<{ baseUrl: string; token: string }>;
   clientId: string;
   getQuality: () => StorageQuality;
   onProgress: (e: DownloadProgress) => void;
 }
 
-const SEGMENT_RETRY_DELAY_MS = 700;
-const SEGMENT_RETRY_ATTEMPTS = 60;
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** A queued download plus the quality mode pinned at enqueue time — a Settings
+ *  quality toggle mid-lifecycle must not flip an already-recorded job's format
+ *  against its transfer (or an already-committed file). */
+interface QueueEntry {
+  job: DownloadJob;
+  format: DownloadFormat;
+}
 
+// Minimum interval between mid-flight record upserts per key. The index's own
+// 600ms debounced persist handles disk; this just bounds in-memory churn.
+const PROGRESS_UPSERT_MS = 500;
+
+/** The download orchestrator: queue policy, dedupe, record bookkeeping. One
+ *  job at a time (concurrency 1 — politeness alongside live streaming); the
+ *  actual transfer runs behind the TransferEngine seam, its events mapped back
+ *  onto index records. */
 export class DownloadManager {
-  private queue: DownloadJob[] = [];
+  private queue: QueueEntry[] = [];
   private running = false;
   private idle: Promise<void> = Promise.resolve();
   private idleResolve: (() => void) | null = null;
+  /** Per-key timestamp of the last mid-flight index upsert (throttle). */
+  private readonly progressUpsertAt = new Map<string, number>();
 
   constructor(private readonly deps: DownloadManagerDeps) {}
 
   async enqueue(jobs: DownloadJob[]): Promise<void> {
     for (const j of jobs) {
       if (this.deps.store.has(j.key)) continue;
-      this.queue.push(j);
-      await this.record(j, "queued", 0);
+      // Dedupe against our own queue AND records already in flight (the running
+      // job is off the queue but its record is "downloading") — a second
+      // enqueue of the same key must not re-download the file.
+      if (this.queue.some((q) => q.job.key === j.key)) continue;
+      const existing = this.deps.index.get(j.key);
+      if (existing && isInFlight(existing)) continue;
+      const format: DownloadFormat = this.deps.getQuality().mode === "aac" ? "aac" : "original";
+      this.queue.push({ job: j, format });
+      await this.record(j, format, "queued", 0);
     }
     this.pump();
   }
@@ -55,22 +76,39 @@ export class DownloadManager {
 
   private async record(
     job: DownloadJob,
+    format: DownloadFormat,
     state: DownloadRecord["state"],
     bytes: number,
     error?: string,
+    /** Terminal complete only: the ACTUAL committed size — authoritative for
+     *  reconcile, so catalog drift can never demote a good file. */
+    committedBytes?: number,
   ): Promise<void> {
+    const existing = this.deps.index.get(job.key);
+    // The catalog expectedBytes is pinned ONCE at enqueue (original only — an
+    // AAC transcode has no predetermined size); later non-terminal writes
+    // preserve whatever is pinned; the complete write overrides it with the
+    // delivered size (both formats), which is what reconcile verifies against.
+    const expectedBytes =
+      committedBytes ??
+      (state === "queued"
+        ? format === "original"
+          ? job.expectedBytes
+          : undefined
+        : existing?.expectedBytes);
     const rec: DownloadRecord = {
       key: job.key,
       serverId: job.serverId,
       plexPath: job.plexPath,
       trackId: job.trackId,
-      format: this.deps.getQuality().mode === "aac" ? "aac" : "original",
+      format,
       state,
       bytes,
-      addedAt: this.deps.index.get(job.key)?.addedAt ?? Date.now(),
+      addedAt: existing?.addedAt ?? Date.now(),
       error,
       meta: job.meta,
       origin: job.origin ?? "manual",
+      expectedBytes,
     };
     await this.deps.index.upsert(rec);
     this.deps.onProgress({ key: job.key, state, bytes, error });
@@ -91,126 +129,53 @@ export class DownloadManager {
     this.idleResolve?.();
   }
 
-  private async runJob(job: DownloadJob): Promise<void> {
-    await this.record(job, "downloading", 0);
-    const quality = this.deps.getQuality();
-    const ep = await this.deps.endpoint(job.serverId);
-    if (quality.mode === "aac") await this.runHlsJob(job, quality, ep);
-    else await this.runOriginalJob(job, ep);
-  }
-
-  private async runOriginalJob(
-    job: DownloadJob,
-    ep: { baseUrl: string; token: string },
-  ): Promise<void> {
-    const url = `${ep.baseUrl}${job.plexPath}${job.plexPath.includes("?") ? "&" : "?"}X-Plex-Token=${encodeURIComponent(ep.token)}`;
-    try {
-      const bytes = await this.deps.store.downloadUrl(job.key, url, (w) =>
-        this.deps.onProgress({ key: job.key, state: "downloading", bytes: w }),
-      );
-      await this.record(job, "downloaded", bytes);
-    } catch (e) {
-      this.deps.store.remove(job.key);
-      await this.record(job, "failed", 0, e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  private async runHlsJob(
-    job: DownloadJob,
-    quality: StorageQuality,
-    ep: { baseUrl: string; token: string },
-  ): Promise<void> {
-    const session = `${job.key}-${Date.now()}`;
-    const startUrl = buildHlsStartUrl({
-      baseUrl: ep.baseUrl,
-      token: ep.token,
-      clientId: this.deps.clientId,
-      session,
-      trackId: job.trackId,
-      bitrateKbps: quality.bitrateKbps,
-    });
-    const headers = {
-      "X-Plex-Token": ep.token,
-      "X-Plex-Client-Profile-Extra": TRANSCODE_PROFILE_EXTRA,
+  private async runJob(entry: QueueEntry): Promise<void> {
+    const { job, format } = entry;
+    await this.record(job, format, "downloading", 0);
+    // Transfer at the PINNED format — quality.mode may have changed since enqueue.
+    const quality: StorageQuality = {
+      mode: format === "aac" ? "aac" : "original",
+      bitrateKbps: this.deps.getQuality().bitrateKbps,
     };
-    let w: StoreWriter | null = null;
-    try {
-      const startRes = await this.deps.fetch(startUrl, { headers });
-      if (!startRes.ok) {
-        await this.record(job, "failed", 0, `hls start ${startRes.status}`);
-        return;
-      }
-      const startText = await startRes.text();
-      const variant = parseHlsMaster(startText);
-      let mediaUrl = startUrl;
-      let mediaText = startText;
-      if (variant) {
-        mediaUrl = new URL(variant, startUrl).toString();
-        const mediaRes = await this.deps.fetch(mediaUrl, { headers });
-        if (!mediaRes.ok) {
-          await this.record(job, "failed", 0, `hls media ${mediaRes.status}`);
+    const ep = await this.deps.endpoint(job.serverId);
+    const transfer = buildTransferJob({
+      job,
+      quality,
+      endpoint: ep,
+      clientId: this.deps.clientId,
+      destPath: this.deps.store.path(job.key),
+      // Session id is caller-supplied (core stays Date.now-free).
+      session: `${job.key}-${Date.now()}`,
+    });
+    // Map this job's engine events back onto records; resolve on the terminal one.
+    await new Promise<void>((resolve) => {
+      const off = this.deps.engine.onEvent((e) => {
+        if (e.key !== job.key) return;
+        if (e.kind === "progress") {
+          this.deps.onProgress({ key: job.key, state: "downloading", bytes: e.bytes });
+          // Also persist mid-flight bytes on the record (throttled per key) so
+          // byte-based UI moves during the transfer, not just at the end.
+          const now = Date.now();
+          if (now - (this.progressUpsertAt.get(job.key) ?? 0) >= PROGRESS_UPSERT_MS) {
+            this.progressUpsertAt.set(job.key, now);
+            const rec = this.deps.index.get(job.key);
+            if (rec) void this.deps.index.upsert({ ...rec, state: "downloading", bytes: e.bytes });
+          }
           return;
         }
-        mediaText = await mediaRes.text();
-      }
-      const { segments, ended } = parseHlsMedia(mediaText);
-      if (segments.length === 0) {
-        await this.record(job, "failed", 0, "no segments");
-        return;
-      }
-      w = this.deps.store.beginWrite(job.key);
-      let total = 0;
-      for (const seg of segments) {
-        const bytes = await this.fetchSegment(new URL(seg.uri, mediaUrl).toString(), headers);
-        if (bytes === null) {
-          await w.abort();
-          w = null;
-          await this.record(job, "failed", 0, `segment unavailable: ${seg.uri}`);
-          return;
-        }
-        w.write(bytes);
-        total += bytes.byteLength;
-        this.deps.onProgress({ key: job.key, state: "downloading", bytes: total });
-      }
-      if (!ended) {
-        await w.abort();
-        w = null;
-        await this.record(job, "failed", 0, "incomplete playlist (no ENDLIST)");
-        return;
-      }
-      await w.commit();
-      w = null;
-      await this.record(job, "downloaded", total);
-    } catch (e) {
-      if (w) await w.abort();
-      await this.record(job, "failed", 0, e instanceof Error ? e.message : String(e));
-    } finally {
-      await this.deps
-        .fetch(
-          stopSessionUrl({
-            baseUrl: ep.baseUrl,
-            token: ep.token,
-            clientId: this.deps.clientId,
-            session,
-          }),
-        )
-        .catch(() => {});
-    }
-  }
-
-  private async fetchSegment(
-    url: string,
-    headers: Record<string, string>,
-  ): Promise<Uint8Array | null> {
-    for (let attempt = 0; attempt < SEGMENT_RETRY_ATTEMPTS; attempt++) {
-      const res = await this.deps.fetch(url, { headers });
-      if (res.ok) {
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        if (bytes.byteLength > 0) return bytes;
-      } else if (res.status !== 404 && res.status < 500) return null;
-      await delay(SEGMENT_RETRY_DELAY_MS);
-    }
-    return null;
+        // A non-terminal error keeps the record "downloading" (PR2's native
+        // engine will retry; JsTransferEngine errors are always terminal).
+        if (e.kind === "error" && !e.terminal) return;
+        off();
+        this.progressUpsertAt.delete(job.key);
+        if (e.kind === "complete") {
+          // Delivered size is authoritative: persist it as expectedBytes (both
+          // formats) so reconcile verifies against what actually landed.
+          void this.record(job, format, "downloaded", e.bytes, undefined, e.bytes).then(resolve);
+        } else void this.record(job, format, "failed", 0, e.message).then(resolve);
+      });
+      void this.deps.engine.submit([transfer]);
+    });
   }
 
   async removeDownload(key: string): Promise<void> {

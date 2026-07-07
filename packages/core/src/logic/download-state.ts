@@ -32,17 +32,37 @@ export interface DownloadRecord {
   /** Epoch ms the track was last played; drives LRU cache eviction. Falls back
    *  to addedAt when absent. */
   lastAccessMs?: number;
+  /** Catalog estimate (Track.media.sizeBytes) while queued/downloading —
+   *  original-format only, pinned at enqueue; the ACTUAL committed byte size
+   *  once downloaded (set for BOTH formats at commit time, authoritative for
+   *  reconcile). Undefined on pre-v2 records and in-flight AAC. */
+  expectedBytes?: number;
+}
+
+/** Is this record still in flight (queued or actively downloading)? */
+export function isInFlight(r: DownloadRecord): boolean {
+  return r.state === "queued" || r.state === "downloading";
 }
 
 /** On launch, mark any 'downloaded' record whose file vanished as 'missing'. Records
- *  still queued/downloading have no file yet, so they're left as-is. */
+ *  still queued/downloading have no file yet, so they're left as-is. When `sizes`
+ *  is supplied, a present file whose on-disk size differs from the record's
+ *  `expectedBytes` (both defined) is also demoted — a partial/corrupt file the
+ *  next sync pass re-queues. */
 export function reconcileRecords(
   records: DownloadRecord[],
   presentKeys: ReadonlySet<string>,
+  sizes?: ReadonlyMap<string, number>,
 ): DownloadRecord[] {
-  return records.map((r) =>
-    r.state === "downloaded" && !presentKeys.has(r.key) ? { ...r, state: "missing" as const } : r,
-  );
+  return records.map((r) => {
+    if (r.state !== "downloaded") return r;
+    if (!presentKeys.has(r.key)) return { ...r, state: "missing" as const };
+    const size = sizes?.get(r.key);
+    if (r.expectedBytes !== undefined && size !== undefined && size !== r.expectedBytes) {
+      return { ...r, state: "missing" as const }; // partial/corrupt — sync re-queues it
+    }
+    return r;
+  });
 }
 
 /** One album's worth of downloaded tracks, for the "On this device" grid. */

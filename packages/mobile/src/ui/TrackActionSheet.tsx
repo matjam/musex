@@ -59,8 +59,14 @@ export function TrackActionSheet({
   if (!track) return null;
   const base = artBaseFor(track.serverId);
   const art = base && token ? artUrl(base, track.thumb, token) : null;
-  const downloadedRecord = downloadRecordFor(buildDownloadLookup(downloadsList()), track);
+  const records = downloadsList();
+  const downloadedRecord = downloadRecordFor(buildDownloadLookup(records), track);
   const isDownloaded = !!downloadedRecord;
+  // Raw record lookup: downloadRecordFor only matches state === "downloaded",
+  // so an in-flight (queued/downloading) record needs its own check.
+  const trackKey = downloadKey(track.serverId, track.media.partKey);
+  const rawRecord = records.find((r) => r.key === trackKey);
+  const isInFlight = rawRecord?.state === "queued" || rawRecord?.state === "downloading";
   const offline = connectivity === "offline";
 
   async function rate(r: number | null) {
@@ -194,6 +200,13 @@ export function TrackActionSheet({
               void removeDownload(downloadKey(track.serverId, track.media.partKey));
               onClose();
             }}
+          />
+        ) : isInFlight ? (
+          <Row
+            icon={<Download color={theme.textDim} size={20} />}
+            label="Downloading…"
+            disabled
+            onPress={() => {}}
           />
         ) : (
           <Row

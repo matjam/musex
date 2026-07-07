@@ -4,6 +4,8 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { useStore } from "../../../src/state/store";
+import { useDownloadProgress } from "../../../src/state/use-download-progress";
+import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
 import { TrackList } from "../../../src/ui/TrackList";
 import { theme } from "../../../src/ui/theme";
 
@@ -19,6 +21,7 @@ export default function PlaylistScreen() {
   const [playlistItemIds, setPlaylistItemIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [offlineEmpty, setOfflineEmpty] = useState(false);
+  const playlistProgress = useDownloadProgress(tracks);
 
   // Playlist validator: updatedAt + trackCount (mirrors desktop's listValidator
   // (playlist.updatedAt, playlist.trackCount)). Threaded via route params and
@@ -106,6 +109,7 @@ export default function PlaylistScreen() {
       playlistId={id}
       playlistItemIds={playlistItemIds}
       onTracksChanged={() => void fetchTracks()}
+      headerExtra={<DownloadProgressBar progress={playlistProgress} />}
     />
   );
 }

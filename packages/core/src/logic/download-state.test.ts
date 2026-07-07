@@ -59,6 +59,29 @@ describe("reconcileRecords", () => {
     const out = reconcileRecords([rec("c", "queued"), rec("d", "downloading")], new Set());
     expect(out.map((r) => r.state)).toEqual(["queued", "downloading"]);
   });
+  it("demotes a downloaded record whose on-disk size mismatches expectedBytes", () => {
+    const r = { ...rec("k1", "downloaded"), expectedBytes: 100 };
+    const out = reconcileRecords([r], new Set(["k1"]), new Map([["k1", 60]]));
+    expect(out[0]?.state).toBe("missing");
+  });
+  it("keeps a downloaded record whose size matches, or that has no expectedBytes", () => {
+    const a = { ...rec("a", "downloaded"), expectedBytes: 100 };
+    const b = rec("b", "downloaded"); // AAC — no expected size
+    const out = reconcileRecords(
+      [a, b],
+      new Set(["a", "b"]),
+      new Map([
+        ["a", 100],
+        ["b", 42],
+      ]),
+    );
+    expect(out.map((r) => r.state)).toEqual(["downloaded", "downloaded"]);
+  });
+  it("keeps a downloaded record with expectedBytes when no sizes map is supplied (two-arg callers)", () => {
+    const r = { ...rec("k1", "downloaded"), expectedBytes: 100 };
+    const out = reconcileRecords([r], new Set(["k1"]));
+    expect(out[0]?.state).toBe("downloaded");
+  });
 });
 
 describe("groupDownloadsByAlbum", () => {
