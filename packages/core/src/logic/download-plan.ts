@@ -32,6 +32,10 @@ export interface DownloadJob {
   /** Who requested this download. Absent ⇒ "manual" (a user pin). The
    *  library-sync mirror sets "sync" so disabling sync only removes its own. */
   origin?: DownloadOrigin;
+  /** Exact size of the original file (Track.media.sizeBytes) when known —
+   *  meaningful for original-format transfers only; a committed file MUST
+   *  match. Undefined for AAC transcodes (no predetermined size). */
+  expectedBytes?: number;
 }
 
 /** Drop jobs already present (by key) and de-duplicate within the batch, preserving order. */
