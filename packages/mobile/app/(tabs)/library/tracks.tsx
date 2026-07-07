@@ -11,8 +11,10 @@ import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
+import { useDownloadProgress } from "../../../src/state/use-download-progress";
 import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
+import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
 import { TrackActionSheet } from "../../../src/ui/TrackActionSheet";
 import { theme } from "../../../src/ui/theme";
 
@@ -39,6 +41,7 @@ export default function AlbumTracks() {
   const [loading, setLoading] = useState(true);
   const [offlineEmpty, setOfflineEmpty] = useState(false);
   const [sheetTrack, setSheetTrack] = useState<Track | null>(null);
+  const albumProgress = useDownloadProgress(tracks);
 
   // Refetch on focus so newly-added tracks appear when returning to this screen.
   // Skip the spinner when tracks are already loaded (background refresh, no flicker).
@@ -131,6 +134,7 @@ export default function AlbumTracks() {
                 offline ? tracks.filter((t) => !!downloadRecordFor(downloadLookup, t)) : tracks
               }
             />
+            <DownloadProgressBar progress={albumProgress} />
           </View>
         }
         renderItem={({ item, index }) => {

@@ -17,6 +17,7 @@ export function TrackList({
   playlistId,
   playlistItemIds,
   onTracksChanged,
+  headerExtra,
 }: {
   title: string;
   tracks: Track[];
@@ -29,6 +30,8 @@ export function TrackList({
   playlistItemIds?: string[];
   /** Called after a successful track removal so the parent can refetch. */
   onTracksChanged?: () => void;
+  /** Rendered directly under the ActionBar (e.g. a download progress bar). */
+  headerExtra?: React.ReactNode;
 }) {
   const [sheetTrack, setSheetTrack] = useState<Track | null>(null);
   const [sheetIndex, setSheetIndex] = useState<number | null>(null);
@@ -70,6 +73,7 @@ export function TrackList({
               {title}
             </Text>
             <ActionBar session={session} getTracks={() => tracks} />
+            {headerExtra}
           </View>
         }
         renderItem={({ item, index }) => {

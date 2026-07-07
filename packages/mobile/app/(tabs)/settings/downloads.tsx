@@ -1,9 +1,10 @@
 import type { StorageQuality } from "@musex/core";
-import { formatBytes, TRANSCODE_BITRATES } from "@musex/core";
-import { useState } from "react";
+import { downloadProgress, formatBytes, TRANSCODE_BITRATES } from "@musex/core";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { CACHE_CAP_OPTIONS } from "../../../src/downloads/cache-config";
 import { useStore } from "../../../src/state/store";
+import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { theme } from "../../../src/ui/theme";
 
@@ -20,9 +21,24 @@ export default function DownloadsSettings() {
     cacheConfig,
     setCacheConfig,
     connectivity,
+    downloadsVersion,
   } = useStore();
 
   const [syncBusy, setSyncBusy] = useState(false);
+
+  // Active downloads: in-flight records (up to 20 shown) + a whole-collection
+  // bar. Recomputes as bytes land (downloadsVersion bumps on progress events).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
+  const { inFlight, wholeProgress } = useMemo(() => {
+    const records = downloadsList();
+    return {
+      inFlight: records.filter((r) => r.state === "queued" || r.state === "downloading"),
+      wholeProgress: downloadProgress(
+        records,
+        records.map((r) => r.key),
+      ),
+    };
+  }, [downloadsList, downloadsVersion]);
 
   function handleSyncToggle(next: boolean) {
     if (syncBusy) return;
@@ -291,6 +307,71 @@ export default function DownloadsSettings() {
           </View>
         ) : null}
       </View>
+
+      {inFlight.length > 0 ? (
+        <>
+          <Text
+            style={{
+              color: theme.textDim,
+              fontSize: 12,
+              textTransform: "uppercase",
+              paddingHorizontal: theme.space(2),
+              paddingTop: theme.space(1),
+              paddingBottom: 6,
+            }}
+          >
+            Active Downloads
+          </Text>
+          <View
+            style={{
+              backgroundColor: theme.surface,
+              borderRadius: 10,
+              marginHorizontal: theme.space(2),
+              marginBottom: theme.space(2),
+              borderWidth: 1,
+              borderColor: theme.border,
+              overflow: "hidden",
+            }}
+          >
+            <DownloadProgressBar progress={wholeProgress} />
+            {inFlight.slice(0, 20).map((r) => (
+              <View
+                key={r.key}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: theme.space(2),
+                  paddingVertical: theme.space(1),
+                  borderTopWidth: 1,
+                  borderTopColor: theme.border,
+                  opacity: r.state === "queued" ? 0.5 : 1,
+                }}
+              >
+                <Text style={{ color: theme.text, flex: 1, fontSize: 13 }} numberOfLines={1}>
+                  {r.meta.title}
+                </Text>
+                <Text style={{ color: theme.textDim, fontSize: 12 }}>
+                  {r.state === "queued" ? "queued" : formatBytes(r.bytes)}
+                </Text>
+              </View>
+            ))}
+            {inFlight.length > 20 ? (
+              <Text
+                style={{
+                  color: theme.textDim,
+                  fontSize: 12,
+                  paddingHorizontal: theme.space(2),
+                  paddingVertical: theme.space(1),
+                  borderTopWidth: 1,
+                  borderTopColor: theme.border,
+                }}
+              >
+                and {inFlight.length - 20} more…
+              </Text>
+            ) : null}
+          </View>
+        </>
+      ) : null}
 
       <Text
         style={{

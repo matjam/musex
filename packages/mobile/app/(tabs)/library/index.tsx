@@ -2,6 +2,7 @@ import type { Album, Artist, Track, TrackAlbumGroup } from "@musex/core";
 import {
   buildLetterIndex,
   downloadKey,
+  downloadProgress,
   groupTracksByAlbum,
   listValidator,
   OfflineUnavailable,
@@ -22,6 +23,7 @@ import { useStore } from "../../../src/state/store";
 import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { AZScrubber } from "../../../src/ui/AZScrubber";
+import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { Tile } from "../../../src/ui/Tile";
 import { theme } from "../../../src/ui/theme";
@@ -169,6 +171,26 @@ export default function LibraryBrowse() {
     if (segment === "Downloaded") refreshDownloads();
   }, [downloadsVersion, segment, refreshDownloads]);
 
+  // Whole-collection progress for the Downloaded header bar ("n/total tracks")
+  // + the set of albums with in-flight records (tile downloading badge). Both
+  // recompute as bytes land (downloadsVersion) and on the 1s poll (activeKeys).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
+  const wholeProgress = useMemo(() => {
+    const records = downloadsList();
+    return downloadProgress(
+      records,
+      records.map((r) => r.key),
+    );
+  }, [downloadsList, downloadsVersion]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
+  const downloadingAlbumIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of downloadsList()) {
+      if (r.state === "queued" || r.state === "downloading") ids.add(r.meta.albumId);
+    }
+    return ids;
+  }, [downloadsList, downloadsVersion]);
+
   const { letters, indexOf } = useMemo(
     () =>
       buildLetterIndex(items, (it: Item) => (it.kind === "artist" ? it.data.name : it.data.title)),
@@ -225,15 +247,11 @@ export default function LibraryBrowse() {
                 <View
                   style={{
                     backgroundColor: theme.surface,
-                    paddingHorizontal: theme.space(2),
-                    paddingVertical: theme.space(1),
                     borderBottomWidth: 1,
                     borderBottomColor: theme.border,
                   }}
                 >
-                  <Text style={{ color: theme.textDim, fontSize: 12 }}>
-                    Downloading {activeKeys.length} track{activeKeys.length !== 1 ? "s" : ""}…
-                  </Text>
+                  <DownloadProgressBar progress={wholeProgress} />
                 </View>
               ) : null}
               {dlTrackGroups.length > 0 ? (
@@ -257,7 +275,23 @@ export default function LibraryBrowse() {
                     if (group.tracks.length) void playTracks(group.tracks, 0);
                   }}
                 >
-                  <AlbumArt url={art} size={tileSize - 12} />
+                  <View>
+                    <AlbumArt url={art} size={tileSize - 12} />
+                    {downloadingAlbumIds.has(group.albumId) ? (
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: 6,
+                          right: 6,
+                          backgroundColor: "#000a",
+                          borderRadius: 12,
+                          padding: 4,
+                        }}
+                      >
+                        <ActivityIndicator size="small" color={theme.accent} />
+                      </View>
+                    ) : null}
+                  </View>
                   <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, marginTop: 6 }}>
                     {group.albumTitle}
                   </Text>
