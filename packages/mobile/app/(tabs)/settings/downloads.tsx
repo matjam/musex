@@ -1,9 +1,10 @@
 import type { StorageQuality } from "@musex/core";
-import { downloadProgress, formatBytes, TRANSCODE_BITRATES } from "@musex/core";
+import { formatBytes, isInFlight, TRANSCODE_BITRATES } from "@musex/core";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { CACHE_CAP_OPTIONS } from "../../../src/downloads/cache-config";
 import { useStore } from "../../../src/state/store";
+import { useRecordsProgress } from "../../../src/state/use-download-progress";
 import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { theme } from "../../../src/ui/theme";
@@ -27,18 +28,13 @@ export default function DownloadsSettings() {
   const [syncBusy, setSyncBusy] = useState(false);
 
   // Active downloads: in-flight records (up to 20 shown) + a whole-collection
-  // bar. Recomputes as bytes land (downloadsVersion bumps on progress events).
+  // bar. Recompute as bytes land (downloadsVersion bumps on progress events).
+  const wholeProgress = useRecordsProgress();
   // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
-  const { inFlight, wholeProgress } = useMemo(() => {
-    const records = downloadsList();
-    return {
-      inFlight: records.filter((r) => r.state === "queued" || r.state === "downloading"),
-      wholeProgress: downloadProgress(
-        records,
-        records.map((r) => r.key),
-      ),
-    };
-  }, [downloadsList, downloadsVersion]);
+  const inFlight = useMemo(
+    () => downloadsList().filter(isInFlight),
+    [downloadsList, downloadsVersion],
+  );
 
   function handleSyncToggle(next: boolean) {
     if (syncBusy) return;

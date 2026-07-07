@@ -1,4 +1,4 @@
-import { type DownloadRecord, reconcileRecords } from "@musex/core";
+import { type DownloadRecord, isInFlight, reconcileRecords } from "@musex/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "musex.downloads-index";
@@ -65,7 +65,7 @@ export class DownloadIndex {
     const corrupt: string[] = [];
     let changed = false;
     for (const r of this.all()) {
-      if (r.state !== "queued" && r.state !== "downloading") continue;
+      if (!isInFlight(r)) continue;
       changed = true;
       const size = sizes.get(r.key);
       if (size === undefined) {

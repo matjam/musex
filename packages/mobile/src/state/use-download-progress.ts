@@ -1,5 +1,6 @@
 import {
   type ContainerDownloadProgress,
+  type DownloadRecord,
   downloadKey,
   downloadProgress,
   type Track,
@@ -20,4 +21,22 @@ export function useDownloadProgress(tracks: readonly Track[]): ContainerDownload
       ),
     [tracks, downloadsList, downloadsVersion],
   );
+}
+
+/** Like useDownloadProgress, but keyed by the download index itself: aggregate
+ *  progress over every record (optionally filtered — an artist's records, the
+ *  whole collection). `filter` must be referentially stable (useCallback) or
+ *  omitted, otherwise the memo recomputes every render. */
+export function useRecordsProgress(
+  filter?: (r: DownloadRecord) => boolean,
+): ContainerDownloadProgress {
+  const { downloadsList, downloadsVersion } = useStore();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is the refresh trigger, not referenced in the body.
+  return useMemo(() => {
+    const records = filter ? downloadsList().filter(filter) : downloadsList();
+    return downloadProgress(
+      records,
+      records.map((r) => r.key),
+    );
+  }, [filter, downloadsList, downloadsVersion]);
 }

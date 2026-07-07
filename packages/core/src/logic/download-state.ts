@@ -39,6 +39,11 @@ export interface DownloadRecord {
   expectedBytes?: number;
 }
 
+/** Is this record still in flight (queued or actively downloading)? */
+export function isInFlight(r: DownloadRecord): boolean {
+  return r.state === "queued" || r.state === "downloading";
+}
+
 /** On launch, mark any 'downloaded' record whose file vanished as 'missing'. Records
  *  still queued/downloading have no file yet, so they're left as-is. When `sizes`
  *  is supplied, a present file whose on-disk size differs from the record's

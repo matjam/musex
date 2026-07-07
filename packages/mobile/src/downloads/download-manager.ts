@@ -3,6 +3,7 @@ import {
   type DownloadFormat,
   type DownloadJob,
   type DownloadRecord,
+  isInFlight,
   type StorageQuality,
 } from "@musex/core";
 import type { DownloadIndex } from "./download-index";
@@ -61,7 +62,7 @@ export class DownloadManager {
       // enqueue of the same key must not re-download the file.
       if (this.queue.some((q) => q.job.key === j.key)) continue;
       const existing = this.deps.index.get(j.key);
-      if (existing && (existing.state === "queued" || existing.state === "downloading")) continue;
+      if (existing && isInFlight(existing)) continue;
       const format: DownloadFormat = this.deps.getQuality().mode === "aac" ? "aac" : "original";
       this.queue.push({ job: j, format });
       await this.record(j, format, "queued", 0);

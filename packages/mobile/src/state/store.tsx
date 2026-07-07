@@ -909,6 +909,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [downloadIndex, gateway]);
 
+  // Stable identity: the provider value is rebuilt per render, so an inline
+  // closure here would defeat every useMemo keyed on it (recompute per render
+  // instead of per downloadsVersion bump).
+  const downloadsList = useCallback(() => downloadIndex.all(), [downloadIndex]);
+
   const getStorageQuality = useCallback((): StorageQuality => storageQualityRef.current, []);
 
   const setStorageQuality = useCallback(async (q: StorageQuality) => {
@@ -948,7 +953,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     downloadArtist,
     removeDownload,
     downloadedTracks,
-    downloadsList: () => downloadIndex.all(),
+    downloadsList,
     downloadsVersion,
     getStorageQuality,
     setStorageQuality,
