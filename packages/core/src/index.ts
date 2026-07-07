@@ -44,6 +44,7 @@ export * from "./logic/smart-playlists";
 export * from "./logic/taste-expansion";
 export * from "./logic/taste-profile";
 export * from "./logic/transcode-url";
+export * from "./logic/transfer-job";
 export * from "./models/entity-ref";
 export type {
   Album,
