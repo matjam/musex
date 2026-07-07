@@ -98,6 +98,18 @@ describe("downloadProgress", () => {
     expect(p.state).toBe("partial");
   });
 
+  it("a dead record's retained bytes don't inflate the fraction", () => {
+    // "b" landed fully, then its file vanished (missing) — its record still
+    // carries bytes=100. Progress must reflect only the live records: the
+    // in-flight "a" at 50/100, not (50+100)/200.
+    const records = [rec("a", "downloading", 50, 100), rec("b", "missing", 100, 100)];
+    const p = downloadProgress(records, ["a", "b"]);
+    expect(p.bytes).toBe(50);
+    expect(p.expectedBytes).toBe(100);
+    expect(p.fraction).toBeCloseTo(0.5);
+    expect(p.failed).toBe(1);
+  });
+
   it("accepts a Map of records too", () => {
     const map = new Map([["a", rec("a", "downloaded", 100, 100)]]);
     const p = downloadProgress(map, ["a"]);

@@ -9,10 +9,14 @@ export interface ContainerDownloadProgress {
   total: number;
   inFlight: number;
   failed: number;
-  /** Bytes landed so far (downloaded + in-flight progress). */
+  /** Bytes landed so far (downloaded + in-flight progress). Dead records
+   *  (failed/missing) retain full byte values but need re-downloading, so they
+   *  are EXCLUDED — otherwise the fraction inflates. */
   bytes: number;
-  /** Sum of expectedBytes when EVERY key has a record and every record defines
-   *  one; otherwise null (AAC transcodes have no predetermined size). */
+  /** Sum of expectedBytes when EVERY key has a record and every live
+   *  (downloaded/in-flight) record defines one; otherwise null (in-flight AAC
+   *  transcodes have no predetermined size). Failed/missing records are
+   *  excluded, matching `bytes`. */
   expectedBytes: number | null;
   /** bytes/expectedBytes when known, else done/total; null when total === 0. */
   fraction: number | null;
@@ -45,9 +49,6 @@ export function downloadProgress(
       expectedKnown = false;
       continue;
     }
-    bytes += r.bytes;
-    if (r.expectedBytes === undefined) expectedKnown = false;
-    else expectedSum += r.expectedBytes;
     switch (r.state) {
       case "downloaded":
         done += 1;
@@ -61,6 +62,12 @@ export function downloadProgress(
         failed += 1;
         break;
     }
+    // Dead records keep their last byte values but the track needs
+    // re-downloading — counting them would inflate the byte fraction.
+    if (r.state === "failed" || r.state === "missing") continue;
+    bytes += r.bytes;
+    if (r.expectedBytes === undefined) expectedKnown = false;
+    else expectedSum += r.expectedBytes;
   }
 
   const expectedBytes = total > 0 && expectedKnown ? expectedSum : null;
