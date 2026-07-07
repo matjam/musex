@@ -11,6 +11,7 @@ import {
   downloadKey,
   downloadRecordFor,
   estimateSyncBytes,
+  isInFlight,
   PlaybackSession,
   PlayMonitor,
   pickDefaultLibrary,
@@ -38,6 +39,7 @@ import {
   useState,
 } from "react";
 import { AppState } from "react-native";
+import BackgroundDownloadsNative from "../../modules/background-downloads";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
 import {
   clearSession,
@@ -67,6 +69,7 @@ import { DownloadIndex } from "../downloads/download-index";
 import { DownloadManager } from "../downloads/download-manager";
 import { DownloadStore } from "../downloads/download-store";
 import { JsTransferEngine } from "../downloads/js-transfer-engine";
+import { createNativeTransferEngine } from "../downloads/native-transfer-engine";
 import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-config";
 import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
@@ -300,8 +303,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // loop calls it through this ref so it stays out of that effect's deps.
   const cacheOnPlayRef = useRef<((s: PlaybackState) => void) | null>(null);
 
+  // Native background engine when the module is in the binary (dev-client /
+  // production builds — transfers continue while the app is suspended or
+  // killed); JS engine otherwise (Expo Go, simulator without the module).
   const transferEngine = useMemo(
-    () => new JsTransferEngine({ store: downloadStore, fetch }),
+    () =>
+      createNativeTransferEngine(BackgroundDownloadsNative) ??
+      new JsTransferEngine({ store: downloadStore, fetch }),
     [downloadStore],
   );
 
@@ -591,8 +599,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // applies to records committed under v2+; pre-v2 records have no
       // expectedBytes, so presence remains their only check).
       await downloadIndex.load();
+      // Fold the engine's while-JS-was-away results into the index BEFORE the
+      // disk passes (native engine only — the JS engine's snapshot is always
+      // empty): completed transfers become downloaded records carrying the
+      // DELIVERED size (verified present below), failures become failed
+      // records, and still-active keys are (a) protected from the stale-in-
+      // flight resolve and (b) given a direct event->record mapping, since no
+      // manager loop owns them this session (their jobs were submitted by a
+      // previous run and live in the native backlog).
+      const snap = await transferEngine.reattach();
       const fileSizes = downloadStore.presentFileSizes();
       const presentKeys = new Set(fileSizes.keys());
+      for (const c of snap.completed) {
+        const r = downloadIndex.get(c.key);
+        // File absent → leave the record; reconcile/resolve below handles it.
+        if (r && presentKeys.has(c.key)) {
+          await downloadIndex.upsert({
+            ...r,
+            state: "downloaded",
+            bytes: c.bytes,
+            expectedBytes: c.bytes,
+            error: undefined,
+          });
+        }
+      }
+      for (const f of snap.failed) {
+        const r = downloadIndex.get(f.key);
+        if (r && isInFlight(r)) {
+          await downloadIndex.upsert({ ...r, state: "failed", bytes: 0, error: f.message });
+        }
+      }
+      const nativeActiveKeys = new Set(snap.active);
       // Corrupt = a still-`downloaded` record whose PRESENT file mismatches its
       // committed size. Computed BEFORE reconcile so a record already `missing`
       // from a prior session (with a present file) is left alone — exactly the
@@ -613,8 +650,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // previous launch are resolved against disk, size-gated (a matching file
       // promotes to downloaded; a mismatched partial is dropped and its file
       // deleted; absent is dropped so the next sync re-queues it) — never
-      // re-download a finished track, never trust a half-committed one.
-      for (const k of downloadIndex.resolveStaleInFlight(fileSizes)) downloadStore.remove(k);
+      // re-download a finished track, never trust a half-committed one. Keys
+      // the native engine reports as active are genuinely still downloading —
+      // they're NOT stale and are left alone.
+      for (const k of downloadIndex.resolveStaleInFlight(fileSizes, nativeActiveKeys)) {
+        downloadStore.remove(k);
+      }
+      // Map events for those reattached-active keys straight onto their index
+      // records until each reaches a terminal state (the manager only maps
+      // events for jobs it submitted itself).
+      if (nativeActiveKeys.size > 0) {
+        const off = transferEngine.onEvent((e) => {
+          if (!nativeActiveKeys.has(e.key)) return;
+          const r = downloadIndex.get(e.key);
+          if (!r) return;
+          if (e.kind === "progress") {
+            void downloadIndex.upsert({ ...r, state: "downloading", bytes: e.bytes });
+            bumpDownloadsVersion();
+            return;
+          }
+          if (e.kind === "error" && !e.terminal) return; // native retries; still downloading
+          nativeActiveKeys.delete(e.key);
+          if (e.kind === "complete") {
+            // Delivered size is authoritative (same rule as the manager).
+            void downloadIndex.upsert({
+              ...r,
+              state: "downloaded",
+              bytes: e.bytes,
+              expectedBytes: e.bytes,
+              error: undefined,
+            });
+          } else {
+            void downloadIndex.upsert({ ...r, state: "failed", bytes: 0, error: e.message });
+          }
+          bumpDownloadsVersion();
+          if (nativeActiveKeys.size === 0) off();
+        });
+      }
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
       const token = await tokenStore.load();
@@ -637,6 +709,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     completeSignIn,
     downloadIndex,
     downloadStore,
+    transferEngine,
+    bumpDownloadsVersion,
     connectivityMonitor,
     listCache,
     setSyncEnabledLocal,
@@ -916,10 +990,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const getStorageQuality = useCallback((): StorageQuality => storageQualityRef.current, []);
 
-  const setStorageQuality = useCallback(async (q: StorageQuality) => {
-    storageQualityRef.current = q;
-    await saveStorageQuality(q);
-  }, []);
+  const setStorageQuality = useCallback(
+    async (q: StorageQuality) => {
+      storageQualityRef.current = q;
+      await saveStorageQuality(q);
+      // Still-queued jobs pinned the OLD mode at enqueue (and, natively, carry
+      // old-mode URLs) — cancel and re-enqueue them so their transfers match
+      // the new mode. A record mid-download finishes in its old mode
+      // (accepted). Note: a re-enqueued job rebuilt from an AAC record has no
+      // catalog expectedBytes, so an aac→original switch loses the truncation
+      // guard for those jobs (pre-v2 semantics; the delivered size still
+      // becomes the record's truth on commit).
+      const queued = downloadIndex.all().filter((r) => r.state === "queued");
+      if (queued.length === 0) return;
+      const keys = queued.map((r) => r.key);
+      downloadManager.cancelQueued(keys);
+      await transferEngine.cancel(keys);
+      for (const k of keys) await downloadIndex.remove(k);
+      await downloadManager.enqueue(
+        queued.map((r) => ({
+          key: r.key,
+          serverId: r.serverId,
+          plexPath: r.plexPath,
+          trackId: r.trackId,
+          origin: r.origin,
+          expectedBytes: r.expectedBytes,
+          meta: r.meta,
+        })),
+      );
+    },
+    [downloadIndex, downloadManager, transferEngine],
+  );
 
   const totalDownloadBytes = useCallback(() => downloadStore.totalBytes(), [downloadStore]);
 

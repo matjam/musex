@@ -178,6 +178,15 @@ export class DownloadManager {
     });
   }
 
+  /** Drop still-queued (not yet running) jobs from the queue — a storage
+   *  quality change re-bakes their transfer URLs, so the old entries must not
+   *  run; the caller drops their records and re-enqueues. The running job is
+   *  untouched (it finishes in its pinned mode). */
+  cancelQueued(keys: string[]): void {
+    const drop = new Set(keys);
+    this.queue = this.queue.filter((q) => !drop.has(q.job.key));
+  }
+
   async removeDownload(key: string): Promise<void> {
     this.deps.store.remove(key);
     await this.deps.index.remove(key);

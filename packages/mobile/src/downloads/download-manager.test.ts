@@ -218,6 +218,33 @@ describe("DownloadManager", () => {
     expect(index.get("b")?.state).toBe("downloaded");
   });
 
+  it("cancelQueued drops a not-yet-running job (the running one is untouched)", async () => {
+    const store = fakeStore();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let downloads = 0;
+    const orig = store.downloadUrl;
+    store.downloadUrl = async (...args) => {
+      downloads += 1;
+      await gate;
+      return orig(...args);
+    };
+    const { index, m } = mgr(store, (async () => new Response("x")) as never, {
+      mode: "original",
+      bitrateKbps: 256,
+    });
+    await m.enqueue([job("a"), job("b")]); // "a" starts (blocked on the gate), "b" queues
+    m.cancelQueued(["b"]);
+    release();
+    await m.drain();
+    expect(downloads).toBe(1); // "b" never ran
+    expect(index.get("a")?.state).toBe("downloaded");
+    // The record cleanup belongs to the caller (store.tsx drops + re-enqueues).
+    expect(index.get("b")?.state).toBe("queued");
+  });
+
   it("aac: no ENDLIST → failed, stores nothing", async () => {
     const store = fakeStore();
     const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nsession/s/base/index.m3u8\n";
