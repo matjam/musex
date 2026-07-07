@@ -53,19 +53,32 @@ export class DownloadIndex {
   }
 
   /** Resolve records left mid-flight by a previous run (nothing is actually
-   *  downloading them on a fresh launch): a committed file present → mark
-   *  downloaded; otherwise drop it so the next sync re-queues it. This is what
-   *  makes an interrupted sync resume without ever re-downloading a finished
-   *  track. */
-  resolveStaleInFlight(presentKeys: ReadonlySet<string>): void {
+   *  downloading them on a fresh launch), SIZE-verified — mere file presence
+   *  never promotes: a present file matching the record's expectedBytes (or a
+   *  record with none) → downloaded, with bytes/expectedBytes set to the actual
+   *  size (delivered size is authoritative, consistent with commit); a
+   *  present-but-mismatched file is a partial — the record is dropped and the
+   *  key RETURNED so the caller deletes the file; absent → dropped so the next
+   *  sync re-queues it. This is what makes an interrupted sync resume without
+   *  ever re-downloading a finished track — or trusting a half-committed one. */
+  resolveStaleInFlight(sizes: ReadonlyMap<string, number>): string[] {
+    const corrupt: string[] = [];
     let changed = false;
     for (const r of this.all()) {
       if (r.state !== "queued" && r.state !== "downloading") continue;
       changed = true;
-      if (presentKeys.has(r.key)) this.map.set(r.key, { ...r, state: "downloaded" });
-      else this.map.delete(r.key);
+      const size = sizes.get(r.key);
+      if (size === undefined) {
+        this.map.delete(r.key); // no file — drop; the next sync re-queues it
+      } else if (r.expectedBytes === undefined || size === r.expectedBytes) {
+        this.map.set(r.key, { ...r, state: "downloaded", bytes: size, expectedBytes: size });
+      } else {
+        this.map.delete(r.key);
+        corrupt.push(r.key); // partial file on disk — caller deletes it
+      }
     }
     if (changed) this.schedulePersist();
+    return corrupt;
   }
 
   /** Force any pending write to disk now (e.g. before teardown). */

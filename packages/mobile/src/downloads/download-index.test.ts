@@ -62,9 +62,33 @@ describe("DownloadIndex", () => {
     await idx.upsert(rec("done", "downloading")); // finished, state never advanced
     await idx.upsert(rec("partial", "queued")); // never finished, no file
     await idx.upsert(rec("keep", "downloaded")); // already complete
-    idx.resolveStaleInFlight(new Set(["done", "keep"])); // "done"+"keep" on disk
-    expect(idx.get("done")?.state).toBe("downloaded");
+    const corrupt = idx.resolveStaleInFlight(
+      new Map([
+        ["done", 7],
+        ["keep", 7],
+      ]), // "done"+"keep" on disk
+    );
+    // No expectedBytes on the record → presence promotes, with bytes and
+    // expectedBytes set to the actual on-disk size.
+    expect(idx.get("done")).toMatchObject({ state: "downloaded", bytes: 7, expectedBytes: 7 });
     expect(idx.get("partial")).toBeUndefined();
     expect(idx.get("keep")?.state).toBe("downloaded");
+    expect(corrupt).toEqual([]);
+  });
+
+  it("resolveStaleInFlight is size-gated: a mismatched partial is dropped and its key returned", async () => {
+    const idx = new DownloadIndex();
+    await idx.load();
+    await idx.upsert({ ...rec("match", "downloading"), expectedBytes: 5 });
+    await idx.upsert({ ...rec("short", "downloading"), expectedBytes: 10 });
+    const corrupt = idx.resolveStaleInFlight(
+      new Map([
+        ["match", 5],
+        ["short", 4], // partially-committed file present
+      ]),
+    );
+    expect(idx.get("match")).toMatchObject({ state: "downloaded", bytes: 5, expectedBytes: 5 });
+    expect(idx.get("short")).toBeUndefined(); // dropped — next sync re-queues
+    expect(corrupt).toEqual(["short"]); // caller deletes the partial file
   });
 });

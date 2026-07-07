@@ -587,19 +587,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCacheConfigState(storedCache);
       // Load the download index and reconcile with what's actually on disk —
       // size-verified: a downloaded record whose file doesn't match its
-      // expectedBytes is demoted to missing (retroactively heals pre-v2 partials).
+      // committed expectedBytes is demoted to missing (size verification
+      // applies to records committed under v2+; pre-v2 records have no
+      // expectedBytes, so presence remains their only check).
       await downloadIndex.load();
       const fileSizes = downloadStore.presentFileSizes();
       const presentKeys = new Set(fileSizes.keys());
+      // Corrupt = a still-`downloaded` record whose PRESENT file mismatches its
+      // committed size. Computed BEFORE reconcile so a record already `missing`
+      // from a prior session (with a present file) is left alone — exactly the
+      // demoted-this-boot files get deleted, nothing else.
+      const corruptKeys = downloadIndex
+        .all()
+        .filter(
+          (r) =>
+            r.state === "downloaded" &&
+            r.expectedBytes !== undefined &&
+            fileSizes.get(r.key) !== undefined &&
+            fileSizes.get(r.key) !== r.expectedBytes,
+        )
+        .map((r) => r.key);
       await downloadIndex.reconcile(presentKeys, fileSizes);
-      // Delete corrupt files (record demoted to missing but a wrong-size file is present).
-      for (const r of downloadIndex.all()) {
-        if (r.state === "missing" && presentKeys.has(r.key)) downloadStore.remove(r.key);
-      }
+      for (const k of corruptKeys) downloadStore.remove(k);
       // Resume an interrupted sync: records stuck "queued"/"downloading" from a
-      // previous launch are resolved against disk (present → downloaded, else
-      // dropped so the next sync re-queues them) — never re-download a finished track.
-      downloadIndex.resolveStaleInFlight(presentKeys);
+      // previous launch are resolved against disk, size-gated (a matching file
+      // promotes to downloaded; a mismatched partial is dropped and its file
+      // deleted; absent is dropped so the next sync re-queues it) — never
+      // re-download a finished track, never trust a half-committed one.
+      for (const k of downloadIndex.resolveStaleInFlight(fileSizes)) downloadStore.remove(k);
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
       const token = await tokenStore.load();
