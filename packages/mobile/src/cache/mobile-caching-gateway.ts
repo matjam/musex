@@ -13,7 +13,8 @@ export class MobileCachingGateway extends CachingPlexGateway {
     cache: ListCache,
     isOnline: () => boolean,
   ) {
-    super(mobileInner, cache, { isOnline, schemaVersion: "m1" });
+    // m2: MediaInfo.sizeBytes added to the mapped Track shape (downloads v2 integrity).
+    super(mobileInner, cache, { isOnline, schemaVersion: "m2" });
   }
 
   /** Base URL for a server's stream/art URLs — not part of the core port. */

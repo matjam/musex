@@ -632,6 +632,7 @@ function toTrackSafe(t: PlexTrack, serverId: string): Track {
           id: p.id,
           key: p.key,
           container: p.container,
+          size: p.size,
         })),
       })),
     },

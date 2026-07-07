@@ -65,6 +65,7 @@ function parseTrack(m: Json, serverId: string): Track | null {
       bitrate: num(media.bitrate),
       partId: String(part.id),
       partKey: str(part.key) ?? "",
+      sizeBytes: num(part.size),
     },
   };
 }
