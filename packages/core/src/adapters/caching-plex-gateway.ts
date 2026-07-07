@@ -18,7 +18,7 @@ export interface CachingGatewayOpts {
   /** When false, lists are served only from the cache (stale), never fetched. */
   isOnline: () => boolean;
   /** Prefixed onto every cache key — bump when the MAPPED shape changes
-   *  (desktop "v6", mobile "m1"). */
+   *  (desktop "v7", mobile "m2"). */
   schemaVersion: string;
 }
 

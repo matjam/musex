@@ -50,9 +50,11 @@ Same local-Expo-module pattern as `lock-screen-commands` (expo-module.config.jso
 ### 3. Integrity (core + both engines)
 
 - **`Track.media.sizeBytes?`** — mapped from Plex's part `size` attribute in BOTH mappers (desktop `to*Safe` in `plex-gateway.ts`, mobile `plex-parse.ts`) per the four-times-bitten model-field rule. **List-cache schema bumps: desktop v6→v7, mobile m1→m2** (mapped shape changed).
-- **`DownloadRecord.expectedBytes?`** — set from `sizeBytes` for Original jobs; undefined for AAC (a transcode has no predetermined size).
-- **Commit rule (both engines):** Original — the final file size must **equal** `expectedBytes` when known (mismatch = failure → retry; never committed). AAC — ENDLIST seen + every segment appended (segment count is the completeness proof).
-- **Reconcile heals history:** the bootstrap reconcile compares each `downloaded` record with `expectedBytes` against the actual on-disk size (store gains `presentFileSizes(): Map<key, bytes>` beside `presentNonEmptyKeys()`); mismatch → demote to `missing`, which the next sync pass re-queues. This retroactively repairs partial files created before v2. (AAC records have no expectedBytes → presence + non-empty remains their reconcile check, as today.)
+- **`DownloadRecord.expectedBytes?`** — while queued/downloading it holds the catalog estimate (`sizeBytes`, Original jobs only; pinned once at enqueue). On the terminal complete the manager overwrites it with the ACTUAL delivered byte size — for BOTH Original and AAC — which becomes the authoritative value reconcile verifies against.
+- **Commit rule (both engines):** Original — the catalog `expectedBytes` is a **truncation guard only**: a delivery **smaller** than it fails (file removed, retried); a delivery equal to or **differing above** it is accepted with a logged warning — the **delivered size wins**. (The Plex catalog can drift from the file actually served; rejecting any difference caused an infinite download→fail→delete→re-queue loop via library sync.) AAC — ENDLIST seen + every segment appended (segment count is the completeness proof).
+- **Reconcile:** the bootstrap reconcile compares each `downloaded` record's actual on-disk size (store gains `presentFileSizes(): Map<key, bytes>` beside `presentNonEmptyKeys()`) against its committed-actual `expectedBytes`; mismatch → demote to `missing`, which the next sync pass re-queues. Because the committed value is the delivered size, catalog drift can never demote a good file. (Records committed before v2 have no `expectedBytes` → presence + non-empty remains their reconcile check, as today.)
+- **Stale in-flight resolution is size-gated:** a record left `queued`/`downloading` by a previous run is promoted to `downloaded` only when its file's on-disk size matches the record's `expectedBytes` (or the record has none) — promotion stamps `bytes`/`expectedBytes` with the actual size; a present-but-mismatched file is a partial (record dropped, file deleted); absent → dropped. Mere file presence never promotes.
+- **Residual caveat (deliberate, logged):** a file that SHRANK on the Plex server after its last scan under-delivers vs the catalog and will fail + retry on every sync trigger until Plex rescans it. Accepting under-delivery instead would record truncated files as good, which is worse.
 - **No checksums** — Plex does not expose a content hash for media parts; exact size is the strongest available truth for Original, segment-completeness for AAC. Explicit non-goal.
 
 ### 4. Progress (core aggregation, UI rendering)
@@ -86,7 +88,7 @@ Same local-Expo-module pattern as `lock-screen-commands` (expo-module.config.jso
 - **Core:** unit tests for `downloadProgress` (counts, bytes-blend, AAC fallback, empty), size-aware reconcile (mismatch → missing; AAC unaffected), `TransferJob` construction.
 - **Mobile JS:** `DownloadManager`-over-seam tests with a fake engine (submit/cancel/reattach/event folding); `JsTransferEngine` keeps the existing manager test coverage; `NativeTransferEngine` tested against a fake native module (event mapping, snapshot folding).
 - **Swift:** compiled by CI `build-ios`; no unit harness (Expo local modules).
-- **On-device acceptance (user):** start a large sync → background the app → tracks keep landing; force-kill → downloads continue, app relaunches in background; airplane mode mid-file → later resumes without restarting the file; interrupted downloads never show as downloaded (integrity); progress bars move live on all four surfaces; historic partials get re-queued after the first v2 launch.
+- **On-device acceptance (user):** start a large sync → background the app → tracks keep landing; force-kill → downloads continue, app relaunches in background; airplane mode mid-file → later resumes without restarting the file; interrupted downloads never show as downloaded (integrity); progress bars move live on all four surfaces; partials committed under v2+ get detected and re-queued on the next launch (pre-v2 records carry no expectedBytes, so only presence/non-empty checks apply to them).
 
 ## Non-goals
 
@@ -97,5 +99,5 @@ Same local-Expo-module pattern as `lock-screen-commands` (expo-module.config.jso
 
 ## Success criteria
 
-- All four symptoms gone on-device: background continuation (suspended AND killed), automatic resume from where it left off, zero partials recorded as downloaded (including retroactive healing), and live per-container progress on the four surfaces.
+- All four symptoms gone on-device: background continuation (suspended AND killed), automatic resume from where it left off, zero partials recorded as downloaded (v2+ records are size-verified on boot; pre-v2 records lack expectedBytes and keep presence-only checks), and live per-container progress on the four surfaces.
 - `pnpm check` green; desktop behavior unchanged (mapper-only diff); JS-engine path behavior-identical for non-native environments.

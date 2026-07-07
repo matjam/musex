@@ -183,7 +183,10 @@ export class JsTransferEngine implements TransferEngine {
       if (w) await w.abort();
       this.fail(job.key, e instanceof Error ? e.message : String(e));
     } finally {
-      if (job.stopUrl) await this.deps.fetch(job.stopUrl).catch(() => {});
+      if (job.stopUrl)
+        await this.deps
+          .fetch(job.stopUrl)
+          .catch((err) => console.warn("[downloads] hls stop-session failed", err));
     }
   }
 
