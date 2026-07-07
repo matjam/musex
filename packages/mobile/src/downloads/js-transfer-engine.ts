@@ -34,7 +34,13 @@ export class JsTransferEngine implements TransferEngine {
 
   async submit(jobs: TransferJob[]): Promise<void> {
     for (const j of jobs) {
-      if (this.queue.some((q) => q.key === j.key)) continue;
+      if (this.queue.some((q) => q.key === j.key)) {
+        // Never drop a job silently — a caller awaiting this job's terminal
+        // event would hang forever. Duplicate submissions are a caller bug
+        // (the manager dedupes); surface it as a terminal error.
+        this.fail(j.key, "duplicate job already queued");
+        continue;
+      }
       this.queue.push(j);
     }
     this.pump();
@@ -86,11 +92,27 @@ export class JsTransferEngine implements TransferEngine {
       const bytes = await this.deps.store.downloadUrl(job.key, job.url, (w) =>
         this.emit({ kind: "progress", key: job.key, bytes: w }),
       );
-      const ok = job.expectedBytes !== undefined ? bytes === job.expectedBytes : bytes > 0;
-      if (!ok) {
+      // expectedBytes (the Plex catalog size) is a TRUNCATION guard only: an
+      // under-delivery is a failed transfer, but the catalog can drift from the
+      // file actually served, so a larger/differing delivery is accepted — the
+      // DELIVERED size becomes the record's truth (the manager persists it on
+      // complete). Rejecting any difference caused an infinite
+      // fail→delete→re-queue loop via library sync.
+      if (job.expectedBytes !== undefined && bytes < job.expectedBytes) {
         this.deps.store.remove(job.key);
-        this.fail(job.key, `size mismatch: got ${bytes} want ${job.expectedBytes}`);
+        this.fail(job.key, `truncated: got ${bytes} want ${job.expectedBytes}`);
         return;
+      }
+      if (job.expectedBytes === undefined && bytes <= 0) {
+        this.deps.store.remove(job.key);
+        this.fail(job.key, "empty download");
+        return;
+      }
+      if (job.expectedBytes !== undefined && bytes !== job.expectedBytes) {
+        console.warn(
+          `[downloads] size differs from Plex catalog (got ${bytes}, want ${job.expectedBytes}), accepting delivered file`,
+          job.key,
+        );
       }
       this.emit({ kind: "complete", key: job.key, bytes });
     } catch (e) {

@@ -32,8 +32,10 @@ export interface DownloadRecord {
   /** Epoch ms the track was last played; drives LRU cache eviction. Falls back
    *  to addedAt when absent. */
   lastAccessMs?: number;
-  /** Exact size of the original file when known; original-format records only —
-   *  a committed file MUST match. Undefined for AAC transcodes. */
+  /** Catalog estimate (Track.media.sizeBytes) while queued/downloading —
+   *  original-format only, pinned at enqueue; the ACTUAL committed byte size
+   *  once downloaded (set for BOTH formats at commit time, authoritative for
+   *  reconcile). Undefined on pre-v2 records and in-flight AAC. */
   expectedBytes?: number;
 }
 

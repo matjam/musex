@@ -15,7 +15,9 @@ export interface TransferJob {
   /** Absolute filesystem path (no file:// scheme). Engines write to
    *  `destPath + ".part"` during transfer and move into place on commit. */
   destPath: string;
-  /** original only — the committed file must match exactly. */
+  /** original only — a TRUNCATION guard: a delivery smaller than this fails;
+   *  a larger/differing delivery is accepted (the delivered size is
+   *  authoritative — the Plex catalog can drift from the file it serves). */
   expectedBytes?: number;
   /** hls only — best-effort Plex transcode-session stop. */
   stopUrl?: string;

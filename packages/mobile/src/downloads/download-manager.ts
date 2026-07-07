@@ -1,5 +1,6 @@
 import {
   buildTransferJob,
+  type DownloadFormat,
   type DownloadJob,
   type DownloadRecord,
   type StorageQuality,
@@ -26,23 +27,44 @@ export interface DownloadManagerDeps {
   onProgress: (e: DownloadProgress) => void;
 }
 
+/** A queued download plus the quality mode pinned at enqueue time — a Settings
+ *  quality toggle mid-lifecycle must not flip an already-recorded job's format
+ *  against its transfer (or an already-committed file). */
+interface QueueEntry {
+  job: DownloadJob;
+  format: DownloadFormat;
+}
+
+// Minimum interval between mid-flight record upserts per key. The index's own
+// 600ms debounced persist handles disk; this just bounds in-memory churn.
+const PROGRESS_UPSERT_MS = 500;
+
 /** The download orchestrator: queue policy, dedupe, record bookkeeping. One
  *  job at a time (concurrency 1 — politeness alongside live streaming); the
  *  actual transfer runs behind the TransferEngine seam, its events mapped back
  *  onto index records. */
 export class DownloadManager {
-  private queue: DownloadJob[] = [];
+  private queue: QueueEntry[] = [];
   private running = false;
   private idle: Promise<void> = Promise.resolve();
   private idleResolve: (() => void) | null = null;
+  /** Per-key timestamp of the last mid-flight index upsert (throttle). */
+  private readonly progressUpsertAt = new Map<string, number>();
 
   constructor(private readonly deps: DownloadManagerDeps) {}
 
   async enqueue(jobs: DownloadJob[]): Promise<void> {
     for (const j of jobs) {
       if (this.deps.store.has(j.key)) continue;
-      this.queue.push(j);
-      await this.record(j, "queued", 0);
+      // Dedupe against our own queue AND records already in flight (the running
+      // job is off the queue but its record is "downloading") — a second
+      // enqueue of the same key must not re-download the file.
+      if (this.queue.some((q) => q.job.key === j.key)) continue;
+      const existing = this.deps.index.get(j.key);
+      if (existing && (existing.state === "queued" || existing.state === "downloading")) continue;
+      const format: DownloadFormat = this.deps.getQuality().mode === "aac" ? "aac" : "original";
+      this.queue.push({ job: j, format });
+      await this.record(j, format, "queued", 0);
     }
     this.pump();
   }
@@ -53,26 +75,39 @@ export class DownloadManager {
 
   private async record(
     job: DownloadJob,
+    format: DownloadFormat,
     state: DownloadRecord["state"],
     bytes: number,
     error?: string,
+    /** Terminal complete only: the ACTUAL committed size — authoritative for
+     *  reconcile, so catalog drift can never demote a good file. */
+    committedBytes?: number,
   ): Promise<void> {
-    const mode = this.deps.getQuality().mode;
+    const existing = this.deps.index.get(job.key);
+    // The catalog expectedBytes is pinned ONCE at enqueue (original only — an
+    // AAC transcode has no predetermined size); later non-terminal writes
+    // preserve whatever is pinned; the complete write overrides it with the
+    // delivered size (both formats), which is what reconcile verifies against.
+    const expectedBytes =
+      committedBytes ??
+      (state === "queued"
+        ? format === "original"
+          ? job.expectedBytes
+          : undefined
+        : existing?.expectedBytes);
     const rec: DownloadRecord = {
       key: job.key,
       serverId: job.serverId,
       plexPath: job.plexPath,
       trackId: job.trackId,
-      format: mode === "aac" ? "aac" : "original",
+      format,
       state,
       bytes,
-      addedAt: this.deps.index.get(job.key)?.addedAt ?? Date.now(),
+      addedAt: existing?.addedAt ?? Date.now(),
       error,
       meta: job.meta,
       origin: job.origin ?? "manual",
-      // Integrity truth for original files only — an AAC transcode has no
-      // predetermined size, so its record never carries one.
-      expectedBytes: mode === "aac" ? undefined : job.expectedBytes,
+      expectedBytes,
     };
     await this.deps.index.upsert(rec);
     this.deps.onProgress({ key: job.key, state, bytes, error });
@@ -93,9 +128,14 @@ export class DownloadManager {
     this.idleResolve?.();
   }
 
-  private async runJob(job: DownloadJob): Promise<void> {
-    await this.record(job, "downloading", 0);
-    const quality = this.deps.getQuality();
+  private async runJob(entry: QueueEntry): Promise<void> {
+    const { job, format } = entry;
+    await this.record(job, format, "downloading", 0);
+    // Transfer at the PINNED format — quality.mode may have changed since enqueue.
+    const quality: StorageQuality = {
+      mode: format === "aac" ? "aac" : "original",
+      bitrateKbps: this.deps.getQuality().bitrateKbps,
+    };
     const ep = await this.deps.endpoint(job.serverId);
     const transfer = buildTransferJob({
       job,
@@ -112,11 +152,26 @@ export class DownloadManager {
         if (e.key !== job.key) return;
         if (e.kind === "progress") {
           this.deps.onProgress({ key: job.key, state: "downloading", bytes: e.bytes });
+          // Also persist mid-flight bytes on the record (throttled per key) so
+          // byte-based UI moves during the transfer, not just at the end.
+          const now = Date.now();
+          if (now - (this.progressUpsertAt.get(job.key) ?? 0) >= PROGRESS_UPSERT_MS) {
+            this.progressUpsertAt.set(job.key, now);
+            const rec = this.deps.index.get(job.key);
+            if (rec) void this.deps.index.upsert({ ...rec, state: "downloading", bytes: e.bytes });
+          }
           return;
         }
+        // A non-terminal error keeps the record "downloading" (PR2's native
+        // engine will retry; JsTransferEngine errors are always terminal).
+        if (e.kind === "error" && !e.terminal) return;
         off();
-        if (e.kind === "complete") void this.record(job, "downloaded", e.bytes).then(resolve);
-        else void this.record(job, "failed", 0, e.message).then(resolve);
+        this.progressUpsertAt.delete(job.key);
+        if (e.kind === "complete") {
+          // Delivered size is authoritative: persist it as expectedBytes (both
+          // formats) so reconcile verifies against what actually landed.
+          void this.record(job, format, "downloaded", e.bytes, undefined, e.bytes).then(resolve);
+        } else void this.record(job, format, "failed", 0, e.message).then(resolve);
       });
       void this.deps.engine.submit([transfer]);
     });

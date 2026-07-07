@@ -80,7 +80,7 @@ describe("JsTransferEngine — original", () => {
     expect(store.files.has("a")).toBe(true);
   });
 
-  it("size mismatch → terminal error and the file is removed", async () => {
+  it("under-delivery (truncation) → terminal error and the file is removed", async () => {
     const store = fakeStore();
     store.downloadUrl = async (key: string) => {
       store.files.set(key, "SHORT");
@@ -93,7 +93,7 @@ describe("JsTransferEngine — original", () => {
     expect(end).toEqual({
       kind: "error",
       key: "a",
-      message: "size mismatch: got 60 want 100",
+      message: "truncated: got 60 want 100",
       terminal: true,
     });
     expect(store.files.has("a")).toBe(false);
@@ -105,6 +105,42 @@ describe("JsTransferEngine — original", () => {
     const { terminal } = collect(engine, "a");
     await engine.submit([originalJob({ expectedBytes: 5 })]);
     expect(await terminal).toEqual({ kind: "complete", key: "a", bytes: 5 });
+  });
+
+  it("over-delivery vs the catalog is accepted with a warning (delivered size wins)", async () => {
+    const store = fakeStore();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const engine = new JsTransferEngine({ store: store as never, fetch: fetch as never });
+      const { terminal } = collect(engine, "a");
+      await engine.submit([originalJob({ expectedBytes: 3 })]); // store delivers 5
+      expect(await terminal).toEqual({ kind: "complete", key: "a", bytes: 5 });
+      expect(store.files.has("a")).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("size differs from Plex catalog"),
+        "a",
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("a duplicate key in one submit batch emits a terminal error, not a silent drop", async () => {
+    const store = fakeStore();
+    const engine = new JsTransferEngine({ store: store as never, fetch: fetch as never });
+    const events: TransferEvent[] = [];
+    const done = new Promise<void>((resolve) => {
+      engine.onEvent((e) => {
+        events.push(e);
+        if (e.kind === "complete") resolve();
+      });
+    });
+    await engine.submit([originalJob(), originalJob()]);
+    await done;
+    expect(
+      events.some((e) => e.kind === "error" && e.terminal && /duplicate/.test(e.message)),
+    ).toBe(true);
+    expect(events.some((e) => e.kind === "complete" && e.bytes === 5)).toBe(true);
   });
 
   it("a thrown download error → terminal error, file removed", async () => {
