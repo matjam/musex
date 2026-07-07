@@ -40,9 +40,14 @@ export class DownloadIndex {
     this.schedulePersist();
   }
 
-  /** Mark downloaded-but-vanished records missing (core reconcile). */
-  async reconcile(presentKeys: ReadonlySet<string>): Promise<void> {
-    const next = reconcileRecords(this.all(), presentKeys);
+  /** Mark downloaded-but-vanished records missing (core reconcile). When
+   *  `sizes` is supplied, a downloaded record whose on-disk size mismatches its
+   *  expectedBytes is also demoted (partial/corrupt — the next sync re-queues it). */
+  async reconcile(
+    presentKeys: ReadonlySet<string>,
+    sizes?: ReadonlyMap<string, number>,
+  ): Promise<void> {
+    const next = reconcileRecords(this.all(), presentKeys, sizes);
     this.map = new Map(next.map((r) => [r.key, r]));
     this.schedulePersist();
   }

@@ -66,6 +66,7 @@ import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
 import { DownloadIndex } from "../downloads/download-index";
 import { DownloadManager } from "../downloads/download-manager";
 import { DownloadStore } from "../downloads/download-store";
+import { JsTransferEngine } from "../downloads/js-transfer-engine";
 import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-config";
 import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
@@ -299,12 +300,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // loop calls it through this ref so it stays out of that effect's deps.
   const cacheOnPlayRef = useRef<((s: PlaybackState) => void) | null>(null);
 
+  const transferEngine = useMemo(
+    () => new JsTransferEngine({ store: downloadStore, fetch }),
+    [downloadStore],
+  );
+
   const downloadManager = useMemo(
     () =>
       new DownloadManager({
         store: downloadStore,
         index: downloadIndex,
-        fetch,
+        engine: transferEngine,
         endpoint: async (serverId: string) => ({
           baseUrl: gateway.baseUrlFor(serverId),
           token: tokenRef.current ?? "",
@@ -326,7 +332,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         },
       }),
-    [downloadStore, downloadIndex, gateway, bumpDownloadsVersion],
+    [downloadStore, downloadIndex, transferEngine, gateway, bumpDownloadsVersion],
   );
 
   // Ref so the connectivity probe always sees the current library without
@@ -579,10 +585,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSyncEnabledLocal(storedSync);
       cacheConfigRef.current = storedCache;
       setCacheConfigState(storedCache);
-      // Load the download index and reconcile with what's actually on disk.
+      // Load the download index and reconcile with what's actually on disk —
+      // size-verified: a downloaded record whose file doesn't match its
+      // expectedBytes is demoted to missing (retroactively heals pre-v2 partials).
       await downloadIndex.load();
-      const presentKeys = downloadStore.presentNonEmptyKeys();
-      await downloadIndex.reconcile(presentKeys);
+      const fileSizes = downloadStore.presentFileSizes();
+      const presentKeys = new Set(fileSizes.keys());
+      await downloadIndex.reconcile(presentKeys, fileSizes);
+      // Delete corrupt files (record demoted to missing but a wrong-size file is present).
+      for (const r of downloadIndex.all()) {
+        if (r.state === "missing" && presentKeys.has(r.key)) downloadStore.remove(r.key);
+      }
       // Resume an interrupted sync: records stuck "queued"/"downloading" from a
       // previous launch are resolved against disk (present → downloaded, else
       // dropped so the next sync re-queues them) — never re-download a finished track.
@@ -664,6 +677,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       plexPath: track.media.partKey,
       trackId: track.id,
       origin,
+      // Integrity truth for Original downloads (AAC ignores it — no
+      // predetermined transcode size).
+      expectedBytes: track.media.sizeBytes,
       meta: {
         title: track.title,
         artistName: track.artistName,

@@ -1,15 +1,12 @@
 import {
-  buildHlsStartUrl,
+  buildTransferJob,
   type DownloadJob,
   type DownloadRecord,
-  parseHlsMaster,
-  parseHlsMedia,
   type StorageQuality,
-  stopSessionUrl,
-  TRANSCODE_PROFILE_EXTRA,
 } from "@musex/core";
 import type { DownloadIndex } from "./download-index";
-import type { FileStore, StoreWriter } from "./download-store";
+import type { FileStore } from "./download-store";
+import type { TransferEngine } from "./transfer-engine";
 
 export interface DownloadProgress {
   key: string;
@@ -21,17 +18,18 @@ export interface DownloadProgress {
 export interface DownloadManagerDeps {
   store: FileStore;
   index: DownloadIndex;
-  fetch: typeof fetch;
+  /** Executes transfers (JS today; PR2 adds the native background engine). */
+  engine: TransferEngine;
   endpoint: (serverId: string) => Promise<{ baseUrl: string; token: string }>;
   clientId: string;
   getQuality: () => StorageQuality;
   onProgress: (e: DownloadProgress) => void;
 }
 
-const SEGMENT_RETRY_DELAY_MS = 700;
-const SEGMENT_RETRY_ATTEMPTS = 60;
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
+/** The download orchestrator: queue policy, dedupe, record bookkeeping. One
+ *  job at a time (concurrency 1 — politeness alongside live streaming); the
+ *  actual transfer runs behind the TransferEngine seam, its events mapped back
+ *  onto index records. */
 export class DownloadManager {
   private queue: DownloadJob[] = [];
   private running = false;
@@ -59,18 +57,22 @@ export class DownloadManager {
     bytes: number,
     error?: string,
   ): Promise<void> {
+    const mode = this.deps.getQuality().mode;
     const rec: DownloadRecord = {
       key: job.key,
       serverId: job.serverId,
       plexPath: job.plexPath,
       trackId: job.trackId,
-      format: this.deps.getQuality().mode === "aac" ? "aac" : "original",
+      format: mode === "aac" ? "aac" : "original",
       state,
       bytes,
       addedAt: this.deps.index.get(job.key)?.addedAt ?? Date.now(),
       error,
       meta: job.meta,
       origin: job.origin ?? "manual",
+      // Integrity truth for original files only — an AAC transcode has no
+      // predetermined size, so its record never carries one.
+      expectedBytes: mode === "aac" ? undefined : job.expectedBytes,
     };
     await this.deps.index.upsert(rec);
     this.deps.onProgress({ key: job.key, state, bytes, error });
@@ -95,122 +97,29 @@ export class DownloadManager {
     await this.record(job, "downloading", 0);
     const quality = this.deps.getQuality();
     const ep = await this.deps.endpoint(job.serverId);
-    if (quality.mode === "aac") await this.runHlsJob(job, quality, ep);
-    else await this.runOriginalJob(job, ep);
-  }
-
-  private async runOriginalJob(
-    job: DownloadJob,
-    ep: { baseUrl: string; token: string },
-  ): Promise<void> {
-    const url = `${ep.baseUrl}${job.plexPath}${job.plexPath.includes("?") ? "&" : "?"}X-Plex-Token=${encodeURIComponent(ep.token)}`;
-    try {
-      const bytes = await this.deps.store.downloadUrl(job.key, url, (w) =>
-        this.deps.onProgress({ key: job.key, state: "downloading", bytes: w }),
-      );
-      await this.record(job, "downloaded", bytes);
-    } catch (e) {
-      this.deps.store.remove(job.key);
-      await this.record(job, "failed", 0, e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  private async runHlsJob(
-    job: DownloadJob,
-    quality: StorageQuality,
-    ep: { baseUrl: string; token: string },
-  ): Promise<void> {
-    const session = `${job.key}-${Date.now()}`;
-    const startUrl = buildHlsStartUrl({
-      baseUrl: ep.baseUrl,
-      token: ep.token,
+    const transfer = buildTransferJob({
+      job,
+      quality,
+      endpoint: ep,
       clientId: this.deps.clientId,
-      session,
-      trackId: job.trackId,
-      bitrateKbps: quality.bitrateKbps,
+      destPath: this.deps.store.path(job.key),
+      // Session id is caller-supplied (core stays Date.now-free).
+      session: `${job.key}-${Date.now()}`,
     });
-    const headers = {
-      "X-Plex-Token": ep.token,
-      "X-Plex-Client-Profile-Extra": TRANSCODE_PROFILE_EXTRA,
-    };
-    let w: StoreWriter | null = null;
-    try {
-      const startRes = await this.deps.fetch(startUrl, { headers });
-      if (!startRes.ok) {
-        await this.record(job, "failed", 0, `hls start ${startRes.status}`);
-        return;
-      }
-      const startText = await startRes.text();
-      const variant = parseHlsMaster(startText);
-      let mediaUrl = startUrl;
-      let mediaText = startText;
-      if (variant) {
-        mediaUrl = new URL(variant, startUrl).toString();
-        const mediaRes = await this.deps.fetch(mediaUrl, { headers });
-        if (!mediaRes.ok) {
-          await this.record(job, "failed", 0, `hls media ${mediaRes.status}`);
+    // Map this job's engine events back onto records; resolve on the terminal one.
+    await new Promise<void>((resolve) => {
+      const off = this.deps.engine.onEvent((e) => {
+        if (e.key !== job.key) return;
+        if (e.kind === "progress") {
+          this.deps.onProgress({ key: job.key, state: "downloading", bytes: e.bytes });
           return;
         }
-        mediaText = await mediaRes.text();
-      }
-      const { segments, ended } = parseHlsMedia(mediaText);
-      if (segments.length === 0) {
-        await this.record(job, "failed", 0, "no segments");
-        return;
-      }
-      w = this.deps.store.beginWrite(job.key);
-      let total = 0;
-      for (const seg of segments) {
-        const bytes = await this.fetchSegment(new URL(seg.uri, mediaUrl).toString(), headers);
-        if (bytes === null) {
-          await w.abort();
-          w = null;
-          await this.record(job, "failed", 0, `segment unavailable: ${seg.uri}`);
-          return;
-        }
-        w.write(bytes);
-        total += bytes.byteLength;
-        this.deps.onProgress({ key: job.key, state: "downloading", bytes: total });
-      }
-      if (!ended) {
-        await w.abort();
-        w = null;
-        await this.record(job, "failed", 0, "incomplete playlist (no ENDLIST)");
-        return;
-      }
-      await w.commit();
-      w = null;
-      await this.record(job, "downloaded", total);
-    } catch (e) {
-      if (w) await w.abort();
-      await this.record(job, "failed", 0, e instanceof Error ? e.message : String(e));
-    } finally {
-      await this.deps
-        .fetch(
-          stopSessionUrl({
-            baseUrl: ep.baseUrl,
-            token: ep.token,
-            clientId: this.deps.clientId,
-            session,
-          }),
-        )
-        .catch(() => {});
-    }
-  }
-
-  private async fetchSegment(
-    url: string,
-    headers: Record<string, string>,
-  ): Promise<Uint8Array | null> {
-    for (let attempt = 0; attempt < SEGMENT_RETRY_ATTEMPTS; attempt++) {
-      const res = await this.deps.fetch(url, { headers });
-      if (res.ok) {
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        if (bytes.byteLength > 0) return bytes;
-      } else if (res.status !== 404 && res.status < 500) return null;
-      await delay(SEGMENT_RETRY_DELAY_MS);
-    }
-    return null;
+        off();
+        if (e.kind === "complete") void this.record(job, "downloaded", e.bytes).then(resolve);
+        else void this.record(job, "failed", 0, e.message).then(resolve);
+      });
+      void this.deps.engine.submit([transfer]);
+    });
   }
 
   async removeDownload(key: string): Promise<void> {

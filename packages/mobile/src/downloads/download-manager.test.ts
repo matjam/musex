@@ -2,6 +2,7 @@ import type { DownloadJob } from "@musex/core";
 import { describe, expect, it, vi } from "vitest";
 import { DownloadIndex } from "./download-index";
 import { DownloadManager } from "./download-manager";
+import { JsTransferEngine } from "./js-transfer-engine";
 
 function fakeStore() {
   const files = new Map<string, string>();
@@ -10,6 +11,7 @@ function fakeStore() {
     has: (k: string) => files.has(k),
     size: (k: string) => files.get(k)?.length ?? 0,
     uri: (k: string) => `file:///downloads/${k}`,
+    path: (k: string) => `/downloads/${k}`,
     beginWrite(key: string) {
       let buf = "";
       return {
@@ -28,6 +30,7 @@ function fakeStore() {
     },
     remove: (k: string) => void files.delete(k),
     presentNonEmptyKeys: () => new Set(files.keys()),
+    presentFileSizes: () => new Map([...files.entries()].map(([k, v]) => [k, v.length])),
     totalBytes: () => 0,
   };
 }
@@ -69,7 +72,7 @@ function mgr(
     m: new DownloadManager({
       store: store as never,
       index,
-      fetch: fetchFn,
+      engine: new JsTransferEngine({ store: store as never, fetch: fetchFn }),
       endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
       clientId: "cid",
       getQuality: () => quality,

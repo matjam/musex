@@ -30,6 +30,13 @@ export class DownloadStore {
     return new File(this.dir, key).uri;
   }
 
+  /** Absolute filesystem path for a key's final file (no file:// scheme) — what
+   *  native/JS engines write to (`path + ".part"` during transfer). */
+  path(key: string): string {
+    const uri = new File(this.dir, key).uri;
+    return uri.startsWith("file://") ? decodeURI(uri.slice("file://".length)) : uri;
+  }
+
   /** AAC path: append segment bytes to `<key>.part`, then move to `<key>`. */
   beginWrite(key: string): StoreWriter {
     this.ensureDir();
@@ -85,14 +92,19 @@ export class DownloadStore {
 
   /** Keys of present, non-empty, non-`.part` files (for reconcile + size totals). */
   presentNonEmptyKeys(): Set<string> {
-    const keys = new Set<string>();
-    if (!this.dir.exists) return keys;
+    return new Set(this.presentFileSizes().keys());
+  }
+
+  /** Sizes of present non-.part files, for size-verified reconcile. */
+  presentFileSizes(): Map<string, number> {
+    const sizes = new Map<string, number>();
+    if (!this.dir.exists) return sizes;
     for (const entry of this.dir.list()) {
       if (entry instanceof File && entry.name && !entry.name.endsWith(".part") && entry.size > 0) {
-        keys.add(entry.name);
+        sizes.set(entry.name, entry.size);
       }
     }
-    return keys;
+    return sizes;
   }
 
   totalBytes(): number {
@@ -111,9 +123,11 @@ export type FileStore = Pick<
   | "has"
   | "size"
   | "uri"
+  | "path"
   | "beginWrite"
   | "downloadUrl"
   | "remove"
   | "presentNonEmptyKeys"
+  | "presentFileSizes"
   | "totalBytes"
 >;
