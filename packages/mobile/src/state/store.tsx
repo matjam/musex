@@ -355,10 +355,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const connectivityMonitor = useMemo(() => {
     const NetInfo = require("@react-native-community/netinfo") as {
-      addEventListener: (cb: (state: { isConnected: boolean | null }) => void) => () => void;
+      addEventListener: (
+        cb: (state: { isConnected: boolean | null; type: string }) => void,
+      ) => () => void;
     };
     return new ConnectivityMonitor({
-      subscribe: (cb) => NetInfo.addEventListener(cb),
+      subscribe: (cb) =>
+        NetInfo.addEventListener((s) => cb({ isConnected: s.isConnected, type: s.type })),
       probe: async () => {
         const tok = tokenRef.current;
         const lib = libraryRef.current;
