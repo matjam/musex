@@ -53,8 +53,8 @@ export function transferModeFor(i: {
 // offline enqueues just wait — the engine retries.)
 ```
 
-- [ ] **Step 1 — failing tests:** transfer-mode table test (original always; aac+native+wifi→convert; aac+native+cellular→hls; aac+no-native→hls; aac+native+other→convert). buildTransferJob convert case: url equals the mode:"original" url for the same job, `mode:"convert"`, `targetBitrateKbps: 256` from quality, expectedBytes passthrough, no stopUrl.
-- [ ] **Step 2 — implement + barrel.** `pnpm check` → 0. Commit `feat(core): convert transfer mode + transferModeFor routing decision`, push.
+- [x] **Step 1 — failing tests:** transfer-mode table test (original always; aac+native+wifi→convert; aac+native+cellular→hls; aac+no-native→hls; aac+native+other→convert). buildTransferJob convert case: url equals the mode:"original" url for the same job, `mode:"convert"`, `targetBitrateKbps: 256` from quality, expectedBytes passthrough, no stopUrl.
+- [x] **Step 2 — implement + barrel.** `pnpm check` → 0. Commit `feat(core): convert transfer mode + transferModeFor routing decision`, push.
 
 ### Task 2: connection type through the ConnectivityMonitor
 
@@ -64,8 +64,8 @@ export function transferModeFor(i: {
 
 **Interfaces — Produces:** `ConnectivityDeps.subscribe` callback gains `type?: string` (NetInfo's `state.type`: "wifi" | "cellular" | …); `ConnectivityMonitor.connectionType(): ConnectionType` (core type; map "wifi"→"wifi", "cellular"→"cellular", null/undefined/"none"→"none", else "other"; default "other" before the first event so a cold enqueue doesn't false-cellular). store.tsx passes `type: state.type` in the NetInfo subscription and exposes the monitor's `connectionType` getter to the manager (Task 3).
 
-- [ ] **Step 1 — failing tests:** subscribe emits type → `connectionType()` reflects it; default before events is "other"; "none" when disconnected.
-- [ ] **Step 2 — implement + wire store's NetInfo callback.** `pnpm check` → 0. Commit `feat(mobile): connectivity monitor exposes connection type`, push.
+- [x] **Step 1 — failing tests:** subscribe emits type → `connectionType()` reflects it; default before events is "other"; "none" when disconnected.
+- [x] **Step 2 — implement + wire store's NetInfo callback.** `pnpm check` → 0. Commit `feat(mobile): connectivity monitor exposes connection type`, push.
 
 ### Task 3: manager/router wiring + record-meta patch
 
@@ -82,8 +82,8 @@ export function transferModeFor(i: {
 - Router: `submit` sends `"convert"` jobs to the **original** engine (they're native downloads+conversions); `"hls"` → hls engine (unchanged).
 - **Record-meta patch on complete:** when a convert-mode job completes, the manager's record write also patches `meta`: `{ ...job.meta, container: "m4a", audioCodec: "aac", bitrate: targetBitrateKbps }` so `recordToTrack` reconstructs the real artifact. (Manager knows the mode from its `submitted`/queue entry — carry it there.)
 
-- [ ] **Step 1 — failing tests:** manager routes aac→convert when supported+wifi (fake engine captures mode), aac→hls on cellular fake, convert-complete patches record meta (container m4a/codec aac/bitrate target), router sends convert jobs to the original engine.
-- [ ] **Step 2 — implement + store wiring.** `pnpm check` → 0. Commit `feat(mobile): route AAC to native convert on WiFi (record meta patched)`, push.
+- [x] **Step 1 — failing tests:** manager routes aac→convert when supported+wifi (fake engine captures mode), aac→hls on cellular fake, convert-complete patches record meta (container m4a/codec aac/bitrate target), router sends convert jobs to the original engine.
+- [x] **Step 2 — implement + store wiring.** `pnpm check` → 0. Commit `feat(mobile): route AAC to native convert on WiFi (record meta patched)`, push.
 
 ### Task 4: Swift — conversion queue
 
@@ -99,8 +99,8 @@ export function transferModeFor(i: {
 - Drain triggers: after every convert-download completion; at session-recreation/cold-start (after state load); and at `urlSessionDidFinishEvents` (before calling the stashed completion handler, convert AT MOST the in-flight one — don't hold the handler hostage; kick an async drain with beginBackgroundTask for the rest).
 - `cancel(keys)` also removes `.orig`/`.tmp` files + pending entries.
 
-- [ ] **Step 1 — implement.** `pnpm check` → 0 (JS untouched here but run it), then prebuild/xcodebuild → BUILD SUCCEEDED (iterate until clean).
-- [ ] **Step 2 —** Commit `feat(mobile): native on-device AAC conversion queue (reader/writer pipeline)`, push.
+- [x] **Step 1 — implement.** `pnpm check` → 0 (JS untouched here but run it), then prebuild/xcodebuild → BUILD SUCCEEDED (iterate until clean).
+- [x] **Step 2 —** Commit `feat(mobile): native on-device AAC conversion queue (reader/writer pipeline)`, push.
 
 ### Task 4b: Background App Refresh awareness (user request)
 
@@ -112,14 +112,14 @@ export function transferModeFor(i: {
 - Swift: `Function("getBackgroundRefreshStatus")` → read `UIApplication.shared.backgroundRefreshStatus` **on the main thread** (`.runOnQueue(.main)` in the Module DSL, or dispatch) → return `"available" | "denied" | "restricted"`. JS wrapper exposes `getBackgroundRefreshStatus(): string | null` (null when the native module is absent — same safe-null pattern).
 - Settings → Downloads: under the "Sync entire library" section, when sync is enabled AND the status is `denied`/`restricted`, render a dim warning row (lucide `Info` icon + text): "Background App Refresh is off — sync only progresses while musex is open or playing music. Enable it in iOS Settings to let downloads trickle in the background." The row is a Pressable → `Linking.openSettings()` (opens this app's iOS settings page, which contains the toggle). When status is `available` or null, render nothing. Read the status once per screen focus (simple `useEffect` on mount is fine).
 
-- [ ] **Step 1 —** Swift getter + wrapper; settings row per above. `pnpm check` → 0; xcodebuild BUILD SUCCEEDED (combined with Task 4's build iteration is fine).
-- [ ] **Step 2 —** Commit `feat(mobile): warn when Background App Refresh is off for library sync`, push.
+- [x] **Step 1 —** Swift getter + wrapper; settings row per above. `pnpm check` → 0; xcodebuild BUILD SUCCEEDED (combined with Task 4's build iteration is fine).
+- [x] **Step 2 —** Commit `feat(mobile): warn when Background App Refresh is off for library sync`, push.
 
 ### Task 5: wrap
 
-- [ ] **Step 1 —** Full `pnpm check` + final xcodebuild BUILD SUCCEEDED.
-- [ ] **Step 2 —** CLAUDE.md arc bullet (convert mode + transferModeFor + cellular carve-out; .orig/persisted pendingConversions/reader-writer AAC pipeline/beginBackgroundTask drains; resume-without-redownload; record-meta patch; delivered-size = m4a).
-- [ ] **Step 3 —** Update the spec only if implementation diverged. Commit `docs: on-device AAC conversion arc bullet`, push. NO PR (controller).
+- [x] **Step 1 —** Full `pnpm check` + final xcodebuild BUILD SUCCEEDED.
+- [x] **Step 2 —** CLAUDE.md arc bullet (convert mode + transferModeFor + cellular carve-out; .orig/persisted pendingConversions/reader-writer AAC pipeline/beginBackgroundTask drains; resume-without-redownload; record-meta patch; delivered-size = m4a).
+- [x] **Step 3 —** Update the spec only if implementation diverged. Commit `docs: on-device AAC conversion arc bullet`, push. NO PR (controller).
 
 ---
 
