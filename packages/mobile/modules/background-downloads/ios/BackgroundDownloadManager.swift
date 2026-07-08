@@ -110,6 +110,16 @@ final class BackgroundDownloadManager: NSObject {
   private var activeTasks: [String: URLSessionTask] = [:]
   private var tasksLoaded = false
   private var lastProgressEmit: [String: TimeInterval] = [:]
+  /// Keys whose active task is parked on a future `earliestBeginDate` (retry
+  /// backoff). fill() may start the next backlog job while EVERY active task
+  /// is waiting — otherwise one job's minutes-long backoff head-of-line
+  /// blocks the whole queue.
+  private var waitingKeys: Set<String> = []
+  /// Segment-phase jobs restored from disk on a cold relaunch: Plex may have
+  /// re-transcoded with different segment boundaries since, so the persisted
+  /// segment list must be revalidated against a fresh media playlist before
+  /// the chain continues. In-memory only (a warm resume never needs it).
+  private var revalidateKeys: Set<String> = []
   private var backgroundCompletionHandler: (() -> Void)?
 
   /// Set by the module (JS alive) to forward events; nil while JS is away —
@@ -160,7 +170,16 @@ final class BackgroundDownloadManager: NSObject {
   }
 
   func setBackgroundCompletionHandler(_ handler: @escaping () -> Void) {
-    queue.async { self.backgroundCompletionHandler = handler }
+    queue.async {
+      // Never drop a previously stashed handler — the ExpoAppDelegate
+      // aggregates handlers across subscribers and only fires the system
+      // callback once EVERY handed-out handler has been called; overwriting
+      // one silently would leave the aggregate unbalanced forever.
+      if let previous = self.backgroundCompletionHandler {
+        DispatchQueue.main.async { previous() }
+      }
+      self.backgroundCompletionHandler = handler
+    }
   }
 
   // MARK: - JS API (module calls)
@@ -191,13 +210,31 @@ final class BackgroundDownloadManager: NSObject {
       let drop = Set(keys)
       let dropped = self.state.jobs.filter { drop.contains($0.key) }
       self.state.jobs.removeAll { drop.contains($0.key) }
+      var terminated = Set(dropped.map { $0.key })
       for key in keys {
-        if let task = self.activeTasks.removeValue(forKey: key) { task.cancel() }
+        if let task = self.activeTasks.removeValue(forKey: key) {
+          task.cancel()
+          terminated.insert(key)
+        }
         self.lastProgressEmit.removeValue(forKey: key)
+        self.waitingKeys.remove(key)
       }
       for job in dropped {
         try? FileManager.default.removeItem(atPath: job.destPath + ".part")
       }
+      // Invariant JS relies on: every submitted key eventually gets exactly
+      // one terminal event — an explicit cancel IS that event. No double
+      // emit from the delegate: a cancelled task's didCompleteWithError
+      // arrives as NSURLErrorCancelled (swallowed there), and its job is
+      // already gone from the backlog anyway.
+      for key in terminated {
+        if let emitter = self.emitter {
+          emitter("onError", ["key": key, "message": "cancelled", "terminal": true])
+        } else {
+          self.state.failed.append(FailedResult(key: key, message: "cancelled"))
+        }
+      }
+      self.trimResultBuffers()
       self.persist()
       self.fill()
       completion()
@@ -228,7 +265,13 @@ final class BackgroundDownloadManager: NSObject {
 
   private func fill() {
     guard tasksLoaded else { return }
-    guard activeTasks.isEmpty else { return } // one task at a time
+    // Steady-state cap is 1 task at a time, but a task parked on a future
+    // earliestBeginDate (retry backoff, up to minutes) must not head-of-line
+    // block the rest of the backlog: when every active task is backoff-
+    // waiting, start the next job. If a delayed retry then fires mid-transfer
+    // we briefly run 2 tasks — an accepted tradeoff: suspend-survivable
+    // backoff via earliestBeginDate is worth the rare brief overlap.
+    guard activeTasks.keys.allSatisfy({ waitingKeys.contains($0) }) else { return }
     guard let idx = state.jobs.firstIndex(where: { activeTasks[$0.key] == nil }) else {
       return
     }
@@ -239,7 +282,31 @@ final class BackgroundDownloadManager: NSObject {
     }
   }
 
+  /// Size of the file at `path`, or nil when absent/unreadable.
+  private func fileSize(_ path: String) -> Int64? {
+    let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+    return (attrs?[.size] as? NSNumber)?.int64Value
+  }
+
+  /// Cold-relaunch short-circuit: a task that finished while the app was dead
+  /// can be absent from getAllTasks(), so fill() would restart the job from
+  /// zero — and the identity guard then discards the finished file when its
+  /// late delegate event finally arrives. If the dest already holds a
+  /// complete file, the job is done. Returns true when it completed the job.
+  private func completeIfAlreadyCommitted(_ job: JobDescriptor) -> Bool {
+    // A live `.part` means the transfer is genuinely mid-flight — any dest
+    // file would be a stale leftover, not a commit.
+    if FileManager.default.fileExists(atPath: job.destPath + ".part") { return false }
+    guard let size = fileSize(job.destPath) else { return false }
+    let complete = job.expectedBytes.map { size >= $0 } ?? (size > 0)
+    guard complete else { return false }
+    if job.mode == "hls" { fireStopUrl(job) }
+    completeJob(job.key, bytes: size)
+    return true
+  }
+
   private func startOriginal(_ job: JobDescriptor) {
+    if completeIfAlreadyCommitted(job) { return }
     let task: URLSessionDownloadTask
     if let b64 = job.resumeDataB64, let data = Data(base64Encoded: b64) {
       task = session.downloadTask(withResumeData: data)
@@ -255,6 +322,9 @@ final class BackgroundDownloadManager: NSObject {
     task.taskDescription = job.key
     if job.retries > 0 {
       task.earliestBeginDate = Date().addingTimeInterval(Self.backoff(retries: job.retries))
+      waitingKeys.insert(job.key)
+    } else {
+      waitingKeys.remove(job.key)
     }
     activeTasks[job.key] = task
     task.resume()
@@ -271,12 +341,34 @@ final class BackgroundDownloadManager: NSObject {
     return state.jobs.firstIndex(where: { $0.key == key })
   }
 
+  /// Cap on each persisted results buffer; oldest entries drop past it. Only
+  /// results that land while NO emitter is attached are buffered at all —
+  /// live events go straight to JS and must not ALSO be buffered, or a JS
+  /// reload without a native teardown would fold them a second time (and the
+  /// buffer would grow without bound while JS is healthy).
+  private static let maxBufferedResults = 500
+
+  private func trimResultBuffers() {
+    if state.completed.count > Self.maxBufferedResults {
+      state.completed.removeFirst(state.completed.count - Self.maxBufferedResults)
+    }
+    if state.failed.count > Self.maxBufferedResults {
+      state.failed.removeFirst(state.failed.count - Self.maxBufferedResults)
+    }
+  }
+
   private func completeJob(_ key: String, bytes: Int64) {
     state.jobs.removeAll { $0.key == key }
-    state.completed.append(CompletedResult(key: key, bytes: bytes))
-    persist()
     lastProgressEmit.removeValue(forKey: key)
-    emitter?("onComplete", ["key": key, "bytes": Int(bytes)])
+    waitingKeys.remove(key)
+    if let emitter = emitter {
+      persist()
+      emitter("onComplete", ["key": key, "bytes": Int(bytes)])
+    } else {
+      state.completed.append(CompletedResult(key: key, bytes: bytes))
+      trimResultBuffers()
+      persist()
+    }
     fill()
   }
 
@@ -286,10 +378,16 @@ final class BackgroundDownloadManager: NSObject {
       try? FileManager.default.removeItem(atPath: job.destPath + ".part")
     }
     state.jobs.removeAll { $0.key == key }
-    state.failed.append(FailedResult(key: key, message: message))
-    persist()
     lastProgressEmit.removeValue(forKey: key)
-    emitter?("onError", ["key": key, "message": message, "terminal": true])
+    waitingKeys.remove(key)
+    if let emitter = emitter {
+      persist()
+      emitter("onError", ["key": key, "message": message, "terminal": true])
+    } else {
+      state.failed.append(FailedResult(key: key, message: message))
+      trimResultBuffers()
+      persist()
+    }
     fill()
   }
 
@@ -370,11 +468,28 @@ final class BackgroundDownloadManager: NSObject {
   // segments < nextIndex, torn appends are truncated away on the next append).
 
   private func startHls(_ jobIdx: Int) {
+    if completeIfAlreadyCommitted(state.jobs[jobIdx]) { return }
     if state.jobs[jobIdx].hls == nil {
       state.jobs[jobIdx].hls = HlsJobState(
         phase: "master", mediaUrl: nil, segmentUrls: [], nextIndex: 0, bytes: 0, attempts: 0)
       persist()
+    } else if revalidateKeys.contains(state.jobs[jobIdx].key),
+      state.jobs[jobIdx].hls!.phase == "segment"
+    {
+      // Cold-relaunch resume of a segment-phase job: the persisted segment
+      // list may be stale (Plex re-transcodes with different boundaries).
+      // Re-fetch the media playlist and compare before continuing.
+      revalidateKeys.remove(state.jobs[jobIdx].key)
+      guard state.jobs[jobIdx].hls!.mediaUrl != nil else {
+        // No media URL to revalidate against — restart the chain outright.
+        resetHlsJob(state.jobs[jobIdx].key, jobIdx: jobIdx)
+        return
+      }
+      state.jobs[jobIdx].hls!.phase = "revalidate"
+      state.jobs[jobIdx].hls!.attempts = 0
+      persist()
     }
+    revalidateKeys.remove(state.jobs[jobIdx].key)
     enqueueCurrentHlsStep(jobIdx, delayed: false)
   }
 
@@ -389,7 +504,7 @@ final class BackgroundDownloadManager: NSObject {
     switch hls.phase {
     case "master":
       urlString = job.url
-    case "media":
+    case "media", "revalidate":
       guard let mediaUrl = hls.mediaUrl else {
         failTerminal(job.key, "hls media url missing")
         return
@@ -414,6 +529,9 @@ final class BackgroundDownloadManager: NSObject {
     task.taskDescription = job.key
     if delayed {
       task.earliestBeginDate = Date().addingTimeInterval(Self.hlsRetryDelaySec)
+      waitingKeys.insert(job.key)
+    } else {
+      waitingKeys.remove(job.key)
     }
     activeTasks[job.key] = task
     task.resume()
@@ -448,6 +566,11 @@ final class BackgroundDownloadManager: NSObject {
         failTerminal(key, "hls http \(status)")
         return
       }
+    } else if phase == "revalidate", status >= 400 {
+      // Revalidation hit a dead/stale transcode session — the persisted
+      // segment list can't be verified, so restart the chain from scratch.
+      resetHlsJob(key, jobIdx: jobIdx)
+      return
     } else if status >= 400 {
       // Playlist (master/media) fetches fail fast on ANY non-ok response —
       // matches the JS engine; the retry policy above is for SEGMENTS only.
@@ -482,6 +605,31 @@ final class BackgroundDownloadManager: NSObject {
       }
       let base = state.jobs[jobIdx].hls?.mediaUrl ?? state.jobs[jobIdx].url
       beginSegments(key, jobIdx: jobIdx, mediaText: text, baseUrl: base)
+    case "revalidate":
+      // Cold-relaunch resume: compare a fresh media playlist against the
+      // persisted segment list. Identical → the chain is still valid,
+      // continue at nextIndex; different (Plex re-transcoded with new
+      // boundaries) → the `.part` is useless, restart from the fresh list.
+      guard let text = try? String(contentsOf: location, encoding: .utf8) else {
+        retryOrFailHlsStep(key, jobIdx: jobIdx, "unreadable media playlist")
+        return
+      }
+      let job = state.jobs[jobIdx]
+      let baseUrl = job.hls?.mediaUrl ?? job.url
+      let (segments, ended) = Self.parseHlsMedia(text)
+      let resolved = segments.compactMap {
+        URL(string: $0, relativeTo: URL(string: baseUrl))?.absoluteString
+      }
+      if ended, resolved.count == segments.count, resolved == (job.hls?.segmentUrls ?? []) {
+        state.jobs[jobIdx].hls!.phase = "segment"
+        state.jobs[jobIdx].hls!.attempts = 0
+        persist()
+        enqueueCurrentHlsStep(jobIdx, delayed: false)
+      } else {
+        // beginSegments deletes the stale .part and starts at index 0 from
+        // the fresh playlist (the current server truth).
+        beginSegments(key, jobIdx: jobIdx, mediaText: text, baseUrl: baseUrl)
+      }
     default: // "segment"
       guard let data = try? Data(contentsOf: location), !data.isEmpty else {
         // Empty body = Plex not ready (mirrors the JS engine's empty-bytes retry).
@@ -693,6 +841,10 @@ final class BackgroundDownloadManager: NSObject {
     guard let data = try? Data(contentsOf: stateFileURL) else { return }
     if let loaded = try? JSONDecoder().decode(PersistedState.self, from: data) {
       state = loaded
+      // Segment-phase jobs restored from disk must revalidate their persisted
+      // segment list against a fresh media playlist before continuing (Plex
+      // may have re-transcoded with different boundaries while we were dead).
+      revalidateKeys = Set(state.jobs.filter { $0.hls?.phase == "segment" }.map { $0.key })
     }
   }
 
@@ -721,6 +873,7 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
     // scheduled retry / the next HLS segment reuses the same key).
     if activeTasks[key] === downloadTask {
       activeTasks.removeValue(forKey: key)
+      waitingKeys.remove(key)
     } else if activeTasks[key] != nil {
       return // superseded — a newer task owns this key
     }
@@ -737,6 +890,9 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64
   ) {
     guard let key = downloadTask.taskDescription, let i = jobIndex(key) else { return }
+    // Bytes are flowing — a backoff-parked task that fired is waiting no more
+    // (fill() goes back to refusing new starts until it finishes).
+    waitingKeys.remove(key)
     guard state.jobs[i].mode == "original" else { return } // HLS progress = per-segment appends
     emitProgress(key, ["key": key, "bytes": Int(totalBytesWritten)])
   }
@@ -748,6 +904,7 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
     // registration under the same key.
     if activeTasks[key] === task {
       activeTasks.removeValue(forKey: key)
+      waitingKeys.remove(key)
     } else if activeTasks[key] != nil {
       return // superseded — a newer task owns this key
     }
@@ -757,7 +914,9 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
     }
     let nsError = error as NSError
     if nsError.code == NSURLErrorCancelled && nsError.domain == NSURLErrorDomain {
-      // Deliberate cancel — backlog already updated by cancel().
+      // Deliberate cancel — backlog already updated AND the terminal
+      // "cancelled" event already emitted by cancel(); emitting here would
+      // be a second terminal event for the same key.
       fill()
       return
     }
