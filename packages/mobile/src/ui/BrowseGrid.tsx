@@ -11,10 +11,11 @@ import {
 } from "@musex/core";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, Pressable, Text, useWindowDimensions } from "react-native";
+import { Dimensions, FlatList, Pressable, Text } from "react-native";
 import { artUrl } from "../logic/art-url";
 import { useStore } from "../state/store";
 import { Collage } from "./Collage";
+import { gridColumns } from "./grid-columns";
 import { theme } from "./theme";
 
 type Cell =
@@ -25,11 +26,15 @@ export function BrowseGrid() {
   const { gateway, token, artBaseFor, taste } = useStore();
   const library = useStore().state.library;
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  // Pane width measured on the list (iPad's sidebar shrinks the pane, so the
+  // window width would oversize tiles). Window width until first layout.
+  const [paneWidth, setPaneWidth] = useState(() => Dimensions.get("window").width);
   const [cells, setCells] = useState<Cell[]>([]);
 
-  // 2-column grid. No scrubber, so use the full width minus outer padding (6px each side).
-  const tileSize = (width - 12) / 2;
+  // Pane-width-derived columns. No scrubber, so use the full width minus outer
+  // padding (6px each side).
+  const cols = gridColumns(paneWidth);
+  const tileSize = (paneWidth - 12) / cols;
 
   useEffect(() => {
     if (!library || !token) return;
@@ -90,8 +95,10 @@ export function BrowseGrid() {
 
   return (
     <FlatList
+      key={cols}
       data={cells}
-      numColumns={2}
+      numColumns={cols}
+      onLayout={(e) => setPaneWidth(e.nativeEvent.layout.width)}
       keyExtractor={(c) => `${c.kind}:${c.key}`}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingHorizontal: 6 }}

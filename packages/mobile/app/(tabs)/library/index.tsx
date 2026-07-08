@@ -10,14 +10,7 @@ import {
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Trash2 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { ActivityIndicator, Dimensions, FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
 import { useRecordsProgress } from "../../../src/state/use-download-progress";
@@ -25,6 +18,7 @@ import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { AZScrubber } from "../../../src/ui/AZScrubber";
 import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
+import { gridColumns } from "../../../src/ui/grid-columns";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { Tile } from "../../../src/ui/Tile";
 import { theme } from "../../../src/ui/theme";
@@ -51,7 +45,9 @@ export default function LibraryBrowse() {
     removeDownload,
   } = useStore();
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  // Content-pane width (measured — on iPad the sidebar shrinks the pane, so
+  // the window width would oversize tiles). Window width until first layout.
+  const [paneWidth, setPaneWidth] = useState(() => Dimensions.get("window").width);
   const [segment, setSegment] = useState<Segment>("Artists");
   // Deep-link target segment (iPad sidebar "Downloaded"): `segNonce` changes on
   // every tap so re-taps re-trigger even when the segment value is unchanged.
@@ -72,9 +68,11 @@ export default function LibraryBrowse() {
   // Downloaded segment state: track-grouped albums (re-baked thumbs).
   const [dlTrackGroups, setDlTrackGroups] = useState<TrackAlbumGroup[]>([]);
 
-  // Tracks render as single-column rows; artists/albums/downloaded as a 2-col tile grid.
-  const numCols = segment === "Tracks" ? 1 : 2;
-  const tileSize = (width - 22) / 2; // 22 = scrubber gutter
+  // Tracks render as single-column rows; artists/albums/downloaded as a tile
+  // grid whose column count derives from the pane width (2 on phone, more on iPad).
+  const gridCols = gridColumns(paneWidth);
+  const numCols = segment === "Tracks" ? 1 : gridCols;
+  const tileSize = (paneWidth - 22) / gridCols; // 22 = scrubber gutter
 
   // Refetch whenever the Library tab gains focus so newly-added Plex tracks
   // appear without an app restart. On a focus-triggered refresh when items are
@@ -197,7 +195,10 @@ export default function LibraryBrowse() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <View
+      style={{ flex: 1, backgroundColor: theme.bg }}
+      onLayout={(e) => setPaneWidth(e.nativeEvent.layout.width)}
+    >
       <SegmentedControl
         segments={["Artists", "Albums", "Tracks", "Downloaded"]}
         value={segment}
@@ -205,9 +206,9 @@ export default function LibraryBrowse() {
       />
       {segment === "Downloaded" ? (
         <FlatList
-          key="downloaded"
+          key={`downloaded-${gridCols}`}
           data={dlTrackGroups}
-          numColumns={2}
+          numColumns={gridCols}
           keyExtractor={(g) => g.albumId}
           ListHeaderComponent={
             <View>
@@ -297,7 +298,7 @@ export default function LibraryBrowse() {
         <View style={{ flex: 1 }}>
           <FlatList
             ref={listRef}
-            key={segment}
+            key={`${segment}-${numCols}`}
             data={items}
             numColumns={numCols}
             keyExtractor={(it, i) => `${it.kind}-${it.data.id}-${i}`}
