@@ -36,6 +36,21 @@ export default function DownloadsSettings() {
     [downloadsList, downloadsVersion],
   );
 
+  // Failed downloads: count + the most frequent distinct error strings. This is
+  // the on-device diagnostic for a failing sync (DownloadRecord.error holds the
+  // exact failure, e.g. "http 401").
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
+  const failedSummary = useMemo(() => {
+    const failed = downloadsList().filter((r) => r.state === "failed");
+    const counts = new Map<string, number>();
+    for (const r of failed) {
+      const err = r.error ?? "unknown error";
+      counts.set(err, (counts.get(err) ?? 0) + 1);
+    }
+    const topErrors = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return { count: failed.length, topErrors };
+  }, [downloadsList, downloadsVersion]);
+
   function handleSyncToggle(next: boolean) {
     if (syncBusy) return;
     if (!next) {
@@ -365,6 +380,49 @@ export default function DownloadsSettings() {
                 and {inFlight.length - 20} more…
               </Text>
             ) : null}
+          </View>
+        </>
+      ) : null}
+
+      {failedSummary.count > 0 ? (
+        <>
+          <Text
+            style={{
+              color: theme.textDim,
+              fontSize: 12,
+              textTransform: "uppercase",
+              paddingHorizontal: theme.space(2),
+              paddingTop: theme.space(1),
+              paddingBottom: 6,
+            }}
+          >
+            Failed
+          </Text>
+          <View
+            style={{
+              backgroundColor: theme.surface,
+              borderRadius: 10,
+              marginHorizontal: theme.space(2),
+              marginBottom: theme.space(2),
+              borderWidth: 1,
+              borderColor: theme.border,
+              overflow: "hidden",
+              paddingHorizontal: theme.space(2),
+              paddingVertical: theme.space(1.5),
+            }}
+          >
+            <Text style={{ color: "#8b1a1a", fontSize: 15, fontWeight: "600" }}>
+              {failedSummary.count.toLocaleString()} failed
+            </Text>
+            {failedSummary.topErrors.map(([err, n]) => (
+              <Text
+                key={err}
+                style={{ color: theme.textDim, fontSize: 12, marginTop: 4 }}
+                numberOfLines={1}
+              >
+                “{err}” ×{n.toLocaleString()}
+              </Text>
+            ))}
           </View>
         </>
       ) : null}
