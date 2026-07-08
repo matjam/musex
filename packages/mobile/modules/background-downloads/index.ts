@@ -39,9 +39,23 @@ try {
 }
 
 /** Background App Refresh status, or null when the native module is absent
- *  (Expo Go, tests) — same safe-null pattern as the default export. */
+ *  (Expo Go, tests) — same safe-null pattern as the default export. Also
+ *  FEATURE-DETECTS the function: a dev-client binary built before this API
+ *  exposes the module WITHOUT it (JS/binary version skew), and calling the
+ *  undefined member was an uncaught red-box at app start. */
 export async function getBackgroundRefreshStatus(): Promise<string | null> {
-  return native ? native.getBackgroundRefreshStatus() : null;
+  return native && typeof native.getBackgroundRefreshStatus === "function"
+    ? native.getBackgroundRefreshStatus()
+    : null;
+}
+
+/** True when the INSTALLED binary's module supports convert-mode jobs (the
+ *  on-device AAC pipeline). `getBackgroundRefreshStatus` shipped in the same
+ *  native generation as convert support, so its presence is the version probe.
+ *  An older binary handed a convert job would run it down its HLS branch and
+ *  reintroduce the media-404 storm — feature-detect, never assume. */
+export function nativeSupportsConvert(): boolean {
+  return native != null && typeof native.getBackgroundRefreshStatus === "function";
 }
 
 export default native;

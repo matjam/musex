@@ -39,7 +39,9 @@ import {
   useState,
 } from "react";
 import { AppState } from "react-native";
-import BackgroundDownloadsNative from "../../modules/background-downloads";
+import BackgroundDownloadsNative, {
+  nativeSupportsConvert,
+} from "../../modules/background-downloads";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
 import {
   clearSession,
@@ -314,7 +316,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // otherwise (Expo Go, simulator without the module).
   const transferEngine = useMemo(() => {
     const js = new JsTransferEngine({ store: downloadStore, fetch });
-    const native = createNativeTransferEngine(BackgroundDownloadsNative);
+    // supportsConvert is FEATURE-DETECTED from the installed binary — a stale
+    // dev client (JS newer than the native build) must not be handed convert
+    // jobs it would run down its HLS branch.
+    const native = createNativeTransferEngine(BackgroundDownloadsNative, {
+      supportsConvert: nativeSupportsConvert(),
+    });
     return native ? new RoutingTransferEngine({ hls: js, original: native }) : js;
   }, [downloadStore]);
 

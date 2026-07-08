@@ -43,12 +43,19 @@ export class NativeTransferEngine implements TransferEngine {
   /** The native backlog is durable (survives suspend/kill) — the manager
    *  batch-submits everything and never awaits per job. */
   readonly ownsQueue = true;
-  /** The Swift module runs `"convert"` jobs (original download + on-device
-   *  AVFoundation AAC conversion). */
-  readonly supportsConvert = true;
+  /** Whether the INSTALLED binary's module runs `"convert"` jobs (original
+   *  download + on-device AVFoundation AAC conversion). Injected — the caller
+   *  feature-detects the binary (see `nativeSupportsConvert()` in the module
+   *  wrapper): a dev-client built before the convert generation would run a
+   *  convert job down its HLS branch and reintroduce the media-404 storm. */
+  readonly supportsConvert: boolean;
   private readonly listeners = new Set<(e: TransferEvent) => void>();
 
-  constructor(private readonly mod: BackgroundDownloadsModuleLike) {
+  constructor(
+    private readonly mod: BackgroundDownloadsModuleLike,
+    opts?: { supportsConvert?: boolean },
+  ) {
+    this.supportsConvert = opts?.supportsConvert ?? true;
     mod.addListener("onProgress", (e) =>
       this.emit({
         kind: "progress",
@@ -110,6 +117,7 @@ export class NativeTransferEngine implements TransferEngine {
  *  (Expo Go, tests, pre-prebuild) — the caller falls back to JsTransferEngine. */
 export function createNativeTransferEngine(
   mod: BackgroundDownloadsModuleLike | null,
+  opts?: { supportsConvert?: boolean },
 ): TransferEngine | null {
-  return mod ? new NativeTransferEngine(mod) : null;
+  return mod ? new NativeTransferEngine(mod, opts) : null;
 }
