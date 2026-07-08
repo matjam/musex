@@ -113,8 +113,13 @@ final class BackgroundDownloadManager: NSObject {
   private var backgroundCompletionHandler: (() -> Void)?
 
   /// Set by the module (JS alive) to forward events; nil while JS is away —
-  /// results still land in the persisted buffer for reattach().
-  var emitter: ((_ name: String, _ body: [String: Any?]) -> Void)?
+  /// results still land in the persisted buffer for reattach(). Confined to
+  /// `queue` (set via setEmitter) so it never races the delegate callbacks.
+  private var emitter: ((_ name: String, _ body: [String: Any?]) -> Void)?
+
+  func setEmitter(_ emitter: ((_ name: String, _ body: [String: Any?]) -> Void)?) {
+    queue.async { self.emitter = emitter }
+  }
 
   private lazy var session: URLSession = {
     let config = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
@@ -540,6 +545,12 @@ final class BackgroundDownloadManager: NSObject {
   private func finalizeHls(_ key: String, jobIdx: Int) {
     let job = state.jobs[jobIdx]
     let bytes = job.hls?.bytes ?? 0
+    let fm = FileManager.default
+    if !fm.fileExists(atPath: job.destPath + ".part") && fm.fileExists(atPath: job.destPath) {
+      // Killed between the move and the backlog persist — already committed.
+      completeJob(key, bytes: bytes)
+      return
+    }
     do {
       try moveIntoPlace(
         from: URL(fileURLWithPath: job.destPath + ".part"), toPath: job.destPath)
@@ -662,7 +673,14 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
     didFinishDownloadingTo location: URL
   ) {
     guard let key = downloadTask.taskDescription, let i = jobIndex(key) else { return }
-    activeTasks.removeValue(forKey: key)
+    // Identity-guarded removal: only unregister if WE are the registered task.
+    // A stale callback must never wipe a successor task's registration (a
+    // scheduled retry / the next HLS segment reuses the same key).
+    if activeTasks[key] === downloadTask {
+      activeTasks.removeValue(forKey: key)
+    } else if activeTasks[key] != nil {
+      return // superseded — a newer task owns this key
+    }
     let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 200
     if state.jobs[i].mode == "original" {
       handleOriginalFinished(key, jobIdx: i, location: location, status: status)
@@ -682,12 +700,18 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     guard let key = task.taskDescription else { return }
+    // Identity-guarded removal (see didFinishDownloadingTo): the trailing
+    // didComplete after a success/retry must not wipe a successor task's
+    // registration under the same key.
+    if activeTasks[key] === task {
+      activeTasks.removeValue(forKey: key)
+    } else if activeTasks[key] != nil {
+      return // superseded — a newer task owns this key
+    }
     guard let error = error else {
       // Success path already handled in didFinishDownloadingTo.
-      activeTasks.removeValue(forKey: key)
       return
     }
-    activeTasks.removeValue(forKey: key)
     let nsError = error as NSError
     if nsError.code == NSURLErrorCancelled && nsError.domain == NSURLErrorDomain {
       // Deliberate cancel — backlog already updated by cancel().

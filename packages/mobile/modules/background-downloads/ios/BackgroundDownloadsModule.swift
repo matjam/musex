@@ -12,14 +12,14 @@ public class BackgroundDownloadsModule: Module {
     Events("onProgress", "onComplete", "onError")
 
     OnCreate {
-      BackgroundDownloadManager.shared.emitter = { [weak self] name, body in
+      BackgroundDownloadManager.shared.setEmitter { [weak self] name, body in
         self?.sendEvent(name, body)
       }
       BackgroundDownloadManager.shared.ensureStarted()
     }
 
     OnDestroy {
-      BackgroundDownloadManager.shared.emitter = nil
+      BackgroundDownloadManager.shared.setEmitter(nil)
     }
 
     AsyncFunction("submit") { (jobsJson: String, promise: Promise) in
