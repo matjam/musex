@@ -5,12 +5,20 @@ import UIKit
 
 // The background-download engine. Owns ONE background URLSession (id
 // `net.stupendous.musex.downloads`) plus a JSON-persisted backlog of job
-// descriptors, and keeps exactly one URLSession task in flight (concurrency 1 —
-// politeness alongside live streaming), refilling from the backlog inside the
-// delegate. Because the session is a background session with
-// sessionSendsLaunchEvents, the whole backlog drains while the app is
-// suspended or killed; results that land while JS is away are buffered in the
-// same persisted state and handed over via reattach().
+// descriptors, and keeps a WINDOW of up to `taskWindow` URLSession tasks
+// enqueued at once, refilling from the backlog inside the delegate. The window
+// is the locked-screen drain budget: tasks created while the app is FOREGROUND
+// are non-discretionary and run to completion even after the screen locks, but
+// tasks created by delegate refills while the app is BACKGROUNDED are treated
+// as discretionary by iOS policy (deferred until charger + Wi-Fi) — so a batch
+// of ready tasks handed to the system up front is what keeps progress flowing
+// on a locked, battery-powered phone. Wire-level politeness (alongside live
+// streaming) moves to the session config's httpMaximumConnectionsPerHost = 1:
+// one transfer on the wire at a time, the rest queued system-side. Because the
+// session is a background session with sessionSendsLaunchEvents, the whole
+// backlog drains while the app is suspended or killed; results that land while
+// JS is away are buffered in the same persisted state and handed over via
+// reattach().
 //
 // "convert" jobs (AAC storage quality, off-cellular) download the ORIGINAL
 // file exactly like "original" — but into `destPath + ".orig.<ext>"` (see
@@ -162,9 +170,12 @@ final class BackgroundDownloadManager: NSObject {
   private var tasksLoaded = false
   private var lastProgressEmit: [String: TimeInterval] = [:]
   /// Keys whose active task is parked on a future `earliestBeginDate` (retry
-  /// backoff). fill() may start the next backlog job while EVERY active task
-  /// is waiting — otherwise one job's minutes-long backoff head-of-line
-  /// blocks the whole queue.
+  /// backoff). A parked task still holds a real URLSession slot, so it counts
+  /// toward the fill window — the other slots keep draining, which is what
+  /// makes one job's minutes-long backoff unable to head-of-line block the
+  /// backlog (the old "start the next job when EVERY active task is waiting"
+  /// exception is subsumed by the window). Kept for bookkeeping: didWriteData
+  /// clears a key once bytes flow.
   private var waitingKeys: Set<String> = []
   /// Segment-phase jobs restored from disk on a cold relaunch: Plex may have
   /// re-transcoded with different segment boundaries since, so the persisted
@@ -195,6 +206,12 @@ final class BackgroundDownloadManager: NSObject {
     let config = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
     config.sessionSendsLaunchEvents = true
     config.isDiscretionary = false
+    // Politeness alongside live streaming: one transfer on the wire at a time.
+    // The `taskWindow` tasks above this cap queue system-side, which is
+    // exactly what we want — they are already created (non-discretionary when
+    // created foreground), so they keep draining while the phone is locked on
+    // battery instead of waiting for a delegate refill iOS would defer.
+    config.httpMaximumConnectionsPerHost = 1
     let opQueue = OperationQueue()
     opQueue.maxConcurrentOperationCount = 1
     opQueue.underlyingQueue = queue
@@ -346,30 +363,49 @@ final class BackgroundDownloadManager: NSObject {
     }
   }
 
-  // MARK: - Backlog fill (concurrency 1)
+  // MARK: - Backlog fill (task window)
+
+  /// How many URLSession tasks stay enqueued at once. This is the
+  /// locked-screen drain budget (see the header comment): tasks created while
+  /// the app is foreground run to completion even locked-on-battery, whereas
+  /// delegate-refill tasks created while backgrounded are discretionary by iOS
+  /// policy (deferred to charger + Wi-Fi) — the window is what keeps
+  /// battery-locked progress flowing. Wire-level politeness is the session's
+  /// httpMaximumConnectionsPerHost = 1, not this number.
+  ///
+  /// Original/convert jobs are the beneficiaries (each is one task, so up to
+  /// `taskWindow` of them pre-enqueue). An HLS job keeps its one-step-at-a-time
+  /// internal chaining — one task at a time within the job — so it occupies a
+  /// single window slot until it reaches a terminal state.
+  private static let taskWindow = 20
 
   private func fill() {
     guard tasksLoaded else { return }
-    // Steady-state cap is 1 task at a time, but a task parked on a future
-    // earliestBeginDate (retry backoff, up to minutes) must not head-of-line
-    // block the rest of the backlog: when every active task is backoff-
-    // waiting, start the next job. If a delayed retry then fires mid-transfer
-    // we briefly run 2 tasks — an accepted tradeoff: suspend-survivable
-    // backoff via earliestBeginDate is worth the rare brief overlap.
-    guard activeTasks.keys.allSatisfy({ waitingKeys.contains($0) }) else { return }
-    // A job pending conversion is downloaded — its slot is free for the next
-    // download while the conversion queue drains it.
-    guard
-      let idx = state.jobs.firstIndex(where: {
-        activeTasks[$0.key] == nil && !state.pendingConversions.contains($0.key)
-      })
-    else {
-      return
-    }
-    if state.jobs[idx].mode == "hls" {
-      startHls(idx)
-    } else {
-      startOriginal(state.jobs[idx])  // "original" and "convert" download alike
+    // Keep the window full. Backoff-parked tasks (waitingKeys) count toward
+    // the window — a parked task holds a real slot with a future
+    // earliestBeginDate while the remaining slots keep the backlog draining,
+    // so the old "start the next job when EVERY active task is waiting"
+    // exception folds in naturally.
+    while activeTasks.count < Self.taskWindow {
+      // A job pending conversion is downloaded — its slot is free for the next
+      // download while the conversion queue drains it.
+      guard
+        let idx = state.jobs.firstIndex(where: {
+          activeTasks[$0.key] == nil && !state.pendingConversions.contains($0.key)
+        })
+      else {
+        return
+      }
+      // Every start path makes progress — it either registers a task under the
+      // job's key (excluding it from the next firstIndex) or removes the job
+      // from the backlog (already-committed / terminal failure) — so this loop
+      // terminates. Nested fill() re-entry (completeJob/failTerminal) is fine:
+      // the inner call tops the window up and this loop then sees it full.
+      if state.jobs[idx].mode == "hls" {
+        startHls(idx)
+      } else {
+        startOriginal(state.jobs[idx])  // "original" and "convert" download alike
+      }
     }
   }
 
@@ -587,7 +623,7 @@ final class BackgroundDownloadManager: NSObject {
     persist()
     emitter?("onError", ["key": key, "message": message, "terminal": false])
     // Re-create the task now with its earliestBeginDate in the future — it
-    // occupies the single slot, so the background session runs the retry even
+    // occupies a window slot, so the background session runs the retry even
     // if the app is suspended by then.
     startOriginal(state.jobs[i])
   }

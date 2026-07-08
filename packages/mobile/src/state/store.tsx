@@ -14,6 +14,7 @@ import {
   isInFlight,
   PlaybackSession,
   PlayMonitor,
+  PlexAuthError,
   pickDefaultLibrary,
   pickDefaultServer,
   planCacheEviction,
@@ -420,10 +421,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const library = await resolveLibrary(gateway, servers, token);
         if (library) await saveSelectedLibrary(library);
         dispatch({ type: "signed-in", token, servers, library });
-      } catch {
-        // Bad/expired token -> signed out (never loop).
-        await tokenStore.clear();
-        dispatch({ type: "bootstrapped", token: null });
+      } catch (err) {
+        if (err instanceof PlexAuthError) {
+          // Genuinely bad/expired token -> signed out (never loop).
+          await tokenStore.clear();
+          dispatch({ type: "bootstrapped", token: null });
+          return;
+        }
+        // Transient failure (offline, plex.tv 5xx, a background launch with
+        // no network) — the token is probably FINE. Never clear it: rethrow
+        // so the caller handles it (bootstrap -> retry on foreground; the
+        // sign-in screen surfaces/retries). Clearing here signed users out
+        // on any network blip during a background relaunch.
+        throw err;
       }
     },
     [gateway, tokenStore],
@@ -599,9 +609,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Bootstrap: init audio session, restore token, discover servers, load last.fm config,
   // load downloads index + reconcile, load storage quality, start connectivity monitor.
-  useEffect(() => {
-    let alive = true;
-    (async () => {
+  //
+  // iOS can relaunch the app in the BACKGROUND (URLSession events) while the
+  // device is locked; the Keychain read in tokenStore.load() rejects there
+  // (errSecInteractionNotAllowed). The body is therefore guarded: on failure
+  // we log, set bootstrapFailedRef, and leave phase "loading" — dispatching
+  // bootstrapped-null would flash the sign-in screen at a signed-in user —
+  // and the AppState listener re-runs the bootstrap on the next foreground.
+  //
+  // The one-time init section (audio session, taste/cache init, download
+  // index load + reattach fold, connectivity monitor) runs at most once per
+  // JS context (bootstrapInitDoneRef): several of its steps are NOT
+  // idempotent — connectivityMonitor.start() would leak a NetInfo
+  // subscription, downloadIndex.load() would clobber in-memory records with
+  // stale disk state (debounced persist), transferEngine.reattach() drains a
+  // one-shot native snapshot, and taste.init() would overwrite in-session
+  // plays with the persisted profile.
+  const bootstrapAliveRef = useRef(true);
+  const bootstrapFailedRef = useRef(false);
+  const bootstrapInFlightRef = useRef(false);
+  const bootstrapInitDoneRef = useRef(false);
+  const runBootstrap = useCallback(async () => {
+    if (bootstrapInFlightRef.current) return;
+    bootstrapInFlightRef.current = true;
+    try {
+      if (!bootstrapInitDoneRef.current) {
+        await bootstrapInit();
+        bootstrapInitDoneRef.current = true;
+      }
+      const token = await tokenStore.load();
+      if (!bootstrapAliveRef.current) return;
+      if (!token) {
+        dispatch({ type: "bootstrapped", token: null });
+        return;
+      }
+      await completeSignIn(token);
+    } catch (err) {
+      console.warn("[bootstrap] failed, will retry on foreground", err);
+      bootstrapFailedRef.current = true;
+    } finally {
+      bootstrapInFlightRef.current = false;
+    }
+    async function bootstrapInit(): Promise<void> {
       await engine.init();
       await taste.init();
       await listCache.init();
@@ -623,6 +672,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // applies to records committed under v2+; pre-v2 records have no
       // expectedBytes, so presence remains their only check).
       await downloadIndex.load();
+      // One-shot migration: converted (on-device AAC) artifacts used to be
+      // committed to the BARE flat name, whose extension is the SOURCE file's
+      // (e.g. `….flac`) — AVPlayer infers local-file format from the extension
+      // and refused to play them. Rename each committed-m4a record's file to
+      // the reserved `.conv.m4a` artifact name before the disk passes below
+      // read the listing. (Both names map to the same download key, so the
+      // reconcile/fold bookkeeping is unaffected either way.)
+      const renamedConverted = downloadStore.migrateConvertedNames(downloadIndex.all());
+      if (renamedConverted > 0) {
+        console.log(`[downloads] renamed ${renamedConverted} converted artifact(s) to .conv.m4a`);
+      }
       // Fold the engine's while-JS-was-away results into the index BEFORE the
       // disk passes (native engine only — the JS engine's snapshot is always
       // empty): completed transfers become downloaded records carrying the
@@ -705,20 +765,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       downloadManager.markReady();
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
-      const token = await tokenStore.load();
-      if (!alive) return;
-      if (!token) {
-        dispatch({ type: "bootstrapped", token: null });
-        return;
-      }
-      if (alive) await completeSignIn(token);
-    })();
-    return () => {
-      alive = false;
-      engine.dispose();
-      downloadManager.dispose();
-      connectivityMonitor.stop();
-    };
+    }
   }, [
     engine,
     tokenStore,
@@ -732,6 +779,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     listCache,
     setSyncEnabledLocal,
   ]);
+
+  useEffect(() => {
+    bootstrapAliveRef.current = true;
+    void runBootstrap();
+    return () => {
+      bootstrapAliveRef.current = false;
+      engine.dispose();
+      downloadManager.dispose();
+      connectivityMonitor.stop();
+    };
+  }, [runBootstrap, engine, downloadManager, connectivityMonitor]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
   // Starting a new collection stops radio.
@@ -965,13 +1023,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") void runSync();
+      if (s === "active") {
+        // A bootstrap that failed (e.g. Keychain unreadable during a locked
+        // background launch) is retried now that the app is foregrounded.
+        if (bootstrapFailedRef.current) {
+          bootstrapFailedRef.current = false;
+          void runBootstrap();
+        }
+        void runSync();
+      }
       // Leaving the foreground: flush any debounced index write so progress isn't
       // lost if iOS suspends/kills the app.
       else void downloadIndex.flush();
     });
     return () => sub.remove();
-  }, [runSync, downloadIndex]);
+  }, [runSync, runBootstrap, downloadIndex]);
 
   /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
    *  with the current server base URL and token so stale baked proxy URLs from

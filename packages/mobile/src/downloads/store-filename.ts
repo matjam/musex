@@ -25,3 +25,31 @@ export function storeFileName(key: string): string {
 export function keyForFileName(fileName: string): string {
   return decodeURIComponent(fileName);
 }
+
+/** RESERVED marker suffix (like `.part`/`.orig`) for on-device CONVERTED
+ *  artifacts: `<flat>.conv.m4a`. AVPlayer infers a local file's format from
+ *  its EXTENSION — an AAC m4a committed under the bare flat name (which ends
+ *  with the SOURCE extension, e.g. `….flac`) refuses to play, the mirror
+ *  image of the fixed bare-`.orig` "Cannot Open". The `.conv` marker keeps
+ *  the name unambiguous vs an original whose own flat name ends `.m4a`. */
+export const CONVERTED_SUFFIX = ".conv.m4a";
+
+/** The on-disk filename of a key's CONVERTED artifact. */
+export function convertedFileName(key: string): string {
+  return storeFileName(key) + CONVERTED_SUFFIX;
+}
+
+/** Whether a directory-listing name is a converted artifact. */
+export function isConvertedFileName(fileName: string): boolean {
+  return fileName.endsWith(CONVERTED_SUFFIX);
+}
+
+/** Recover the download key from ANY committed on-disk name: a converted
+ *  `<flat>.conv.m4a` strips the reserved suffix first; a bare flat name
+ *  decodes directly. (The suffix is plain ASCII, untouched by the encoding,
+ *  so stripping before decoding is exact.) */
+export function keyForDiskName(fileName: string): string {
+  return keyForFileName(
+    isConvertedFileName(fileName) ? fileName.slice(0, -CONVERTED_SUFFIX.length) : fileName,
+  );
+}

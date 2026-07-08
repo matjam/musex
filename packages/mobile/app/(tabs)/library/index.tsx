@@ -3,7 +3,6 @@ import {
   buildLetterIndex,
   downloadKey,
   groupTracksByAlbum,
-  isInFlight,
   listValidator,
   OfflineUnavailable,
 } from "@musex/core";
@@ -202,12 +201,16 @@ export default function LibraryBrowse() {
 
   // Whole-collection progress for the Downloaded header bar ("n/total tracks")
   // + header gating (inFlight > 0), recomputed per downloadsVersion bump.
+  // The header deliberately keeps counting queued records in its totals.
   const wholeProgress = useRecordsProgress();
-  // Albums with in-flight records (tile downloading badge).
+  // Albums with an ACTIVELY TRANSFERRING record (tile spinner badge).
+  // "downloading" only — NOT isInFlight, which includes "queued": during a
+  // whole-library sync every album has queued siblings, so the queued-inclusive
+  // set put a spinner on every tile, including fully downloaded albums.
   // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
   const downloadingAlbumIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const r of downloadsList()) if (isInFlight(r)) ids.add(r.meta.albumId);
+    for (const r of downloadsList()) if (r.state === "downloading") ids.add(r.meta.albumId);
     return ids;
   }, [downloadsList, downloadsVersion]);
 

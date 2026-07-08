@@ -468,6 +468,10 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     expect(t?.targetBitrateKbps).toBe(192);
     expect(t?.expectedBytes).toBe(999);
     expect(t?.stopUrl).toBeUndefined();
+    // The committed artifact is an AAC m4a — its destPath carries the reserved
+    // `.conv.m4a` suffix so AVPlayer's extension sniffing sees m4a (the bare
+    // flat name ends with the SOURCE extension and refuses to play).
+    expect(t?.destPath).toBe("/downloads/a.conv.m4a");
     // The artifact is AAC — the pinned per-job format stays "aac".
     expect(index.get("a")?.format).toBe("aac");
   });
@@ -485,6 +489,8 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     await m.enqueue([{ ...j, meta: { ...j.meta, container: "ogg", audioCodec: "vorbis" } }]);
     expect(eng.submits).toHaveLength(1);
     expect(eng.submits[0]?.[0]?.mode).toBe("hls");
+    // Not a convert job — the artifact name stays the BARE flat name.
+    expect(eng.submits[0]?.[0]?.destPath).toBe("/downloads/a");
   });
 
   it("aac + convert-capable engine on CELLULAR → hls (server transcode)", async () => {
@@ -552,6 +558,8 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     });
     m.markReady();
     await m.enqueue([job("a")]);
+    // Original jobs commit the original bytes — bare artifact name, no suffix.
+    expect(eng.submits[0]?.[0]?.destPath).toBe("/downloads/a");
     eng.emit({ kind: "complete", key: "a", bytes: 5 });
     await tick();
     expect(index.get("a")?.meta).toMatchObject({ container: "flac", audioCodec: "flac" });
