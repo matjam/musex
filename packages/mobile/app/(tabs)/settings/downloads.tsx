@@ -52,14 +52,20 @@ export default function DownloadsSettings() {
   }, []);
   const bgRefreshOff = bgRefresh === "denied" || bgRefresh === "restricted";
 
-  // Active downloads: in-flight records (up to 20 shown) + a whole-collection
-  // bar. Recompute as bytes land (downloadsVersion bumps on progress events).
+  // Active downloads: the whole-collection bar + rows for the ACTUALLY-active
+  // transfers only (state "downloading" — concurrency means ~1-2; a 9000-track
+  // sync queue would otherwise be a pointless 20-row "queued" window) + a
+  // single queued count. Recompute as bytes land (downloadsVersion bumps on
+  // progress events).
   const wholeProgress = useRecordsProgress();
   // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is a deliberate refresh trigger, not referenced in the body.
-  const inFlight = useMemo(
-    () => downloadsList().filter(isInFlight),
-    [downloadsList, downloadsVersion],
-  );
+  const active = useMemo(() => {
+    const inFlight = downloadsList().filter(isInFlight);
+    return {
+      downloading: inFlight.filter((r) => r.state === "downloading").slice(0, 5),
+      queuedCount: inFlight.filter((r) => r.state === "queued").length,
+    };
+  }, [downloadsList, downloadsVersion]);
 
   // Failed downloads: count + the most frequent distinct error strings. This is
   // the on-device diagnostic for a failing sync (DownloadRecord.error holds the
@@ -373,7 +379,7 @@ export default function DownloadsSettings() {
         ) : null}
       </View>
 
-      {inFlight.length > 0 ? (
+      {active.downloading.length > 0 || active.queuedCount > 0 ? (
         <>
           <Text
             style={{
@@ -399,7 +405,7 @@ export default function DownloadsSettings() {
             }}
           >
             <DownloadProgressBar progress={wholeProgress} />
-            {inFlight.slice(0, 20).map((r) => (
+            {active.downloading.map((r) => (
               <View
                 key={r.key}
                 style={{
@@ -409,18 +415,15 @@ export default function DownloadsSettings() {
                   paddingVertical: theme.space(1),
                   borderTopWidth: 1,
                   borderTopColor: theme.border,
-                  opacity: r.state === "queued" ? 0.5 : 1,
                 }}
               >
                 <Text style={{ color: theme.text, flex: 1, fontSize: 13 }} numberOfLines={1}>
                   {r.meta.title}
                 </Text>
-                <Text style={{ color: theme.textDim, fontSize: 12 }}>
-                  {r.state === "queued" ? "queued" : formatBytes(r.bytes)}
-                </Text>
+                <Text style={{ color: theme.textDim, fontSize: 12 }}>{formatBytes(r.bytes)}</Text>
               </View>
             ))}
-            {inFlight.length > 20 ? (
+            {active.queuedCount > 0 ? (
               <Text
                 style={{
                   color: theme.textDim,
@@ -431,7 +434,7 @@ export default function DownloadsSettings() {
                   borderTopColor: theme.border,
                 }}
               >
-                and {inFlight.length - 20} more…
+                Queued: {active.queuedCount.toLocaleString()} tracks
               </Text>
             ) : null}
           </View>
