@@ -105,11 +105,7 @@ export class JsTransferEngine implements TransferEngine {
         this.fail(job.key, `truncated: got ${bytes} want ${job.expectedBytes}`);
         return;
       }
-      if (job.expectedBytes === undefined && bytes <= 0) {
-        this.deps.store.remove(job.key);
-        this.fail(job.key, "empty download");
-        return;
-      }
+      // (No empty-delivery check needed: store.downloadUrl throws on <= 0 bytes.)
       if (job.expectedBytes !== undefined && bytes !== job.expectedBytes) {
         console.warn(
           `[downloads] size differs from Plex catalog (got ${bytes}, want ${job.expectedBytes}), accepting delivered file`,

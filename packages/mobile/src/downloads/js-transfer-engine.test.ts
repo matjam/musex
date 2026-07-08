@@ -33,7 +33,6 @@ function fakeStore() {
     },
     remove: (k: string) => void files.delete(k),
     presentFileSizes: () => new Map([...files.entries()].map(([k, v]) => [k, v.length])),
-    presentNonEmptyKeys: () => new Set(files.keys()),
     totalBytes: () => 0,
   };
 }

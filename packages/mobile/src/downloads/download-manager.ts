@@ -367,6 +367,15 @@ export class DownloadManager {
   }
 
   async removeDownload(key: string): Promise<void> {
+    // Cancel the transfer FIRST — deleting file+record while the engine still
+    // ran the job meant a mid-flight completion re-created the record (or the
+    // native engine rewrote the just-deleted file). The submitted entry goes
+    // before the cancel so the terminal "cancelled" event maps to nothing;
+    // a late complete then hits the no-record orphan cleanup instead of
+    // resurrecting anything.
+    this.submitted.delete(key);
+    this.queue = this.queue.filter((q) => q.job.key !== key);
+    await this.deps.engine.cancel([key]);
     this.deps.store.remove(key);
     await this.deps.index.remove(key);
   }

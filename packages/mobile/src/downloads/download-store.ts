@@ -101,11 +101,6 @@ export class DownloadStore {
     if (part.exists) part.delete();
   }
 
-  /** Keys of present, non-empty, non-`.part` files (for reconcile + size totals). */
-  presentNonEmptyKeys(): Set<string> {
-    return new Set(this.presentFileSizes().keys());
-  }
-
   /** Sizes of present non-.part files, for size-verified reconcile. On-disk
    *  names are the flattened `storeFileName(key)`, so decode them back to the
    *  download keys that reconcile compares against records. */
@@ -140,7 +135,6 @@ export type FileStore = Pick<
   | "beginWrite"
   | "downloadUrl"
   | "remove"
-  | "presentNonEmptyKeys"
   | "presentFileSizes"
   | "totalBytes"
 >;

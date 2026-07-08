@@ -34,7 +34,6 @@ function fakeStore() {
       return 5;
     },
     remove: (k: string) => void files.delete(k),
-    presentNonEmptyKeys: () => new Set(files.keys()),
     presentFileSizes: () => new Map([...files.entries()].map(([k, v]) => [k, v.length])),
     totalBytes: () => 0,
   };
@@ -398,6 +397,28 @@ describe("DownloadManager — native engine (ownsQueue)", () => {
     eng.emit({ kind: "error", key: "a", message: "cancelled", terminal: true });
     await tick();
     expect(index.get("a")?.state).toBe("queued");
+  });
+
+  it("removeDownload cancels the transfer FIRST; a late terminal never resurrects", async () => {
+    const { store, index, eng, m } = nativeMgr();
+    m.markReady();
+    await m.enqueue([job("a")]);
+    store.files.set("a", "PART"); // some bytes already landed
+    await m.removeDownload("a");
+    expect(eng.cancels).toEqual([["a"]]);
+    expect(store.files.has("a")).toBe(false);
+    expect(index.get("a")).toBeUndefined();
+    // The transfer finished before the cancel landed: native committed the
+    // file and its late complete event arrives → orphan cleanup, no record.
+    store.files.set("a", "AUDIO");
+    eng.emit({ kind: "complete", key: "a", bytes: 5 });
+    await tick();
+    expect(index.get("a")).toBeUndefined();
+    expect(store.files.has("a")).toBe(false);
+    // and the cancelled terminal is bookkeeping-only too
+    eng.emit({ kind: "error", key: "a", message: "cancelled", terminal: true });
+    await tick();
+    expect(index.get("a")).toBeUndefined();
   });
 
   it("buffers events until markReady so the reattach fold wins", async () => {
