@@ -212,15 +212,23 @@ export default function DownloadsSettings() {
           padding: theme.space(1.5),
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
+        {/* While library sync is on, play-caching is redundant (every track is
+            already kept offline) — grey the row out without touching the stored
+            cacheConfig, so turning sync off reveals the previous setting. */}
+        <View
+          style={{ flexDirection: "row", alignItems: "center", opacity: syncEnabled ? 0.4 : 1 }}
+        >
           <View style={{ flex: 1, paddingRight: theme.space(1.5) }}>
             <Text style={{ color: theme.text, fontSize: 15 }}>Keep played tracks offline</Text>
             <Text style={{ color: theme.textDim, fontSize: 12, marginTop: 2 }}>
-              Tracks you listen to are saved automatically, up to the limit below.
+              {syncEnabled
+                ? "Covered by library sync — every track is already kept offline."
+                : "Tracks you listen to are saved automatically, up to the limit below."}
             </Text>
           </View>
           <Switch
             value={cacheConfig.enabled}
+            disabled={syncEnabled}
             onValueChange={(v) => void setCacheConfig({ ...cacheConfig, enabled: v })}
           />
         </View>
