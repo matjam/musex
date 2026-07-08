@@ -612,8 +612,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const presentKeys = new Set(fileSizes.keys());
       for (const c of snap.completed) {
         const r = downloadIndex.get(c.key);
+        if (!r) {
+          // Orphan: Swift moved a finished file into place for a key JS no
+          // longer tracks (removed while the transfer completed in the
+          // background). Without cleanup the file would linger forever.
+          downloadStore.remove(c.key);
+          continue;
+        }
         // File absent → leave the record; reconcile/resolve below handles it.
-        if (r && presentKeys.has(c.key)) {
+        if (presentKeys.has(c.key)) {
           await downloadIndex.upsert({
             ...r,
             state: "downloaded",
@@ -624,6 +631,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       }
       for (const f of snap.failed) {
+        // "cancelled" is bookkeeping-only: the JS side that cancelled it
+        // already removed (or re-created) the record — same rule as the
+        // manager's live event mapping.
+        if (f.message === "cancelled") continue;
         const r = downloadIndex.get(f.key);
         if (r && isInFlight(r)) {
           await downloadIndex.upsert({ ...r, state: "failed", bytes: 0, error: f.message });
@@ -656,37 +667,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       for (const k of downloadIndex.resolveStaleInFlight(fileSizes, nativeActiveKeys)) {
         downloadStore.remove(k);
       }
-      // Map events for those reattached-active keys straight onto their index
-      // records until each reaches a terminal state (the manager only maps
-      // events for jobs it submitted itself).
-      if (nativeActiveKeys.size > 0) {
-        const off = transferEngine.onEvent((e) => {
-          if (!nativeActiveKeys.has(e.key)) return;
-          const r = downloadIndex.get(e.key);
-          if (!r) return;
-          if (e.kind === "progress") {
-            void downloadIndex.upsert({ ...r, state: "downloading", bytes: e.bytes });
-            bumpDownloadsVersion();
-            return;
-          }
-          if (e.kind === "error" && !e.terminal) return; // native retries; still downloading
-          nativeActiveKeys.delete(e.key);
-          if (e.kind === "complete") {
-            // Delivered size is authoritative (same rule as the manager).
-            void downloadIndex.upsert({
-              ...r,
-              state: "downloaded",
-              bytes: e.bytes,
-              expectedBytes: e.bytes,
-              error: undefined,
-            });
-          } else {
-            void downloadIndex.upsert({ ...r, state: "failed", bytes: 0, error: e.message });
-          }
-          bumpDownloadsVersion();
-          if (nativeActiveKeys.size === 0) off();
-        });
-      }
+      // The manager's persistent engine subscription owns event→record
+      // mapping from here on — for its own submissions AND the reattached-
+      // active keys (it patches any record it has no entry for). It buffered
+      // events while we folded; release them now that the index is settled.
+      downloadManager.markReady();
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
       const token = await tokenStore.load();
@@ -700,6 +685,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       alive = false;
       engine.dispose();
+      downloadManager.dispose();
       connectivityMonitor.stop();
     };
   }, [
@@ -709,8 +695,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     completeSignIn,
     downloadIndex,
     downloadStore,
+    downloadManager,
     transferEngine,
-    bumpDownloadsVersion,
     connectivityMonitor,
     listCache,
     setSyncEnabledLocal,
@@ -1004,8 +990,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const queued = downloadIndex.all().filter((r) => r.state === "queued");
       if (queued.length === 0) return;
       const keys = queued.map((r) => r.key);
-      downloadManager.cancelQueued(keys);
-      await transferEngine.cancel(keys);
+      // cancelQueued drops the manager's own entries first, then cancels the
+      // keys on the engine backlog. The engine's terminal "cancelled" events
+      // are bookkeeping-only in the manager's mapping (ignored when a record
+      // exists), so the re-enqueued records below can't be marked failed by a
+      // stale cancel event racing them.
+      await downloadManager.cancelQueued(keys);
       for (const k of keys) await downloadIndex.remove(k);
       await downloadManager.enqueue(
         queued.map((r) => ({
@@ -1019,7 +1009,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })),
       );
     },
-    [downloadIndex, downloadManager, transferEngine],
+    [downloadIndex, downloadManager],
   );
 
   const totalDownloadBytes = useCallback(() => downloadStore.totalBytes(), [downloadStore]);

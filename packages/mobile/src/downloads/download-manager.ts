@@ -5,6 +5,8 @@ import {
   type DownloadRecord,
   isInFlight,
   type StorageQuality,
+  type TransferEvent,
+  type TransferJob,
 } from "@musex/core";
 import type { DownloadIndex } from "./download-index";
 import type { FileStore } from "./download-store";
@@ -20,7 +22,7 @@ export interface DownloadProgress {
 export interface DownloadManagerDeps {
   store: FileStore;
   index: DownloadIndex;
-  /** Executes transfers (JS today; PR2 adds the native background engine). */
+  /** Executes transfers (JS in Expo Go/tests; native background engine in real builds). */
   engine: TransferEngine;
   endpoint: (serverId: string) => Promise<{ baseUrl: string; token: string }>;
   clientId: string;
@@ -40,21 +42,76 @@ interface QueueEntry {
 // 600ms debounced persist handles disk; this just bounds in-memory churn.
 const PROGRESS_UPSERT_MS = 500;
 
-/** The download orchestrator: queue policy, dedupe, record bookkeeping. One
- *  job at a time (concurrency 1 — politeness alongside live streaming); the
+/** The download orchestrator: queue policy, dedupe, record bookkeeping. The
  *  actual transfer runs behind the TransferEngine seam, its events mapped back
- *  onto index records. */
+ *  onto index records. Two execution shapes, keyed on `engine.ownsQueue`:
+ *
+ *  - `ownsQueue` (native background engine): enqueue records every job then
+ *    submits the WHOLE batch to the native backlog at once — so a killed app
+ *    still drains everything, and no JS await sits between jobs. A single
+ *    persistent `onEvent` subscription maps events onto records for ANY key
+ *    (manager-submitted, reattached-active from a previous run, or orphan).
+ *    Events are buffered until `markReady()` (bootstrap calls it after the
+ *    reattach fold, so folding always wins over live events).
+ *  - `!ownsQueue` (JS engine): the sequential per-job-await loop — one job at
+ *    a time (concurrency 1, politeness alongside live streaming); the JS
+ *    engine dies with the app so there is nothing to hand a backlog to. */
 export class DownloadManager {
+  /** JS-engine mode only — the manager-owned FIFO. */
   private queue: QueueEntry[] = [];
   private running = false;
   private idle: Promise<void> = Promise.resolve();
   private idleResolve: (() => void) | null = null;
+  /** Native mode only — jobs this manager instance submitted, by key. */
+  private readonly submitted = new Map<string, QueueEntry>();
+  /** Native mode: events held back until markReady() releases them. */
+  private pending: TransferEvent[] = [];
+  private ready = false;
+  private offEngine: (() => void) | null = null;
   /** Per-key timestamp of the last mid-flight index upsert (throttle). */
   private readonly progressUpsertAt = new Map<string, number>();
 
-  constructor(private readonly deps: DownloadManagerDeps) {}
+  constructor(private readonly deps: DownloadManagerDeps) {
+    this.ensureSubscribed();
+  }
+
+  private ensureSubscribed(): void {
+    if (!this.deps.engine.ownsQueue || this.offEngine) return;
+    this.offEngine = this.deps.engine.onEvent((e) => {
+      if (!this.ready) {
+        this.pending.push(e);
+        return;
+      }
+      void this.handleEngineEvent(e);
+    });
+  }
+
+  /** Release buffered engine events. Bootstrap calls this AFTER folding the
+   *  reattach snapshot into the index — a terminal event that raced the fold
+   *  must never be applied to not-yet-loaded records (the orphan-cleanup rule
+   *  would delete a good file). */
+  markReady(): void {
+    this.ensureSubscribed(); // re-attach after a dispose() (effect re-run)
+    void (async () => {
+      while (this.pending.length > 0) {
+        const e = this.pending.shift();
+        if (e) await this.handleEngineEvent(e);
+      }
+      this.ready = true;
+    })();
+  }
+
+  /** Detach the persistent engine subscription (bootstrap effect cleanup). */
+  dispose(): void {
+    this.offEngine?.();
+    this.offEngine = null;
+  }
 
   async enqueue(jobs: DownloadJob[]): Promise<void> {
+    if (this.deps.engine.ownsQueue) {
+      await this.enqueueNative(jobs);
+      return;
+    }
     for (const j of jobs) {
       if (this.deps.store.has(j.key)) continue;
       // Dedupe against our own queue AND records already in flight (the running
@@ -70,7 +127,54 @@ export class DownloadManager {
     this.pump();
   }
 
+  /** Native path: build EVERY TransferJob now (format pinned per entry) and
+   *  hand the whole batch to the native backlog — no per-job await, no
+   *  manager-side queue. Completion is the engine's job; events come back
+   *  through the persistent subscription. */
+  private async enqueueNative(jobs: DownloadJob[]): Promise<void> {
+    const transfers: TransferJob[] = [];
+    for (const j of jobs) {
+      if (this.deps.store.has(j.key)) continue;
+      if (this.submitted.has(j.key)) continue;
+      // A reattached-active record (submitted by a previous run, still on the
+      // native backlog) is in flight too — never double-submit it.
+      const existing = this.deps.index.get(j.key);
+      if (existing && isInFlight(existing)) continue;
+      const format: DownloadFormat = this.deps.getQuality().mode === "aac" ? "aac" : "original";
+      const quality: StorageQuality = {
+        mode: format === "aac" ? "aac" : "original",
+        bitrateKbps: this.deps.getQuality().bitrateKbps,
+      };
+      let transfer: TransferJob;
+      try {
+        const ep = await this.deps.endpoint(j.serverId);
+        transfer = buildTransferJob({
+          job: j,
+          quality,
+          endpoint: ep,
+          clientId: this.deps.clientId,
+          destPath: this.deps.store.path(j.key),
+          // Session id is caller-supplied (core stays Date.now-free).
+          session: `${j.key}-${Date.now()}`,
+        });
+      } catch (err) {
+        // Endpoint unresolved (server not connected) — surface it, never
+        // leave a queued record with no job behind it.
+        await this.record(j, format, "failed", 0, err instanceof Error ? err.message : String(err));
+        continue;
+      }
+      this.submitted.set(j.key, { job: j, format });
+      await this.record(j, format, "queued", 0);
+      transfers.push(transfer);
+    }
+    if (transfers.length > 0) await this.deps.engine.submit(transfers);
+  }
+
   drain(): Promise<void> {
+    // Native mode: the native backlog owns completion (transfers keep running
+    // while the app is suspended or killed) — there is nothing meaningful for
+    // JS to await. JS tests exercise the drain semantics via the JS engine.
+    if (this.deps.engine.ownsQueue) return Promise.resolve();
     return this.idle;
   }
 
@@ -114,6 +218,84 @@ export class DownloadManager {
     this.deps.onProgress({ key: job.key, state, bytes, error });
   }
 
+  /** Persist mid-flight bytes on the record (throttled per key) so byte-based
+   *  UI moves during the transfer, not just at the end. */
+  private upsertProgress(key: string, bytes: number): void {
+    const now = Date.now();
+    if (now - (this.progressUpsertAt.get(key) ?? 0) < PROGRESS_UPSERT_MS) return;
+    this.progressUpsertAt.set(key, now);
+    const rec = this.deps.index.get(key);
+    if (rec) void this.deps.index.upsert({ ...rec, state: "downloading", bytes });
+  }
+
+  /** Native mode: the persistent event→record mapping, for ANY key. */
+  private async handleEngineEvent(e: TransferEvent): Promise<void> {
+    if (e.kind === "error" && e.terminal && e.message === "cancelled") {
+      // Every native cancel is JS-initiated (removeDownload / quality-change
+      // re-enqueue), and the canceller does its own record/file bookkeeping —
+      // so a terminal "cancelled" is cleanup-only: delete an orphan file when
+      // NO record tracks the key, otherwise ignore it (an existing record
+      // belongs to a NEWER life of the key, e.g. a re-enqueue racing the
+      // stale cancel event, and must not be marked failed).
+      if (!this.deps.index.get(e.key)) this.deps.store.remove(e.key);
+      return;
+    }
+    const entry = this.submitted.get(e.key);
+    if (entry) {
+      const { job, format } = entry;
+      if (e.kind === "progress") {
+        this.deps.onProgress({ key: e.key, state: "downloading", bytes: e.bytes });
+        this.upsertProgress(e.key, e.bytes);
+        return;
+      }
+      // A non-terminal error keeps the record "downloading" (the native
+      // engine retries on its own backoff).
+      if (e.kind === "error" && !e.terminal) return;
+      this.submitted.delete(e.key);
+      this.progressUpsertAt.delete(e.key);
+      if (e.kind === "complete") {
+        // Delivered size is authoritative: persist it as expectedBytes (both
+        // formats) so reconcile verifies against what actually landed.
+        await this.record(job, format, "downloaded", e.bytes, undefined, e.bytes);
+      } else {
+        await this.record(job, format, "failed", 0, e.message);
+      }
+      return;
+    }
+    // Not ours: a job submitted by a previous run, reattached-active on the
+    // native backlog — patch its existing index record directly.
+    const rec = this.deps.index.get(e.key);
+    if (rec) {
+      if (e.kind === "progress") {
+        void this.deps.index.upsert({ ...rec, state: "downloading", bytes: e.bytes });
+        this.deps.onProgress({ key: e.key, state: "downloading", bytes: e.bytes });
+        return;
+      }
+      if (e.kind === "error" && !e.terminal) return;
+      if (e.kind === "complete") {
+        // Delivered size is authoritative (same rule as the submitted path).
+        await this.deps.index.upsert({
+          ...rec,
+          state: "downloaded",
+          bytes: e.bytes,
+          expectedBytes: e.bytes,
+          error: undefined,
+        });
+        this.deps.onProgress({ key: e.key, state: "downloaded", bytes: e.bytes });
+      } else {
+        await this.deps.index.upsert({ ...rec, state: "failed", bytes: 0, error: e.message });
+        this.deps.onProgress({ key: e.key, state: "failed", bytes: 0, error: e.message });
+      }
+      return;
+    }
+    // No record at all: an orphan — e.g. a download removed while its
+    // transfer ran to completion in the background. Clean the file up; never
+    // create a record from an event.
+    if (e.kind === "complete" || (e.kind === "error" && e.terminal)) {
+      this.deps.store.remove(e.key);
+    }
+  }
+
   private pump(): void {
     if (this.running) return;
     this.running = true;
@@ -153,18 +335,11 @@ export class DownloadManager {
         if (e.key !== job.key) return;
         if (e.kind === "progress") {
           this.deps.onProgress({ key: job.key, state: "downloading", bytes: e.bytes });
-          // Also persist mid-flight bytes on the record (throttled per key) so
-          // byte-based UI moves during the transfer, not just at the end.
-          const now = Date.now();
-          if (now - (this.progressUpsertAt.get(job.key) ?? 0) >= PROGRESS_UPSERT_MS) {
-            this.progressUpsertAt.set(job.key, now);
-            const rec = this.deps.index.get(job.key);
-            if (rec) void this.deps.index.upsert({ ...rec, state: "downloading", bytes: e.bytes });
-          }
+          this.upsertProgress(job.key, e.bytes);
           return;
         }
-        // A non-terminal error keeps the record "downloading" (PR2's native
-        // engine will retry; JsTransferEngine errors are always terminal).
+        // A non-terminal error keeps the record "downloading" (JsTransferEngine
+        // errors are always terminal; this guard mirrors the native contract).
         if (e.kind === "error" && !e.terminal) return;
         off();
         this.progressUpsertAt.delete(job.key);
@@ -178,13 +353,17 @@ export class DownloadManager {
     });
   }
 
-  /** Drop still-queued (not yet running) jobs from the queue — a storage
-   *  quality change re-bakes their transfer URLs, so the old entries must not
-   *  run; the caller drops their records and re-enqueues. The running job is
-   *  untouched (it finishes in its pinned mode). */
-  cancelQueued(keys: string[]): void {
+  /** Drop still-queued (not yet running) jobs — a storage quality change
+   *  re-bakes their transfer URLs, so the old entries must not run; the caller
+   *  drops their records and re-enqueues. A job mid-download is untouched (it
+   *  finishes in its pinned mode). Native mode: the submitted entries go FIRST
+   *  so the engine's terminal "cancelled" events map to nothing (see
+   *  handleEngineEvent), then the keys are cancelled on the native backlog. */
+  async cancelQueued(keys: string[]): Promise<void> {
     const drop = new Set(keys);
+    for (const k of keys) this.submitted.delete(k);
     this.queue = this.queue.filter((q) => !drop.has(q.job.key));
+    await this.deps.engine.cancel(keys);
   }
 
   async removeDownload(key: string): Promise<void> {

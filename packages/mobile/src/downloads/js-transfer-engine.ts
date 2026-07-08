@@ -26,6 +26,8 @@ export interface JsTransferEngineDeps {
  *  that's PR2's native engine), so `reattach()` is always empty and every
  *  error is terminal (no retry-later). */
 export class JsTransferEngine implements TransferEngine {
+  /** Dies with JS — the manager keeps its own queue and per-job await. */
+  readonly ownsQueue = false;
   private queue: TransferJob[] = [];
   private running = false;
   private readonly listeners = new Set<(e: TransferEvent) => void>();

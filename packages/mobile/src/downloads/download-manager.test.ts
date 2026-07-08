@@ -1,4 +1,4 @@
-import type { DownloadJob } from "@musex/core";
+import type { DownloadJob, DownloadRecord, TransferEvent, TransferJob } from "@musex/core";
 import { describe, expect, it, vi } from "vitest";
 import { DownloadIndex } from "./download-index";
 import { DownloadManager } from "./download-manager";
@@ -236,7 +236,7 @@ describe("DownloadManager", () => {
       bitrateKbps: 256,
     });
     await m.enqueue([job("a"), job("b")]); // "a" starts (blocked on the gate), "b" queues
-    m.cancelQueued(["b"]);
+    await m.cancelQueued(["b"]);
     release();
     await m.drain();
     expect(downloads).toBe(1); // "b" never ran
@@ -262,5 +262,163 @@ describe("DownloadManager", () => {
     await m.drain();
     expect(store.files.has("h")).toBe(false);
     expect(index.get("h")?.state).toBe("failed");
+  });
+});
+
+// --- native (ownsQueue) mode ---
+
+const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+
+/** Fake of the native background engine: records submits/cancels, lets tests
+ *  emit events. ownsQueue → the manager batch-submits and never awaits. */
+function fakeNativeEngine() {
+  const listeners = new Set<(e: TransferEvent) => void>();
+  const eng = {
+    ownsQueue: true,
+    submits: [] as TransferJob[][],
+    cancels: [] as string[][],
+    async submit(jobs: TransferJob[]) {
+      eng.submits.push(jobs);
+    },
+    async cancel(keys: string[]) {
+      eng.cancels.push(keys);
+    },
+    async reattach() {
+      return { active: [], completed: [], failed: [] };
+    },
+    onEvent(cb: (e: TransferEvent) => void) {
+      listeners.add(cb);
+      return () => void listeners.delete(cb);
+    },
+    emit(e: TransferEvent) {
+      for (const cb of listeners) cb(e);
+    },
+  };
+  return eng;
+}
+
+function nativeMgr() {
+  const store = fakeStore();
+  const index = new DownloadIndex();
+  const eng = fakeNativeEngine();
+  const m = new DownloadManager({
+    store: store as never,
+    index,
+    engine: eng,
+    endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
+    clientId: "cid",
+    getQuality: () => ({ mode: "original" as const, bitrateKbps: 256 }),
+    onProgress: () => {},
+  });
+  return { store, index, eng, m };
+}
+
+/** A record as a previous run would have left it (reattached-active). */
+const rec = (key: string, state: DownloadRecord["state"]): DownloadRecord => ({
+  key,
+  serverId: "s1",
+  plexPath: `/library/parts/${key}/f.flac`,
+  trackId: key,
+  format: "original",
+  state,
+  bytes: 0,
+  addedAt: 1,
+  origin: "manual",
+  meta: job(key).meta,
+});
+
+describe("DownloadManager — native engine (ownsQueue)", () => {
+  it("submits the WHOLE batch to the native backlog; drain resolves immediately", async () => {
+    const { store, index, eng, m } = nativeMgr();
+    m.markReady();
+    await m.enqueue([job("a"), job("b"), job("c")]);
+    expect(eng.submits).toHaveLength(1); // one batch, not one submit per job
+    expect(eng.submits[0]?.map((t) => t.key)).toEqual(["a", "b", "c"]);
+    for (const k of ["a", "b", "c"]) expect(index.get(k)?.state).toBe("queued");
+    await m.drain(); // native owns completion — nothing to await in JS
+    expect(store.files.size).toBe(0);
+  });
+
+  it("maps events onto records for its own submissions (progress/complete/error)", async () => {
+    const { index, eng, m } = nativeMgr();
+    m.markReady();
+    await m.enqueue([job("a", 3), job("b")]);
+    eng.emit({ kind: "progress", key: "a", bytes: 2 });
+    await tick();
+    expect(index.get("a")?.state).toBe("downloading");
+    expect(index.get("a")?.bytes).toBe(2);
+    // non-terminal error → still downloading (native retries on its own)
+    eng.emit({ kind: "error", key: "a", message: "http 503", terminal: false });
+    await tick();
+    expect(index.get("a")?.state).toBe("downloading");
+    // delivered size is authoritative on complete
+    eng.emit({ kind: "complete", key: "a", bytes: 5 });
+    eng.emit({ kind: "error", key: "b", message: "http 403", terminal: true });
+    await tick();
+    expect(index.get("a")).toMatchObject({ state: "downloaded", bytes: 5, expectedBytes: 5 });
+    expect(index.get("b")).toMatchObject({ state: "failed", error: "http 403" });
+  });
+
+  it("patches a reattached-active record it never submitted itself", async () => {
+    const { index, eng, m } = nativeMgr();
+    await index.upsert(rec("x", "downloading"));
+    m.markReady();
+    await tick();
+    eng.emit({ kind: "progress", key: "x", bytes: 4 });
+    await tick();
+    expect(index.get("x")).toMatchObject({ state: "downloading", bytes: 4 });
+    eng.emit({ kind: "complete", key: "x", bytes: 9 });
+    await tick();
+    expect(index.get("x")).toMatchObject({ state: "downloaded", bytes: 9, expectedBytes: 9 });
+  });
+
+  it("a terminal event for a key with NO record cleans the orphan file, creates nothing", async () => {
+    const { store, index, eng, m } = nativeMgr();
+    m.markReady();
+    await tick();
+    store.files.set("ghost", "AUDIO"); // Swift committed it; JS forgot the key
+    eng.emit({ kind: "complete", key: "ghost", bytes: 5 });
+    await tick();
+    expect(store.files.has("ghost")).toBe(false);
+    expect(index.get("ghost")).toBeUndefined();
+  });
+
+  it("a stale 'cancelled' terminal never fails a cancelled-then-re-enqueued record", async () => {
+    const { index, eng, m } = nativeMgr();
+    m.markReady();
+    await m.enqueue([job("a")]);
+    // Quality change (store.tsx order): cancelQueued → drop records → re-enqueue.
+    await m.cancelQueued(["a"]);
+    expect(eng.cancels).toEqual([["a"]]);
+    await index.remove("a");
+    await m.enqueue([job("a")]);
+    expect(eng.submits).toHaveLength(2); // re-submitted at the new mode
+    // The old job's terminal "cancelled" event arrives late — bookkeeping
+    // already done, must not touch the fresh record.
+    eng.emit({ kind: "error", key: "a", message: "cancelled", terminal: true });
+    await tick();
+    expect(index.get("a")?.state).toBe("queued");
+  });
+
+  it("buffers events until markReady so the reattach fold wins", async () => {
+    const { index, eng, m } = nativeMgr();
+    await index.upsert(rec("x", "downloading"));
+    eng.emit({ kind: "complete", key: "x", bytes: 7 }); // before markReady
+    await tick();
+    expect(index.get("x")?.state).toBe("downloading"); // held back
+    m.markReady();
+    await tick();
+    expect(index.get("x")?.state).toBe("downloaded"); // released after the fold
+  });
+
+  it("dedupes against in-flight records and already-present files", async () => {
+    const { store, index, eng, m } = nativeMgr();
+    m.markReady();
+    await index.upsert(rec("active", "downloading")); // reattached-active
+    store.files.set("done", "AUDIO"); // already downloaded
+    await m.enqueue([job("active"), job("done"), job("fresh")]);
+    expect(eng.submits).toHaveLength(1);
+    expect(eng.submits[0]?.map((t) => t.key)).toEqual(["fresh"]);
+    expect(index.get("active")?.state).toBe("downloading"); // untouched
   });
 });

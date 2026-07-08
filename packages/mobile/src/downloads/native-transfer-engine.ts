@@ -33,6 +33,9 @@ const EMPTY_SNAPSHOT: TransferSnapshot = { active: [], completed: [], failed: []
  *  while the app is suspended or killed), and results that landed while JS was
  *  away come back through `reattach()`. */
 export class NativeTransferEngine implements TransferEngine {
+  /** The native backlog is durable (survives suspend/kill) — the manager
+   *  batch-submits everything and never awaits per job. */
+  readonly ownsQueue = true;
   private readonly listeners = new Set<(e: TransferEvent) => void>();
 
   constructor(private readonly mod: BackgroundDownloadsModuleLike) {
