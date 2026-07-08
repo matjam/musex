@@ -91,4 +91,18 @@ describe("DownloadIndex", () => {
     expect(idx.get("short")).toBeUndefined(); // dropped — next sync re-queues
     expect(corrupt).toEqual(["short"]); // caller deletes the partial file
   });
+
+  it("resolveStaleInFlight leaves natively-active keys untouched", async () => {
+    const idx = new DownloadIndex();
+    await idx.load();
+    await idx.upsert({ ...rec("live", "downloading"), bytes: 3, expectedBytes: 100 });
+    await idx.upsert(rec("stale", "queued")); // no file, not active → dropped
+    const corrupt = idx.resolveStaleInFlight(
+      new Map([["live", 3]]), // a partial .final would mismatch expectedBytes...
+      new Set(["live"]), // ...but the native engine is still writing it
+    );
+    expect(idx.get("live")).toMatchObject({ state: "downloading", bytes: 3 });
+    expect(idx.get("stale")).toBeUndefined();
+    expect(corrupt).toEqual([]);
+  });
 });

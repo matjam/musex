@@ -26,6 +26,8 @@ export interface JsTransferEngineDeps {
  *  that's PR2's native engine), so `reattach()` is always empty and every
  *  error is terminal (no retry-later). */
 export class JsTransferEngine implements TransferEngine {
+  /** Dies with JS — the manager keeps its own queue and per-job await. */
+  readonly ownsQueue = false;
   private queue: TransferJob[] = [];
   private running = false;
   private readonly listeners = new Set<(e: TransferEvent) => void>();
@@ -103,11 +105,7 @@ export class JsTransferEngine implements TransferEngine {
         this.fail(job.key, `truncated: got ${bytes} want ${job.expectedBytes}`);
         return;
       }
-      if (job.expectedBytes === undefined && bytes <= 0) {
-        this.deps.store.remove(job.key);
-        this.fail(job.key, "empty download");
-        return;
-      }
+      // (No empty-delivery check needed: store.downloadUrl throws on <= 0 bytes.)
       if (job.expectedBytes !== undefined && bytes !== job.expectedBytes) {
         console.warn(
           `[downloads] size differs from Plex catalog (got ${bytes}, want ${job.expectedBytes}), accepting delivered file`,

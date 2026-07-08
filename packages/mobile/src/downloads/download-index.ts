@@ -60,12 +60,18 @@ export class DownloadIndex {
    *  present-but-mismatched file is a partial — the record is dropped and the
    *  key RETURNED so the caller deletes the file; absent → dropped so the next
    *  sync re-queues it. This is what makes an interrupted sync resume without
-   *  ever re-downloading a finished track — or trusting a half-committed one. */
-  resolveStaleInFlight(sizes: ReadonlyMap<string, number>): string[] {
+   *  ever re-downloading a finished track — or trusting a half-committed one.
+   *  `activeKeys` (native engine reattach) are keys GENUINELY still in flight
+   *  on the background URLSession — those records are left untouched. */
+  resolveStaleInFlight(
+    sizes: ReadonlyMap<string, number>,
+    activeKeys?: ReadonlySet<string>,
+  ): string[] {
     const corrupt: string[] = [];
     let changed = false;
     for (const r of this.all()) {
       if (!isInFlight(r)) continue;
+      if (activeKeys?.has(r.key)) continue; // still downloading natively — not stale
       changed = true;
       const size = sizes.get(r.key);
       if (size === undefined) {

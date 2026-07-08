@@ -4,10 +4,11 @@ import { Text, View } from "react-native";
 import { theme } from "./theme";
 
 /** Thin per-container download progress bar with a "{done}/{total} tracks ·
- *  bytes" caption. Renders nothing when the container has no download activity
- *  ("none") or everything already landed ("complete"). */
+ *  bytes" caption. Renders ONLY while something is actively downloading —
+ *  "partial" (some tracks failed, nothing in flight) would otherwise leave
+ *  the bar lingering forever. */
 export function DownloadProgressBar({ progress }: { progress: ContainerDownloadProgress }) {
-  if (progress.state === "none" || progress.state === "complete") return null;
+  if (progress.state !== "downloading") return null;
   const fraction = Math.min(1, Math.max(0, progress.fraction ?? 0));
   return (
     <View style={{ paddingHorizontal: theme.space(2), paddingVertical: theme.space(1) }}>
