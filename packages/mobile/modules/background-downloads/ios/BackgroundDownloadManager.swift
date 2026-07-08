@@ -104,6 +104,12 @@ final class BackgroundDownloadManager: NSObject {
   struct CompletedResult: Codable {
     let key: String
     let bytes: Int64
+    /// Convert jobs only — the artifact is the on-device AAC m4a, and this is
+    /// its ACTUAL target bitrate (from the JobDescriptor), so JS patches the
+    /// record's media meta from truth instead of guessing. Optionals so state
+    /// files persisted before the fields existed still decode.
+    let converted: Bool?
+    let bitrateKbps: Int?
   }
 
   struct FailedResult: Codable {
@@ -162,6 +168,11 @@ final class BackgroundDownloadManager: NSObject {
   /// conversion leaves the key in the persisted pendingConversions, so the
   /// next launch re-converts from the kept `.orig`). Serial: one at a time.
   private var convertingKey: String?
+  /// Invalidation token for the running conversion pump: each conversion
+  /// captures the current value at start, and cancel() of the converting key
+  /// bumps it — the stale pump's finishConversion then no-ops instead of
+  /// stalling the queue or committing into a resubmitted key's job.
+  private var conversionGeneration = 0
   private var backgroundCompletionHandler: (() -> Void)?
 
   /// Set by the module (JS alive) to forward events; nil while JS is away —
@@ -273,9 +284,14 @@ final class BackgroundDownloadManager: NSObject {
         }
       }
       // Cancelled keys leave the conversion backlog too. If one is converting
-      // RIGHT NOW its completion callback finds the job gone and just moves
-      // on (the files above are already deleted; its writer fails harmlessly).
+      // RIGHT NOW, invalidate the running pump: bump the generation (its
+      // finishConversion sees the mismatch and no-ops) and free the slot so
+      // the rest of the backlog proceeds instead of stalling behind it.
       self.state.pendingConversions.removeAll { drop.contains($0) }
+      if let converting = self.convertingKey, drop.contains(converting) {
+        self.conversionGeneration += 1
+        self.convertingKey = nil
+      }
       // Invariant JS relies on: every submitted key eventually gets exactly
       // one terminal event — an explicit cancel IS that event. No double
       // emit from the delegate: a cancelled task's didCompleteWithError
@@ -291,6 +307,7 @@ final class BackgroundDownloadManager: NSObject {
       self.trimResultBuffers()
       self.persist()
       self.fill()
+      self.drainConversions()
       completion()
     }
   }
@@ -303,7 +320,15 @@ final class BackgroundDownloadManager: NSObject {
       self.ensureStartedLocked()
       let snapshot: [String: Any] = [
         "active": self.state.jobs.map { $0.key },
-        "completed": self.state.completed.map { ["key": $0.key, "bytes": Int($0.bytes)] },
+        "completed": self.state.completed.map { c -> [String: Any] in
+          var entry: [String: Any] = ["key": c.key, "bytes": Int(c.bytes)]
+          // Convert jobs carry the artifact truth (see CompletedResult).
+          if c.converted == true {
+            entry["converted"] = true
+            if let b = c.bitrateKbps { entry["bitrateKbps"] = b }
+          }
+          return entry
+        },
         "failed": self.state.failed.map { ["key": $0.key, "message": $0.message] },
       ]
       self.state.completed = []
@@ -365,7 +390,7 @@ final class BackgroundDownloadManager: NSObject {
       if FileManager.default.fileExists(atPath: job.destPath + ".orig") { return false }
       guard let size = fileSize(job.destPath), size > 0 else { return false }
       state.pendingConversions.removeAll { $0 == job.key }
-      completeJob(job.key, bytes: size)
+      completeJob(job.key, bytes: size, converted: true, bitrateKbps: job.targetBitrateKbps)
       return true
     }
     guard let size = fileSize(job.destPath) else { return false }
@@ -388,6 +413,10 @@ final class BackgroundDownloadManager: NSObject {
       }
       var req = URLRequest(url: url)
       for (k, v) in job.headers { req.setValue(v, forHTTPHeaderField: k) }
+      // Routing rule (JS `transferModeFor`): on-device conversion is the
+      // off-cellular path — a WiFi→cellular flip mid-queue must PAUSE these
+      // original downloads until WiFi returns, not trickle them over data.
+      if job.mode == "convert" { req.allowsCellularAccess = false }
       task = session.downloadTask(with: req)
     }
     task.taskDescription = job.key
@@ -428,15 +457,27 @@ final class BackgroundDownloadManager: NSObject {
     }
   }
 
-  private func completeJob(_ key: String, bytes: Int64) {
+  /// `converted`/`bitrateKbps` are set ONLY for convert jobs whose dest is the
+  /// on-device AAC m4a — the event/snapshot carries the artifact truth so JS
+  /// never has to guess the record's media meta.
+  private func completeJob(
+    _ key: String, bytes: Int64, converted: Bool = false, bitrateKbps: Int? = nil
+  ) {
     state.jobs.removeAll { $0.key == key }
     lastProgressEmit.removeValue(forKey: key)
     waitingKeys.remove(key)
     if let emitter = emitter {
       persist()
-      emitter("onComplete", ["key": key, "bytes": Int(bytes)])
+      var body: [String: Any?] = ["key": key, "bytes": Int(bytes)]
+      if converted {
+        body["converted"] = true
+        body["bitrateKbps"] = bitrateKbps
+      }
+      emitter("onComplete", body)
     } else {
-      state.completed.append(CompletedResult(key: key, bytes: bytes))
+      state.completed.append(
+        CompletedResult(
+          key: key, bytes: bytes, converted: converted ? true : nil, bitrateKbps: bitrateKbps))
       trimResultBuffers()
       persist()
     }
@@ -601,7 +642,7 @@ final class BackgroundDownloadManager: NSObject {
         // Killed between the m4a move (which deletes .orig) and the backlog
         // persist — the artifact is already committed.
         state.pendingConversions.removeAll { $0 == key }
-        completeJob(key, bytes: size)
+        completeJob(key, bytes: size, converted: true, bitrateKbps: job.targetBitrateKbps)
       } else {
         // Nothing to convert and nothing committed — hand the job back to
         // the download stage (fill() restarts it now that it's not pending).
@@ -613,6 +654,9 @@ final class BackgroundDownloadManager: NSObject {
       return
     }
     convertingKey = key
+    // Captured by this pump; cancel() of `key` bumps the manager's counter so
+    // the pump's finishConversion knows it has been invalidated.
+    let generation = conversionGeneration
     // Wake-window insurance: ask for background time for THIS conversion.
     // Ended exactly once on every exit (finishConversion's defer + the
     // expiration handler share the once-guarded box).
@@ -627,11 +671,15 @@ final class BackgroundDownloadManager: NSObject {
           dst: URL(fileURLWithPath: tmpPath),
           bitrateKbps: bitrateKbps)
         self?.queue.async {
-          self?.finishConversion(key, bytes: bytes, error: nil, endWakeTask: endWakeTask)
+          self?.finishConversion(
+            key, generation: generation, tmpPath: tmpPath, bytes: bytes, error: nil,
+            endWakeTask: endWakeTask)
         }
       } catch {
         self?.queue.async {
-          self?.finishConversion(key, bytes: 0, error: error, endWakeTask: endWakeTask)
+          self?.finishConversion(
+            key, generation: generation, tmpPath: tmpPath, bytes: 0, error: error,
+            endWakeTask: endWakeTask)
         }
       }
     }
@@ -641,13 +689,24 @@ final class BackgroundDownloadManager: NSObject {
   /// m4a and reports ITS size (delivered-size-authoritative); failure retries
   /// once, then fails terminally (failTerminal cleans .orig/.m4a.tmp).
   private func finishConversion(
-    _ key: String, bytes: Int64, error: Error?, endWakeTask: @escaping () -> Void
+    _ key: String, generation: Int, tmpPath: String, bytes: Int64, error: Error?,
+    endWakeTask: @escaping () -> Void
   ) {
-    convertingKey = nil
     defer { endWakeTask() }
+    guard generation == conversionGeneration else {
+      // Stale pump: cancel() invalidated this conversion (bumped the
+      // generation, cleared convertingKey, kept the queue draining). The key
+      // may have been resubmitted since — touching jobs/pending/records or
+      // emitting here would cross-contaminate the new life of the key. Only
+      // remove our own output (the pump may have recreated the .m4a.tmp
+      // after cancel()'s delete).
+      try? FileManager.default.removeItem(atPath: tmpPath)
+      return
+    }
+    convertingKey = nil
     guard let i = jobIndex(key), state.pendingConversions.contains(key) else {
-      // Cancelled mid-conversion: cancel() already removed the job, the
-      // pending entry and the files — nothing to do but keep draining.
+      // Job vanished without a cancel-of-converting-key (defensive): nothing
+      // to commit — keep draining.
       drainConversions()
       return
     }
@@ -661,7 +720,7 @@ final class BackgroundDownloadManager: NSObject {
                             toPath: job.destPath)
           try? fm.removeItem(atPath: job.destPath + ".orig")
           state.pendingConversions.removeAll { $0 == key }
-          completeJob(key, bytes: bytes)
+          completeJob(key, bytes: bytes, converted: true, bitrateKbps: job.targetBitrateKbps)
           drainConversions()
           return
         } catch {
@@ -753,24 +812,39 @@ final class BackgroundDownloadManager: NSObject {
   /// .m4a at the requested bitrate, honoring the user's bitrate setting —
   /// which is exactly what AVAssetExportSession's AppleM4A preset ignores, so
   /// this is the AVAssetReader→AVAssetWriter pipeline: a track output
-  /// decoding to LPCM feeds an AAC-encoding writer input (the writer input
-  /// converts sample rate/channel count as needed). Returns the m4a's size.
+  /// decoding to LPCM (resampled/downmixed decoder-side to the capped output
+  /// shape) feeds an AAC-encoding writer input. Returns the m4a's size.
   static func convertToAacM4a(src: URL, dst: URL, bitrateKbps: Int) async throws -> Int64 {
     let asset = AVURLAsset(url: src)
     guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
       throw conversionError("no audio track")
     }
     // Source rate/channels bound the output settings: the AAC-LC encoder
-    // takes at most 48 kHz / stereo here (hi-res and multichannel originals
-    // are resampled/downmixed by the writer input).
+    // takes at most 48 kHz / stereo here. Hi-res and multichannel originals
+    // are resampled/downmixed by the READER's decoder — the writer input's
+    // append REJECTS buffers whose rate/channels differ from its pinned
+    // settings, so the LPCM handed to it must already be at the capped shape.
     let asbd = try await track.load(.formatDescriptions).first
       .flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee }
     let srcRate = asbd.map { $0.mSampleRate } ?? 0
     let srcChannels = asbd.map { Int($0.mChannelsPerFrame) } ?? 2
+    let outRate = min(srcRate > 0 ? srcRate : 44100, 48000)
+    let outChannels = min(max(srcChannels, 1), 2)
 
     let reader = try AVAssetReader(asset: asset)
+    // Full LPCM spec (not just the format id): the decoder resamples/downmixes
+    // to exactly what the AAC writer input accepts.
     let readerOutput = AVAssetReaderTrackOutput(
-      track: track, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM])
+      track: track,
+      outputSettings: [
+        AVFormatIDKey: kAudioFormatLinearPCM,
+        AVSampleRateKey: outRate,
+        AVNumberOfChannelsKey: outChannels,
+        AVLinearPCMBitDepthKey: 16,
+        AVLinearPCMIsFloatKey: false,
+        AVLinearPCMIsBigEndianKey: false,
+        AVLinearPCMIsNonInterleaved: false,
+      ])
     guard reader.canAdd(readerOutput) else { throw conversionError("cannot add reader output") }
     reader.add(readerOutput)
 
@@ -781,8 +855,8 @@ final class BackgroundDownloadManager: NSObject {
       mediaType: .audio,
       outputSettings: [
         AVFormatIDKey: kAudioFormatMPEG4AAC,
-        AVSampleRateKey: min(srcRate > 0 ? srcRate : 44100, 48000),
-        AVNumberOfChannelsKey: min(max(srcChannels, 1), 2),
+        AVSampleRateKey: outRate,
+        AVNumberOfChannelsKey: outChannels,
         AVEncoderBitRateKey: bitrateKbps * 1000,
       ])
     input.expectsMediaDataInRealTime = false
