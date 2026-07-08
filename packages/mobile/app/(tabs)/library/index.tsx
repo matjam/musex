@@ -7,17 +7,12 @@ import {
   listValidator,
   OfflineUnavailable,
 } from "@musex/core";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Trash2 } from "lucide-react-native";
+import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import type { ViewToken } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../../../src/logic/art-url";
 import { useStore } from "../../../src/state/store";
 import { useRecordsProgress } from "../../../src/state/use-download-progress";
@@ -25,6 +20,7 @@ import { ActionBar } from "../../../src/ui/ActionBar";
 import { AlbumArt } from "../../../src/ui/AlbumArt";
 import { AZScrubber } from "../../../src/ui/AZScrubber";
 import { DownloadProgressBar } from "../../../src/ui/DownloadProgressBar";
+import { gridColumns } from "../../../src/ui/grid-columns";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { Tile } from "../../../src/ui/Tile";
 import { theme } from "../../../src/ui/theme";
@@ -36,6 +32,50 @@ type Item =
   | { kind: "track"; data: Track };
 
 const TRACK_ROW_H = 64; // fixed track-row height so scrollToIndex is exact
+
+// Best-effort scroll restore across column-count changes (rotation). A
+// numColumns change requires the key remount (RN can't change numColumns in
+// place), which resets scroll — so track the first visible ITEM index and,
+// after the remount, scroll back to its row under the new column count.
+// RN requires viewabilityConfig/onViewableItemsChanged to be STABLE refs
+// (changing them on the fly throws), hence the useRef wrappers; the current
+// column count reaches the stable callback through colsRef.
+function useColumnScrollRestore<T>(
+  listRef: RefObject<FlatList<T> | null>,
+  numCols: number,
+  resetKey: string,
+) {
+  const firstVisibleItem = useRef(0);
+  const colsRef = useRef(numCols);
+  colsRef.current = numCols;
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 10 }).current;
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const first = viewableItems[0];
+    // With numColumns > 1 FlatList virtualizes by ROW, so viewable indices
+    // are row indices — convert to an item index.
+    if (first?.index != null) firstVisibleItem.current = first.index * colsRef.current;
+  }).current;
+  const prev = useRef({ cols: numCols, key: resetKey });
+  useEffect(() => {
+    const p = prev.current;
+    prev.current = { cols: numCols, key: resetKey };
+    if (p.key !== resetKey) {
+      // Different dataset (segment switch) — start at the top, no restore.
+      firstVisibleItem.current = 0;
+      return;
+    }
+    if (p.cols === numCols) return;
+    const row = Math.floor(firstVisibleItem.current / numCols);
+    if (row <= 0) return;
+    // Defer past the key remount so the new list instance exists and has laid
+    // out; a bad index lands in the list's onScrollToIndexFailed fallback.
+    const t = setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: row, animated: false });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [numCols, resetKey, listRef]);
+  return { viewabilityConfig, onViewableItemsChanged };
+}
 
 export default function LibraryBrowse() {
   const {
@@ -51,20 +91,42 @@ export default function LibraryBrowse() {
     removeDownload,
   } = useStore();
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  // Content-pane width (measured — on iPad the sidebar shrinks the pane, so
+  // the window width would oversize tiles). null until onLayout delivers a
+  // width: rendering nothing for one frame beats seeding from the WINDOW width
+  // (which includes the sidebar → wrong column count → key-remount flash).
+  const [paneWidth, setPaneWidth] = useState<number | null>(null);
   const [segment, setSegment] = useState<Segment>("Artists");
+  // Deep-link target segment (iPad sidebar "Downloaded"): `segNonce` changes on
+  // every tap so re-taps re-trigger even when the segment value is unchanged.
+  const params = useLocalSearchParams<{ segment?: string; segNonce?: string }>();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: segNonce is a deliberate re-trigger, not referenced in the body.
+  useEffect(() => {
+    const seg = params.segment;
+    if (seg === "Artists" || seg === "Albums" || seg === "Tracks" || seg === "Downloaded") {
+      setSegment(seg);
+    }
+  }, [params.segment, params.segNonce]);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   // Set when an offline fetch found nothing cached (distinct from a generic
   // error, which keeps the prior items).
   const [offlineEmpty, setOfflineEmpty] = useState(false);
   const listRef = useRef<FlatList<Item>>(null);
+  const dlListRef = useRef<FlatList<TrackAlbumGroup>>(null);
   // Downloaded segment state: track-grouped albums (re-baked thumbs).
   const [dlTrackGroups, setDlTrackGroups] = useState<TrackAlbumGroup[]>([]);
 
-  // Tracks render as single-column rows; artists/albums/downloaded as a 2-col tile grid.
-  const numCols = segment === "Tracks" ? 1 : 2;
-  const tileSize = (width - 22) / 2; // 22 = scrubber gutter
+  // Tracks render as single-column rows; artists/albums/downloaded as a tile
+  // grid whose column count derives from the pane width (2 on phone, more on iPad).
+  // Fallback 0 is never rendered — the lists mount only once paneWidth is measured.
+  const gridCols = gridColumns(paneWidth ?? 0);
+  const numCols = segment === "Tracks" ? 1 : gridCols;
+  const tileSize = ((paneWidth ?? 0) - 22) / gridCols; // 22 = scrubber gutter
+
+  // Restore scroll position across rotation-driven column changes.
+  const mainRestore = useColumnScrollRestore(listRef, numCols, segment);
+  const dlRestore = useColumnScrollRestore(dlListRef, gridCols, "downloaded");
 
   // Refetch whenever the Library tab gains focus so newly-added Plex tracks
   // appear without an app restart. On a focus-triggered refresh when items are
@@ -187,18 +249,30 @@ export default function LibraryBrowse() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <View
+      style={{ flex: 1, backgroundColor: theme.bg }}
+      onLayout={(e) => setPaneWidth(e.nativeEvent.layout.width)}
+    >
       <SegmentedControl
         segments={["Artists", "Albums", "Tracks", "Downloaded"]}
         value={segment}
         onChange={(s) => setSegment(s as Segment)}
       />
-      {segment === "Downloaded" ? (
+      {paneWidth === null ? null : segment === "Downloaded" ? (
         <FlatList
-          key="downloaded"
+          ref={dlListRef}
+          key={`downloaded-${gridCols}`}
           data={dlTrackGroups}
-          numColumns={2}
+          numColumns={gridCols}
           keyExtractor={(g) => g.albumId}
+          viewabilityConfig={dlRestore.viewabilityConfig}
+          onViewableItemsChanged={dlRestore.onViewableItemsChanged}
+          onScrollToIndexFailed={(info) => {
+            dlListRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: false,
+            });
+          }}
           ListHeaderComponent={
             <View>
               {wholeProgress.inFlight > 0 ? (
@@ -287,10 +361,12 @@ export default function LibraryBrowse() {
         <View style={{ flex: 1 }}>
           <FlatList
             ref={listRef}
-            key={segment}
+            key={`${segment}-${numCols}`}
             data={items}
             numColumns={numCols}
             keyExtractor={(it, i) => `${it.kind}-${it.data.id}-${i}`}
+            viewabilityConfig={mainRestore.viewabilityConfig}
+            onViewableItemsChanged={mainRestore.onViewableItemsChanged}
             ListHeaderComponent={<ActionBar session={session} getTracks={allLibraryTracks} />}
             getItemLayout={
               numCols === 1

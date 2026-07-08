@@ -9,10 +9,16 @@
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "net.stupendous.musex",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
         ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocalNetworkUsageDescription": "musex connects to Plex Media Servers on your local network to stream your music library.",
