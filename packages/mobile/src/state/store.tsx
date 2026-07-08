@@ -14,6 +14,7 @@ import {
   isInFlight,
   PlaybackSession,
   PlayMonitor,
+  PlexAuthError,
   pickDefaultLibrary,
   pickDefaultServer,
   planCacheEviction,
@@ -420,10 +421,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const library = await resolveLibrary(gateway, servers, token);
         if (library) await saveSelectedLibrary(library);
         dispatch({ type: "signed-in", token, servers, library });
-      } catch {
-        // Bad/expired token -> signed out (never loop).
-        await tokenStore.clear();
-        dispatch({ type: "bootstrapped", token: null });
+      } catch (err) {
+        if (err instanceof PlexAuthError) {
+          // Genuinely bad/expired token -> signed out (never loop).
+          await tokenStore.clear();
+          dispatch({ type: "bootstrapped", token: null });
+          return;
+        }
+        // Transient failure (offline, plex.tv 5xx, a background launch with
+        // no network) — the token is probably FINE. Never clear it: rethrow
+        // so the caller handles it (bootstrap -> retry on foreground; the
+        // sign-in screen surfaces/retries). Clearing here signed users out
+        // on any network blip during a background relaunch.
+        throw err;
       }
     },
     [gateway, tokenStore],
