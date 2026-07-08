@@ -39,7 +39,9 @@ import {
   useState,
 } from "react";
 import { AppState } from "react-native";
-import BackgroundDownloadsNative from "../../modules/background-downloads";
+import BackgroundDownloadsNative, {
+  nativeSupportsConvert,
+} from "../../modules/background-downloads";
 import { ExpoAudioEngine } from "../adapters/audio-engine";
 import {
   clearSession,
@@ -66,7 +68,7 @@ import { DEFAULT_CACHE_CONFIG, loadCacheConfig, saveCacheConfig } from "../downl
 import type { Connectivity } from "../downloads/connectivity-monitor";
 import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
 import { DownloadIndex } from "../downloads/download-index";
-import { DownloadManager } from "../downloads/download-manager";
+import { convertedMeta, DownloadManager } from "../downloads/download-manager";
 import { DownloadStore } from "../downloads/download-store";
 import { JsTransferEngine } from "../downloads/js-transfer-engine";
 import { createNativeTransferEngine } from "../downloads/native-transfer-engine";
@@ -314,9 +316,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // otherwise (Expo Go, simulator without the module).
   const transferEngine = useMemo(() => {
     const js = new JsTransferEngine({ store: downloadStore, fetch });
-    const native = createNativeTransferEngine(BackgroundDownloadsNative);
+    // supportsConvert is FEATURE-DETECTED from the installed binary — a stale
+    // dev client (JS newer than the native build) must not be handed convert
+    // jobs it would run down its HLS branch.
+    const native = createNativeTransferEngine(BackgroundDownloadsNative, {
+      supportsConvert: nativeSupportsConvert(),
+    });
     return native ? new RoutingTransferEngine({ hls: js, original: native }) : js;
   }, [downloadStore]);
+
+  // Ref so the connectivity probe always sees the current library without
+  // causing the monitor to be reconstructed on every library change.
+  const libraryRef = useRef<Library | null>(null);
+  libraryRef.current = state.library;
+
+  const connectivityMonitor = useMemo(() => {
+    const NetInfo = require("@react-native-community/netinfo") as {
+      addEventListener: (
+        cb: (state: { isConnected: boolean | null; type: string }) => void,
+      ) => () => void;
+    };
+    return new ConnectivityMonitor({
+      subscribe: (cb) =>
+        NetInfo.addEventListener((s) => cb({ isConnected: s.isConnected, type: s.type })),
+      probe: async () => {
+        const tok = tokenRef.current;
+        const lib = libraryRef.current;
+        if (!lib || !tok) return; // not signed in — treat as online
+        await gateway.probe(lib.serverId, tok);
+      },
+      onChange: (c) => dispatch({ type: "connectivity", connectivity: c }),
+    });
+  }, [gateway]);
 
   const downloadManager = useMemo(
     () =>
@@ -330,6 +361,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
         clientId: CLIENT_ID,
         getQuality: () => storageQualityRef.current,
+        // Routing input: AAC converts on-device off-cellular, HLS on cellular.
+        getConnectionType: () => connectivityMonitor.connectionType(),
         onProgress: (e) => {
           bumpDownloadsVersion();
           // When a cache track finishes, trim the cache to its cap (LRU). Uses
@@ -345,29 +378,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         },
       }),
-    [downloadStore, downloadIndex, transferEngine, gateway, bumpDownloadsVersion],
+    [
+      downloadStore,
+      downloadIndex,
+      transferEngine,
+      gateway,
+      bumpDownloadsVersion,
+      connectivityMonitor,
+    ],
   );
-
-  // Ref so the connectivity probe always sees the current library without
-  // causing the monitor to be reconstructed on every library change.
-  const libraryRef = useRef<Library | null>(null);
-  libraryRef.current = state.library;
-
-  const connectivityMonitor = useMemo(() => {
-    const NetInfo = require("@react-native-community/netinfo") as {
-      addEventListener: (cb: (state: { isConnected: boolean | null }) => void) => () => void;
-    };
-    return new ConnectivityMonitor({
-      subscribe: (cb) => NetInfo.addEventListener(cb),
-      probe: async () => {
-        const tok = tokenRef.current;
-        const lib = libraryRef.current;
-        if (!lib || !tok) return; // not signed in — treat as online
-        await gateway.probe(lib.serverId, tok);
-      },
-      onChange: (c) => dispatch({ type: "connectivity", connectivity: c }),
-    });
-  }, [gateway]);
 
   const lastfm = useMemo(
     () =>
@@ -626,8 +645,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         // File absent → leave the record; reconcile/resolve below handles it.
         if (presentKeys.has(c.key)) {
+          // The snapshot entry says whether the native engine CONVERTED the
+          // artifact (on-device AAC m4a) and at what actual bitrate (the
+          // job's target, from the native backlog descriptor) — patch the
+          // media meta from that truth, exactly like the manager does on a
+          // live complete. No converted flag → the file is the original.
+          const meta = c.converted ? convertedMeta(r.meta, c.bitrateKbps) : r.meta;
           await downloadIndex.upsert({
             ...r,
+            meta,
             state: "downloaded",
             bytes: c.bytes,
             expectedBytes: c.bytes,

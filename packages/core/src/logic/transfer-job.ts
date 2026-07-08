@@ -7,20 +7,24 @@ import { buildHlsStartUrl, stopSessionUrl, TRANSCODE_PROFILE_EXTRA } from "./tra
  *  destination. Serializable (crosses the native bridge as JSON). */
 export interface TransferJob {
   key: string;
-  mode: "original" | "hls";
-  /** original: signed file URL; hls: signed start.m3u8 URL. */
+  /** convert = download the ORIGINAL file, then convert to AAC on-device. */
+  mode: "original" | "hls" | "convert";
+  /** original/convert: signed original-file URL; hls: signed start.m3u8 URL. */
   url: string;
-  /** hls: token + profile-extra; original: {}. */
+  /** hls: token + profile-extra; original/convert: {}. */
   headers: Record<string, string>;
   /** Absolute filesystem path (no file:// scheme). Engines write to
    *  `destPath + ".part"` during transfer and move into place on commit. */
   destPath: string;
-  /** original only — a TRUNCATION guard: a delivery smaller than this fails;
-   *  a larger/differing delivery is accepted (the delivered size is
-   *  authoritative — the Plex catalog can drift from the file it serves). */
+  /** original/convert only — a TRUNCATION guard on the downloaded original: a
+   *  delivery smaller than this fails; a larger/differing delivery is accepted
+   *  (the delivered size is authoritative — the Plex catalog can drift from
+   *  the file it serves). Convert's terminal complete reports the m4a size. */
   expectedBytes?: number;
   /** hls only — best-effort Plex transcode-session stop. */
   stopUrl?: string;
+  /** convert only — the on-device AAC target bitrate. */
+  targetBitrateKbps?: number;
 }
 
 export interface TransferEndpoint {
@@ -28,17 +32,22 @@ export interface TransferEndpoint {
   token: string;
 }
 
-/** Progress/terminal events an engine emits for its jobs. */
+/** Progress/terminal events an engine emits for its jobs. On complete,
+ *  `converted`/`bitrateKbps` are set ONLY when the engine ran a convert job —
+ *  the committed artifact is an on-device AAC m4a at that ACTUAL bitrate (the
+ *  job's target), so the caller patches record media meta from truth instead
+ *  of guessing from format/capability heuristics. */
 export type TransferEvent =
   | { kind: "progress"; key: string; bytes: number; segmentsDone?: number; segmentsTotal?: number }
-  | { kind: "complete"; key: string; bytes: number }
+  | { kind: "complete"; key: string; bytes: number; converted?: boolean; bitrateKbps?: number }
   | { kind: "error"; key: string; message: string; terminal: boolean };
 
 /** What an engine reports on reattach: keys still in flight plus results that
- *  landed while JS was away. */
+ *  landed while JS was away. Completed entries carry the same optional
+ *  `converted`/`bitrateKbps` artifact truth as the complete event. */
 export interface TransferSnapshot {
   active: string[];
-  completed: { key: string; bytes: number }[];
+  completed: { key: string; bytes: number; converted?: boolean; bitrateKbps?: number }[];
   failed: { key: string; message: string }[];
 }
 
@@ -53,8 +62,25 @@ export function buildTransferJob(opts: {
   clientId: string;
   destPath: string;
   session: string;
+  /** aac only — emit mode "convert" (download the original, convert to AAC
+   *  on-device) instead of "hls". The caller decides via `transferModeFor`;
+   *  false/undefined behaves exactly as before. */
+  convert?: boolean;
 }): TransferJob {
-  const { job, quality, endpoint, clientId, destPath, session } = opts;
+  const { job, quality, endpoint, clientId, destPath, session, convert } = opts;
+  if (quality.mode === "aac" && convert) {
+    const sep = job.plexPath.includes("?") ? "&" : "?";
+    return {
+      key: job.key,
+      mode: "convert",
+      // Same construction as mode:"original" — the download IS the original.
+      url: `${endpoint.baseUrl}${job.plexPath}${sep}X-Plex-Token=${encodeURIComponent(endpoint.token)}`,
+      headers: {},
+      destPath,
+      expectedBytes: job.expectedBytes,
+      targetBitrateKbps: quality.bitrateKbps,
+    };
+  }
   if (quality.mode === "aac") {
     return {
       key: job.key,

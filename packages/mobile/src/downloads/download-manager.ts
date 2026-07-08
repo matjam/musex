@@ -1,12 +1,15 @@
 import {
   buildTransferJob,
+  type ConnectionType,
   type DownloadFormat,
   type DownloadJob,
+  type DownloadMeta,
   type DownloadRecord,
   isInFlight,
   type StorageQuality,
   type TransferEvent,
   type TransferJob,
+  transferModeFor,
 } from "@musex/core";
 import type { DownloadIndex } from "./download-index";
 import type { FileStore } from "./download-store";
@@ -27,15 +30,27 @@ export interface DownloadManagerDeps {
   endpoint: (serverId: string) => Promise<{ baseUrl: string; token: string }>;
   clientId: string;
   getQuality: () => StorageQuality;
+  /** Current network class (connectivity monitor) — feeds `transferModeFor`:
+   *  AAC routes to on-device conversion off-cellular, server HLS on cellular. */
+  getConnectionType: () => ConnectionType;
   onProgress: (e: DownloadProgress) => void;
 }
 
 /** A queued download plus the quality mode pinned at enqueue time — a Settings
  *  quality toggle mid-lifecycle must not flip an already-recorded job's format
- *  against its transfer (or an already-committed file). */
+ *  against its transfer (or an already-committed file). No transfer mode here:
+ *  the terminal complete EVENT says whether the artifact was converted (and at
+ *  what bitrate), so record meta is patched from the engine's truth. */
 interface QueueEntry {
   job: DownloadJob;
   format: DownloadFormat;
+}
+
+/** The record meta for a finished convert job: the artifact on disk is an
+ *  AAC-in-m4a at the ACTUAL bitrate the engine reported, not the catalog
+ *  original. (Exported for the bootstrap reattach fold in store.tsx.) */
+export function convertedMeta(meta: DownloadMeta, bitrateKbps?: number): DownloadMeta {
+  return { ...meta, container: "m4a", audioCodec: "aac", bitrate: bitrateKbps };
 }
 
 /** Plex transcode-session ids must be PLAIN tokens: Plex embeds the session in
@@ -157,6 +172,14 @@ export class DownloadManager {
         mode: format === "aac" ? "aac" : "original",
         bitrateKbps: this.deps.getQuality().bitrateKbps,
       };
+      // AAC travels as on-device conversion (native original download + local
+      // AAC encode) when the engine supports it and we're off cellular; server
+      // HLS otherwise. The pinned format stays "aac" — the artifact is AAC.
+      const mode = transferModeFor({
+        qualityMode: quality.mode,
+        nativeConvertAvailable: !!this.deps.engine.supportsConvert,
+        connectionType: this.deps.getConnectionType(),
+      });
       let transfer: TransferJob;
       try {
         const ep = await this.deps.endpoint(j.serverId);
@@ -168,6 +191,7 @@ export class DownloadManager {
           destPath: this.deps.store.path(j.key),
           // Session id is caller-supplied (core stays Date.now-free).
           session: plexSessionId(),
+          convert: mode === "convert",
         });
       } catch (err) {
         // Endpoint unresolved (server not connected) — surface it, never
@@ -267,8 +291,15 @@ export class DownloadManager {
       this.progressUpsertAt.delete(e.key);
       if (e.kind === "complete") {
         // Delivered size is authoritative: persist it as expectedBytes (both
-        // formats) so reconcile verifies against what actually landed.
-        await this.record(job, format, "downloaded", e.bytes, undefined, e.bytes);
+        // formats) so reconcile verifies against what actually landed. When
+        // the engine says the artifact was CONVERTED (on-device AAC m4a at
+        // the reported actual bitrate), patch the media meta so recordToTrack
+        // reconstructs the real file — the event is the truth, not a
+        // format/capability guess.
+        const finished = e.converted
+          ? { ...job, meta: convertedMeta(job.meta, e.bitrateKbps) }
+          : job;
+        await this.record(finished, format, "downloaded", e.bytes, undefined, e.bytes);
       } else {
         await this.record(job, format, "failed", 0, e.message);
       }
@@ -286,8 +317,13 @@ export class DownloadManager {
       if (e.kind === "error" && !e.terminal) return;
       if (e.kind === "complete") {
         // Delivered size is authoritative (same rule as the submitted path).
+        // The engine's event says whether the artifact was converted and at
+        // what ACTUAL bitrate (the previous run's target, carried in the
+        // native JobDescriptor) — no guessing from format/capability.
+        const meta = e.converted ? convertedMeta(rec.meta, e.bitrateKbps) : rec.meta;
         await this.deps.index.upsert({
           ...rec,
+          meta,
           state: "downloaded",
           bytes: e.bytes,
           expectedBytes: e.bytes,
@@ -331,6 +367,13 @@ export class DownloadManager {
       mode: format === "aac" ? "aac" : "original",
       bitrateKbps: this.deps.getQuality().bitrateKbps,
     };
+    // Same routing decision as the native path — moot for the plain JS engine
+    // (supportsConvert is never set there), kept uniform for correctness.
+    const mode = transferModeFor({
+      qualityMode: quality.mode,
+      nativeConvertAvailable: !!this.deps.engine.supportsConvert,
+      connectionType: this.deps.getConnectionType(),
+    });
     const ep = await this.deps.endpoint(job.serverId);
     const transfer = buildTransferJob({
       job,
@@ -340,6 +383,7 @@ export class DownloadManager {
       destPath: this.deps.store.path(job.key),
       // Session id is caller-supplied (core stays Date.now-free).
       session: plexSessionId(),
+      convert: mode === "convert",
     });
     // Map this job's engine events back onto records; resolve on the terminal one.
     await new Promise<void>((resolve) => {
@@ -358,7 +402,13 @@ export class DownloadManager {
         if (e.kind === "complete") {
           // Delivered size is authoritative: persist it as expectedBytes (both
           // formats) so reconcile verifies against what actually landed.
-          void this.record(job, format, "downloaded", e.bytes, undefined, e.bytes).then(resolve);
+          const finished =
+            transfer.mode === "convert"
+              ? { ...job, meta: convertedMeta(job.meta, transfer.targetBitrateKbps) }
+              : job;
+          void this.record(finished, format, "downloaded", e.bytes, undefined, e.bytes).then(
+            resolve,
+          );
         } else void this.record(job, format, "failed", 0, e.message).then(resolve);
       });
       void this.deps.engine.submit([transfer]);

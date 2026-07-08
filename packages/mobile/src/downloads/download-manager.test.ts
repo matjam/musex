@@ -84,6 +84,7 @@ function mgr(
       endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
       clientId: "cid",
       getQuality: typeof quality === "function" ? quality : () => quality,
+      getConnectionType: () => "other",
       onProgress: () => {},
     }),
   };
@@ -271,10 +272,11 @@ const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 /** Fake of the native background engine: records submits/cancels, lets tests
  *  emit events. ownsQueue → the manager batch-submits and never awaits. */
-function fakeNativeEngine() {
+function fakeNativeEngine(supportsConvert = false) {
   const listeners = new Set<(e: TransferEvent) => void>();
   const eng = {
     ownsQueue: true,
+    supportsConvert: supportsConvert || undefined,
     submits: [] as TransferJob[][],
     cancels: [] as string[][],
     async submit(jobs: TransferJob[]) {
@@ -297,17 +299,22 @@ function fakeNativeEngine() {
   return eng;
 }
 
-function nativeMgr() {
+function nativeMgr(opts?: {
+  quality?: { mode: "original" | "aac"; bitrateKbps: number };
+  connectionType?: "wifi" | "cellular" | "other" | "none";
+  supportsConvert?: boolean;
+}) {
   const store = fakeStore();
   const index = new DownloadIndex();
-  const eng = fakeNativeEngine();
+  const eng = fakeNativeEngine(opts?.supportsConvert ?? false);
   const m = new DownloadManager({
     store: store as never,
     index,
     engine: eng,
     endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
     clientId: "cid",
-    getQuality: () => ({ mode: "original" as const, bitrateKbps: 256 }),
+    getQuality: () => opts?.quality ?? { mode: "original" as const, bitrateKbps: 256 },
+    getConnectionType: () => opts?.connectionType ?? "other",
     onProgress: () => {},
   });
   return { store, index, eng, m };
@@ -445,6 +452,135 @@ describe("DownloadManager — native engine (ownsQueue)", () => {
   });
 });
 
+describe("DownloadManager — convert mode routing (aac + native convert)", () => {
+  it("aac + convert-capable engine + wifi → mode convert (original-file url, target bitrate)", async () => {
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 192 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    m.markReady();
+    await m.enqueue([job("a", 999)]);
+    expect(eng.submits).toHaveLength(1);
+    const t = eng.submits[0]?.[0];
+    expect(t?.mode).toBe("convert");
+    expect(t?.url).toBe("https://pms/library/parts/a/f.flac?X-Plex-Token=t");
+    expect(t?.targetBitrateKbps).toBe(192);
+    expect(t?.expectedBytes).toBe(999);
+    expect(t?.stopUrl).toBeUndefined();
+    // The artifact is AAC — the pinned per-job format stays "aac".
+    expect(index.get("a")?.format).toBe("aac");
+  });
+
+  it("aac + convert-capable engine on CELLULAR → hls (server transcode)", async () => {
+    const { eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 192 },
+      connectionType: "cellular",
+      supportsConvert: true,
+    });
+    m.markReady();
+    await m.enqueue([job("a")]);
+    expect(eng.submits[0]?.[0]?.mode).toBe("hls");
+  });
+
+  it("aac without convert support → hls even on wifi", async () => {
+    const { eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 192 },
+      connectionType: "wifi",
+      supportsConvert: false,
+    });
+    m.markReady();
+    await m.enqueue([job("a")]);
+    expect(eng.submits[0]?.[0]?.mode).toBe("hls");
+  });
+
+  it("convert complete patches the record meta from the EVENT's converted+bitrate", async () => {
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 256 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    m.markReady();
+    await m.enqueue([job("a")]);
+    // The engine reports the ACTUAL artifact bitrate (192) — that wins over
+    // the current quality setting (256).
+    eng.emit({ kind: "complete", key: "a", bytes: 42, converted: true, bitrateKbps: 192 });
+    await tick();
+    const r = index.get("a");
+    expect(r).toMatchObject({ state: "downloaded", bytes: 42, expectedBytes: 42 });
+    expect(r?.meta).toMatchObject({ container: "m4a", audioCodec: "aac", bitrate: 192 });
+    // Non-media meta untouched.
+    expect(r?.meta.title).toBe("a");
+  });
+
+  it("a submitted convert-mode job completing WITHOUT converted keeps the original meta", async () => {
+    // The engine fell back to committing the original (or never converted):
+    // no `converted` on the event → the record must describe the real file.
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 256 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    m.markReady();
+    await m.enqueue([job("a")]);
+    eng.emit({ kind: "complete", key: "a", bytes: 42 });
+    await tick();
+    expect(index.get("a")?.meta).toMatchObject({ container: "flac", audioCodec: "flac" });
+    expect(index.get("a")?.meta.bitrate).toBeUndefined();
+  });
+
+  it("an original-mode complete never patches meta", async () => {
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "original", bitrateKbps: 256 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    m.markReady();
+    await m.enqueue([job("a")]);
+    eng.emit({ kind: "complete", key: "a", bytes: 5 });
+    await tick();
+    expect(index.get("a")?.meta).toMatchObject({ container: "flac", audioCodec: "flac" });
+  });
+
+  it("a reattached-active record completing with converted gets the meta patch (event bitrate)", async () => {
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 128 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    await index.upsert({ ...rec("x", "downloading"), format: "aac" });
+    m.markReady();
+    await tick();
+    // The previous run's ACTUAL target (192, carried by the native backlog)
+    // beats the current quality setting (128).
+    eng.emit({ kind: "complete", key: "x", bytes: 9, converted: true, bitrateKbps: 192 });
+    await tick();
+    const r = index.get("x");
+    expect(r).toMatchObject({ state: "downloaded", bytes: 9, expectedBytes: 9 });
+    expect(r?.meta).toMatchObject({ container: "m4a", audioCodec: "aac", bitrate: 192 });
+  });
+
+  it("a reattached-active aac record completing WITHOUT converted → meta untouched", async () => {
+    // Even on a convert-capable engine with an aac-format record, no
+    // `converted` on the event means the committed file is the original —
+    // the old format/capability heuristic must not resurrect the m4a guess.
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 128 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    await index.upsert({ ...rec("x", "downloading"), format: "aac" });
+    m.markReady();
+    await tick();
+    eng.emit({ kind: "complete", key: "x", bytes: 9 });
+    await tick();
+    const r = index.get("x");
+    expect(r).toMatchObject({ state: "downloaded", bytes: 9, expectedBytes: 9 });
+    expect(r?.meta).toMatchObject({ container: "flac", audioCodec: "flac" });
+    expect(r?.meta.bitrate).toBeUndefined();
+  });
+});
+
 describe("DownloadManager — routing engine (hls → JS engine, original → native)", () => {
   it("routes by pinned mode and maps routed events back onto records", async () => {
     const store = fakeStore();
@@ -459,6 +595,7 @@ describe("DownloadManager — routing engine (hls → JS engine, original → na
       endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
       clientId: "cid",
       getQuality: () => ({ mode, bitrateKbps: 192 }),
+      getConnectionType: () => "other",
       onProgress: () => {},
     });
     m.markReady();

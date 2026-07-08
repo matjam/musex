@@ -31,6 +31,8 @@ export interface JsTransferEngineDeps {
 export class JsTransferEngine implements TransferEngine {
   /** Dies with JS — the manager keeps its own queue and per-job await. */
   readonly ownsQueue = false;
+  /** No on-device conversion here — AAC stays on the server-transcode HLS path. */
+  readonly supportsConvert?: boolean;
   private queue: TransferJob[] = [];
   private running = false;
   private readonly listeners = new Set<(e: TransferEvent) => void>();

@@ -45,6 +45,7 @@ export * from "./logic/taste-expansion";
 export * from "./logic/taste-profile";
 export * from "./logic/transcode-url";
 export * from "./logic/transfer-job";
+export * from "./logic/transfer-mode";
 export * from "./models/entity-ref";
 export type {
   Album,

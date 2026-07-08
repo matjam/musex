@@ -9,6 +9,10 @@ export interface TransferEngine {
    *  events as they come — no per-job await. False = the manager runs its
    *  sequential per-job loop (JS engine dies with the app). */
   readonly ownsQueue: boolean;
+  /** True when the engine can run `"convert"` jobs (download the original,
+   *  convert to AAC on-device — the native background engine). Undefined/false
+   *  = the manager routes AAC to the server-transcode HLS path instead. */
+  readonly supportsConvert?: boolean;
   /** Hand jobs to the engine (idempotent per key). */
   submit(jobs: TransferJob[]): Promise<void>;
   cancel(keys: string[]): Promise<void>;
