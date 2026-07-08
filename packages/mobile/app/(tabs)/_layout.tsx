@@ -5,7 +5,9 @@ import { Pressable, type View as RNView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "../../src/state/store";
 import { MiniPlayer } from "../../src/ui/MiniPlayer";
+import { Sidebar } from "../../src/ui/Sidebar";
 import { theme } from "../../src/ui/theme";
+import { useLayoutMode } from "../../src/ui/use-layout-mode";
 
 // SDK 56: expo-router dropped react-navigation, so the tab bar is built with
 // expo-router/ui's headless Tabs (TabSlot = content, TabList = the bar). TabList
@@ -35,47 +37,89 @@ TabButton.displayName = "TabButton";
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { connectivity } = useStore();
-  return (
-    <Tabs>
-      <TabSlot />
-      {connectivity === "offline" ? (
-        <View
+  const mode = useLayoutMode();
+
+  if (mode === "phone") {
+    // Phone: the exact pre-iPad tree (rendering must stay pixel-identical).
+    return (
+      <Tabs>
+        <TabSlot />
+        {connectivity === "offline" ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              backgroundColor: "#8b1a1a",
+              paddingVertical: 6,
+            }}
+          >
+            <WifiOff color="#fff" size={14} />
+            <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+              Offline · playing downloaded music
+            </Text>
+          </View>
+        ) : null}
+        <MiniPlayer />
+        <TabList
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-            backgroundColor: "#8b1a1a",
-            paddingVertical: 6,
+            backgroundColor: theme.surface,
+            borderTopWidth: 1,
+            borderTopColor: theme.border,
+            paddingBottom: insets.bottom,
           }}
         >
-          <WifiOff color="#fff" size={14} />
-          <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
-            Offline · playing downloaded music
-          </Text>
+          <TabTrigger name="home" href="/(tabs)/home" asChild>
+            <TabButton icon={Home} label="Home" />
+          </TabTrigger>
+          <TabTrigger name="search" href="/(tabs)/search" asChild>
+            <TabButton icon={Search} label="Search" />
+          </TabTrigger>
+          <TabTrigger name="library" href="/(tabs)/library" asChild>
+            <TabButton icon={Library} label="Library" />
+          </TabTrigger>
+          <TabTrigger name="settings" href="/(tabs)/settings" asChild>
+            <TabButton icon={Cog} label="Settings" />
+          </TabTrigger>
+        </TabList>
+      </Tabs>
+    );
+  }
+
+  // iPad (both orientations): desktop-mirror two-column layout. The TabList
+  // still DEFINES the tabs (the navigator only scans Tabs' direct children for
+  // it) but is hidden; the Sidebar's switch-triggers drive navigation.
+  return (
+    <Tabs>
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        <Sidebar mode={mode} />
+        <View style={{ flex: 1 }}>
+          <TabSlot />
+          {connectivity === "offline" ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                backgroundColor: "#8b1a1a",
+                paddingVertical: 6,
+              }}
+            >
+              <WifiOff color="#fff" size={14} />
+              <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+                Offline · playing downloaded music
+              </Text>
+            </View>
+          ) : null}
         </View>
-      ) : null}
-      <MiniPlayer />
-      <TabList
-        style={{
-          backgroundColor: theme.surface,
-          borderTopWidth: 1,
-          borderTopColor: theme.border,
-          paddingBottom: insets.bottom,
-        }}
-      >
-        <TabTrigger name="home" href="/(tabs)/home" asChild>
-          <TabButton icon={Home} label="Home" />
-        </TabTrigger>
-        <TabTrigger name="search" href="/(tabs)/search" asChild>
-          <TabButton icon={Search} label="Search" />
-        </TabTrigger>
-        <TabTrigger name="library" href="/(tabs)/library" asChild>
-          <TabButton icon={Library} label="Library" />
-        </TabTrigger>
-        <TabTrigger name="settings" href="/(tabs)/settings" asChild>
-          <TabButton icon={Cog} label="Settings" />
-        </TabTrigger>
+      </View>
+      <TabList style={{ display: "none" }}>
+        <TabTrigger name="home" href="/(tabs)/home" />
+        <TabTrigger name="search" href="/(tabs)/search" />
+        <TabTrigger name="library" href="/(tabs)/library" />
+        <TabTrigger name="settings" href="/(tabs)/settings" />
       </TabList>
     </Tabs>
   );

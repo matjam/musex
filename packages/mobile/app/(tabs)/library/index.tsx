@@ -7,7 +7,7 @@ import {
   listValidator,
   OfflineUnavailable,
 } from "@musex/core";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Trash2 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -53,6 +53,16 @@ export default function LibraryBrowse() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [segment, setSegment] = useState<Segment>("Artists");
+  // Deep-link target segment (iPad sidebar "Downloaded"): `segNonce` changes on
+  // every tap so re-taps re-trigger even when the segment value is unchanged.
+  const params = useLocalSearchParams<{ segment?: string; segNonce?: string }>();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: segNonce is a deliberate re-trigger, not referenced in the body.
+  useEffect(() => {
+    const seg = params.segment;
+    if (seg === "Artists" || seg === "Albums" || seg === "Tracks" || seg === "Downloaded") {
+      setSegment(seg);
+    }
+  }, [params.segment, params.segNonce]);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   // Set when an offline fetch found nothing cached (distinct from a generic
