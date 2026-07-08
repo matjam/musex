@@ -123,18 +123,26 @@ export class JsTransferEngine implements TransferEngine {
     const { headers } = job;
     let w: StoreWriter | null = null;
     try {
+      // TEMP-DIAG: URL-level logging for the on-device "hls media 404" hunt.
+      console.log(`[hls-diag] start GET ${job.url}`);
       const startRes = await this.deps.fetch(job.url, { headers });
+      console.log(`[hls-diag] start -> ${startRes.status}`);
       if (!startRes.ok) {
         this.fail(job.key, `hls start ${startRes.status}`);
         return;
       }
       const startText = await startRes.text();
       const variant = parseHlsMaster(startText);
+      console.log(
+        `[hls-diag] master body (${startText.length}b) variant=${JSON.stringify(variant)} first120=${JSON.stringify(startText.slice(0, 120))}`,
+      );
       let mediaUrl = job.url;
       let mediaText = startText;
       if (variant) {
         mediaUrl = new URL(variant, job.url).toString();
+        console.log(`[hls-diag] media GET ${mediaUrl}`);
         const mediaRes = await this.deps.fetch(mediaUrl, { headers });
+        console.log(`[hls-diag] media -> ${mediaRes.status}`);
         if (!mediaRes.ok) {
           this.fail(job.key, `hls media ${mediaRes.status}`);
           return;

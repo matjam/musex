@@ -308,7 +308,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // killed); JS engine otherwise (Expo Go, simulator without the module).
   const transferEngine = useMemo(
     () =>
-      createNativeTransferEngine(BackgroundDownloadsNative) ??
+      // TEMP-DIAG: native engine bypassed to bisect the on-device
+      // "hls media http 404" — restore the line below before merging.
+      // createNativeTransferEngine(BackgroundDownloadsNative) ??
       new JsTransferEngine({ store: downloadStore, fetch }),
     [downloadStore],
   );
