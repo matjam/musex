@@ -2,6 +2,7 @@ import { formatDuration } from "@musex/core";
 import Slider from "@react-native-community/slider";
 import { useRouter } from "expo-router";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react-native";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { artUrl } from "../logic/art-url";
@@ -16,6 +17,11 @@ export function PlayerBar() {
   const { state, session, artBaseFor, token } = useStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Seek-drag guard: while the user drags, freeze the slider's controlled
+  // value at the drag-start position so the ~250ms position ticks don't yank
+  // the thumb out from under the finger mid-drag.
+  const [isSliding, setIsSliding] = useState(false);
+  const [sliderValue, setSliderValue] = useState(0);
   const pb = state.playback;
   // PlaybackState has no `current`: derive it from the queue.
   const current = pb?.queue ? pb.queue.tracks[pb.queue.index] : undefined;
@@ -89,15 +95,22 @@ export function PlayerBar() {
         <Slider
           style={{ flex: 1 }}
           minimumValue={0}
-          maximumValue={durationSec}
-          value={pb.positionSec}
+          maximumValue={Math.max(durationSec, 1)}
+          value={isSliding ? sliderValue : pb.positionSec}
           minimumTrackTintColor={theme.accent}
           maximumTrackTintColor={theme.border}
           thumbTintColor={theme.text}
-          onSlidingComplete={(v) => session.seek(v)}
+          onSlidingStart={(v) => {
+            setSliderValue(v);
+            setIsSliding(true);
+          }}
+          onSlidingComplete={(v) => {
+            session.seek(v);
+            setIsSliding(false);
+          }}
         />
         <Text style={{ color: theme.textDim, fontSize: 11, minWidth: 36 }}>
-          {formatDuration(durationSec * 1000)}
+          {durationSec > 0 ? formatDuration(durationSec * 1000) : "–:––"}
         </Text>
       </View>
     </View>
