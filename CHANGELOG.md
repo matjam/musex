@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.0](https://github.com/matjam/musex/compare/v0.21.0...v0.22.0) (2026-07-08)
+
+
+### Features
+
+* **mobile:** iPad support — desktop-mirror sidebar layout ([#106](https://github.com/matjam/musex/issues/106)) ([5db42c4](https://github.com/matjam/musex/commit/5db42c45c9f759f11b33bcb2fc32784385b07a53))
+* **mobile:** on-device AAC conversion — transparent background library sync ([#108](https://github.com/matjam/musex/issues/108)) ([7aa83e4](https://github.com/matjam/musex/commit/7aa83e4964d8d95d29b8baa1f75b715c15b6ef72))
+
+
+### Bug Fixes
+
+* **mobile:** library sync actually downloads — session ids, AAC engine routing, failure diagnostics ([#107](https://github.com/matjam/musex/issues/107)) ([8440602](https://github.com/matjam/musex/commit/84406027915a499bf023584d0efe4179886b262e))
+* **mobile:** update-proof download paths + useful queue display ([#110](https://github.com/matjam/musex/issues/110)) ([2c1af9f](https://github.com/matjam/musex/commit/2c1af9fc433471e05b8336648f8019b695fcd447))
+
 ## [0.21.0](https://github.com/matjam/musex/compare/v0.20.0...v0.21.0) (2026-07-08)
 
 
