@@ -5,6 +5,7 @@ import { Pressable, type View as RNView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "../../src/state/store";
 import { MiniPlayer } from "../../src/ui/MiniPlayer";
+import { PlayerBar } from "../../src/ui/PlayerBar";
 import { Sidebar } from "../../src/ui/Sidebar";
 import { theme } from "../../src/ui/theme";
 import { useLayoutMode } from "../../src/ui/use-layout-mode";
@@ -113,6 +114,7 @@ export default function TabsLayout() {
               </Text>
             </View>
           ) : null}
+          <PlayerBar />
         </View>
       </View>
       <TabList style={{ display: "none" }}>
