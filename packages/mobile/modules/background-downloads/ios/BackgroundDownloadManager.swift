@@ -72,7 +72,11 @@ final class BackgroundDownloadManager: NSObject {
     let mode: String
     let url: String
     let headers: [String: String]
-    let destPath: String
+    /// ABSOLUTE while in memory (submit() hands us current-container absolute
+    /// paths from JS; every `.part`/`.orig`/`.m4a.tmp` derives from it at use
+    /// time). Crosses the persistence boundary container-RELATIVE — see
+    /// relativizePath/absolutizePath.
+    var destPath: String
     let expectedBytes: Int64?
     let stopUrl: String?
     var retries: Int
@@ -1299,6 +1303,52 @@ final class BackgroundDownloadManager: NSObject {
 
   // MARK: - Persistence
 
+  // iOS assigns the app container a NEW UUID path on every app update or
+  // reinstall, so an absolute destPath persisted in backlog.json dies with
+  // the old container — after an update every surviving job's move/write
+  // targets the dead path (NSCocoaError 513, "you don't have permission to
+  // save the file"). destPath therefore crosses the persistence boundary
+  // container-RELATIVE ("Documents/downloads/<name>") and is re-rooted onto
+  // the current NSHomeDirectory() at load. ONLY the boundary converts —
+  // in-memory state stays absolute, so nothing else changes. (resumeDataB64
+  // is opaque URLSession data, not a path; a post-update resume that
+  // references a dead tmp file just fails into the normal retry path.)
+
+  /// Absolute → home-relative at encode time. A path outside the current home
+  /// (shouldn't happen — JS builds dest paths under Documents) is stored
+  /// as-is; absolutizePath's foreign-container rebase handles it at load.
+  static func relativizePath(_ path: String) -> String {
+    let home = NSHomeDirectory()
+    if path.hasPrefix(home + "/") {
+      return String(path.dropFirst(home.count + 1))
+    }
+    return path
+  }
+
+  /// Decode-time re-rooting. Cases:
+  /// - relative (the persisted format) → joined onto the current home;
+  /// - absolute under the CURRENT home → passes through unchanged;
+  /// - absolute under a FOREIGN container (a state file persisted by a
+  ///   pre-relative build, surviving an app update) → the "/Documents/" (or
+  ///   "/Library/") anchor is located and that suffix re-rooted onto the
+  ///   current home;
+  /// - unrecognizable absolute path → nil; the caller DROPS the job (JS
+  ///   bootstrap re-queues it via sync) rather than keeping a job that fails
+  ///   every move forever.
+  static func absolutizePath(_ path: String) -> String? {
+    let home = NSHomeDirectory()
+    guard path.hasPrefix("/") else {
+      return home + "/" + path
+    }
+    if path.hasPrefix(home + "/") { return path }
+    for anchor in ["/Documents/", "/Library/"] {
+      if let range = path.range(of: anchor) {
+        return home + String(path[range.lowerBound...])
+      }
+    }
+    return nil
+  }
+
   private var stateFileURL: URL {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     return base.appendingPathComponent("musex-downloads/backlog.json")
@@ -1306,20 +1356,45 @@ final class BackgroundDownloadManager: NSObject {
 
   private func loadState() {
     guard let data = try? Data(contentsOf: stateFileURL) else { return }
-    if let loaded = try? JSONDecoder().decode(PersistedState.self, from: data) {
-      state = loaded
-      // Segment-phase jobs restored from disk must revalidate their persisted
-      // segment list against a fresh media playlist before continuing (Plex
-      // may have re-transcoded with different boundaries while we were dead).
-      revalidateKeys = Set(state.jobs.filter { $0.hls?.phase == "segment" }.map { $0.key })
+    guard var loaded = try? JSONDecoder().decode(PersistedState.self, from: data) else { return }
+    // Re-root every job's destPath onto the current container (see the
+    // persistence-boundary note above). Unrecognizable paths drop their job.
+    var dropped: Set<String> = []
+    loaded.jobs = loaded.jobs.compactMap { job in
+      guard let abs = Self.absolutizePath(job.destPath) else {
+        NSLog(
+          "[musex downloads] dropping job with unrecognizable destPath (container migration): %@",
+          job.key)
+        dropped.insert(job.key)
+        return nil
+      }
+      var j = job
+      j.destPath = abs
+      return j
     }
+    if !dropped.isEmpty {
+      loaded.pendingConversions.removeAll { dropped.contains($0) }
+    }
+    state = loaded
+    // Segment-phase jobs restored from disk must revalidate their persisted
+    // segment list against a fresh media playlist before continuing (Plex
+    // may have re-transcoded with different boundaries while we were dead).
+    revalidateKeys = Set(state.jobs.filter { $0.hls?.phase == "segment" }.map { $0.key })
   }
 
   private func persist() {
     do {
       let dir = stateFileURL.deletingLastPathComponent()
       try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-      let data = try JSONEncoder().encode(state)
+      // Persist destPath container-relative (see the boundary note above);
+      // the in-memory state stays absolute.
+      var toWrite = state
+      toWrite.jobs = state.jobs.map { job in
+        var j = job
+        j.destPath = Self.relativizePath(job.destPath)
+        return j
+      }
+      let data = try JSONEncoder().encode(toWrite)
       try data.write(to: stateFileURL, options: .atomic)
     } catch {
       NSLog("[musex downloads] backlog persist failed: %@", error.localizedDescription)
