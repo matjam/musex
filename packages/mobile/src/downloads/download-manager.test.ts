@@ -494,7 +494,28 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     expect(eng.submits[0]?.[0]?.mode).toBe("hls");
   });
 
-  it("convert complete patches the record meta to the actual artifact (m4a/aac/target bitrate)", async () => {
+  it("convert complete patches the record meta from the EVENT's converted+bitrate", async () => {
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 256 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    m.markReady();
+    await m.enqueue([job("a")]);
+    // The engine reports the ACTUAL artifact bitrate (192) — that wins over
+    // the current quality setting (256).
+    eng.emit({ kind: "complete", key: "a", bytes: 42, converted: true, bitrateKbps: 192 });
+    await tick();
+    const r = index.get("a");
+    expect(r).toMatchObject({ state: "downloaded", bytes: 42, expectedBytes: 42 });
+    expect(r?.meta).toMatchObject({ container: "m4a", audioCodec: "aac", bitrate: 192 });
+    // Non-media meta untouched.
+    expect(r?.meta.title).toBe("a");
+  });
+
+  it("a submitted convert-mode job completing WITHOUT converted keeps the original meta", async () => {
+    // The engine fell back to committing the original (or never converted):
+    // no `converted` on the event → the record must describe the real file.
     const { index, eng, m } = nativeMgr({
       quality: { mode: "aac", bitrateKbps: 256 },
       connectionType: "wifi",
@@ -504,11 +525,8 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     await m.enqueue([job("a")]);
     eng.emit({ kind: "complete", key: "a", bytes: 42 });
     await tick();
-    const r = index.get("a");
-    expect(r).toMatchObject({ state: "downloaded", bytes: 42, expectedBytes: 42 });
-    expect(r?.meta).toMatchObject({ container: "m4a", audioCodec: "aac", bitrate: 256 });
-    // Non-media meta untouched.
-    expect(r?.meta.title).toBe("a");
+    expect(index.get("a")?.meta).toMatchObject({ container: "flac", audioCodec: "flac" });
+    expect(index.get("a")?.meta.bitrate).toBeUndefined();
   });
 
   it("an original-mode complete never patches meta", async () => {
@@ -524,7 +542,28 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     expect(index.get("a")?.meta).toMatchObject({ container: "flac", audioCodec: "flac" });
   });
 
-  it("a reattached-active aac record completing on the native engine gets the meta patch", async () => {
+  it("a reattached-active record completing with converted gets the meta patch (event bitrate)", async () => {
+    const { index, eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 128 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    await index.upsert({ ...rec("x", "downloading"), format: "aac" });
+    m.markReady();
+    await tick();
+    // The previous run's ACTUAL target (192, carried by the native backlog)
+    // beats the current quality setting (128).
+    eng.emit({ kind: "complete", key: "x", bytes: 9, converted: true, bitrateKbps: 192 });
+    await tick();
+    const r = index.get("x");
+    expect(r).toMatchObject({ state: "downloaded", bytes: 9, expectedBytes: 9 });
+    expect(r?.meta).toMatchObject({ container: "m4a", audioCodec: "aac", bitrate: 192 });
+  });
+
+  it("a reattached-active aac record completing WITHOUT converted → meta untouched", async () => {
+    // Even on a convert-capable engine with an aac-format record, no
+    // `converted` on the event means the committed file is the original —
+    // the old format/capability heuristic must not resurrect the m4a guess.
     const { index, eng, m } = nativeMgr({
       quality: { mode: "aac", bitrateKbps: 128 },
       connectionType: "wifi",
@@ -537,7 +576,8 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     await tick();
     const r = index.get("x");
     expect(r).toMatchObject({ state: "downloaded", bytes: 9, expectedBytes: 9 });
-    expect(r?.meta).toMatchObject({ container: "m4a", audioCodec: "aac", bitrate: 128 });
+    expect(r?.meta).toMatchObject({ container: "flac", audioCodec: "flac" });
+    expect(r?.meta.bitrate).toBeUndefined();
   });
 });
 

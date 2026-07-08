@@ -38,20 +38,19 @@ export interface DownloadManagerDeps {
 
 /** A queued download plus the quality mode pinned at enqueue time — a Settings
  *  quality toggle mid-lifecycle must not flip an already-recorded job's format
- *  against its transfer (or an already-committed file). Convert-mode entries
- *  also carry the transfer mode + target bitrate so the terminal complete can
- *  patch the record's media meta to the actual artifact. */
+ *  against its transfer (or an already-committed file). No transfer mode here:
+ *  the terminal complete EVENT says whether the artifact was converted (and at
+ *  what bitrate), so record meta is patched from the engine's truth. */
 interface QueueEntry {
   job: DownloadJob;
   format: DownloadFormat;
-  mode?: TransferJob["mode"];
-  targetBitrateKbps?: number;
 }
 
 /** The record meta for a finished convert job: the artifact on disk is an
- *  AAC-in-m4a at the target bitrate, not the catalog original. */
-function convertedMeta(meta: DownloadMeta, targetBitrateKbps?: number): DownloadMeta {
-  return { ...meta, container: "m4a", audioCodec: "aac", bitrate: targetBitrateKbps };
+ *  AAC-in-m4a at the ACTUAL bitrate the engine reported, not the catalog
+ *  original. (Exported for the bootstrap reattach fold in store.tsx.) */
+export function convertedMeta(meta: DownloadMeta, bitrateKbps?: number): DownloadMeta {
+  return { ...meta, container: "m4a", audioCodec: "aac", bitrate: bitrateKbps };
 }
 
 /** Plex transcode-session ids must be PLAIN tokens: Plex embeds the session in
@@ -200,12 +199,7 @@ export class DownloadManager {
         await this.record(j, format, "failed", 0, err instanceof Error ? err.message : String(err));
         continue;
       }
-      this.submitted.set(j.key, {
-        job: j,
-        format,
-        mode: transfer.mode,
-        targetBitrateKbps: transfer.targetBitrateKbps,
-      });
+      this.submitted.set(j.key, { job: j, format });
       await this.record(j, format, "queued", 0);
       transfers.push(transfer);
     }
@@ -297,13 +291,14 @@ export class DownloadManager {
       this.progressUpsertAt.delete(e.key);
       if (e.kind === "complete") {
         // Delivered size is authoritative: persist it as expectedBytes (both
-        // formats) so reconcile verifies against what actually landed. A
-        // convert job's artifact is the on-device AAC m4a — patch the media
-        // meta so recordToTrack reconstructs the real file.
-        const finished =
-          entry.mode === "convert"
-            ? { ...job, meta: convertedMeta(job.meta, entry.targetBitrateKbps) }
-            : job;
+        // formats) so reconcile verifies against what actually landed. When
+        // the engine says the artifact was CONVERTED (on-device AAC m4a at
+        // the reported actual bitrate), patch the media meta so recordToTrack
+        // reconstructs the real file — the event is the truth, not a
+        // format/capability guess.
+        const finished = e.converted
+          ? { ...job, meta: convertedMeta(job.meta, e.bitrateKbps) }
+          : job;
         await this.record(finished, format, "downloaded", e.bytes, undefined, e.bytes);
       } else {
         await this.record(job, format, "failed", 0, e.message);
@@ -322,16 +317,10 @@ export class DownloadManager {
       if (e.kind === "error" && !e.terminal) return;
       if (e.kind === "complete") {
         // Delivered size is authoritative (same rule as the submitted path).
-        // A reattached aac record completing here came off the NATIVE backlog
-        // (JS HLS jobs die with the app, so they're always in `submitted`) —
-        // on a convert-capable engine that makes it a convert job from a
-        // previous run: apply the same artifact meta patch. Bitrate is the
-        // current quality setting (the previous run's exact target isn't
-        // retrievable from JS — best available).
-        const meta =
-          this.deps.engine.supportsConvert && rec.format === "aac"
-            ? convertedMeta(rec.meta, this.deps.getQuality().bitrateKbps)
-            : rec.meta;
+        // The engine's event says whether the artifact was converted and at
+        // what ACTUAL bitrate (the previous run's target, carried in the
+        // native JobDescriptor) — no guessing from format/capability.
+        const meta = e.converted ? convertedMeta(rec.meta, e.bitrateKbps) : rec.meta;
         await this.deps.index.upsert({
           ...rec,
           meta,

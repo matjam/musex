@@ -7,7 +7,14 @@ export type BackgroundDownloadsEvents = {
     segmentsDone?: number;
     segmentsTotal?: number;
   }) => void;
-  onComplete: (e: { key: string; bytes: number }) => void;
+  /** `converted`/`bitrateKbps` are present only for convert jobs — the
+   *  committed artifact is an on-device AAC m4a at that actual bitrate. */
+  onComplete: (e: {
+    key: string;
+    bytes: number;
+    converted?: boolean;
+    bitrateKbps?: number;
+  }) => void;
   onError: (e: { key: string; message: string; terminal: boolean }) => void;
 };
 

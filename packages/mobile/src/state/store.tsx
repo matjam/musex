@@ -66,7 +66,7 @@ import { DEFAULT_CACHE_CONFIG, loadCacheConfig, saveCacheConfig } from "../downl
 import type { Connectivity } from "../downloads/connectivity-monitor";
 import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
 import { DownloadIndex } from "../downloads/download-index";
-import { DownloadManager } from "../downloads/download-manager";
+import { convertedMeta, DownloadManager } from "../downloads/download-manager";
 import { DownloadStore } from "../downloads/download-store";
 import { JsTransferEngine } from "../downloads/js-transfer-engine";
 import { createNativeTransferEngine } from "../downloads/native-transfer-engine";
@@ -638,20 +638,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         // File absent → leave the record; reconcile/resolve below handles it.
         if (presentKeys.has(c.key)) {
-          // An aac record completing off the NATIVE backlog is a convert job
-          // (JS HLS jobs die with the app and never reach the snapshot) — its
-          // artifact is the on-device AAC m4a, so patch the media meta like
-          // the manager does on a live convert complete. Bitrate is the
-          // current quality setting (best available after a relaunch).
-          const meta =
-            transferEngine.supportsConvert && r.format === "aac"
-              ? {
-                  ...r.meta,
-                  container: "m4a",
-                  audioCodec: "aac",
-                  bitrate: storageQualityRef.current.bitrateKbps,
-                }
-              : r.meta;
+          // The snapshot entry says whether the native engine CONVERTED the
+          // artifact (on-device AAC m4a) and at what actual bitrate (the
+          // job's target, from the native backlog descriptor) — patch the
+          // media meta from that truth, exactly like the manager does on a
+          // live complete. No converted flag → the file is the original.
+          const meta = c.converted ? convertedMeta(r.meta, c.bitrateKbps) : r.meta;
           await downloadIndex.upsert({
             ...r,
             meta,

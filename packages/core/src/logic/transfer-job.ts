@@ -32,17 +32,22 @@ export interface TransferEndpoint {
   token: string;
 }
 
-/** Progress/terminal events an engine emits for its jobs. */
+/** Progress/terminal events an engine emits for its jobs. On complete,
+ *  `converted`/`bitrateKbps` are set ONLY when the engine ran a convert job —
+ *  the committed artifact is an on-device AAC m4a at that ACTUAL bitrate (the
+ *  job's target), so the caller patches record media meta from truth instead
+ *  of guessing from format/capability heuristics. */
 export type TransferEvent =
   | { kind: "progress"; key: string; bytes: number; segmentsDone?: number; segmentsTotal?: number }
-  | { kind: "complete"; key: string; bytes: number }
+  | { kind: "complete"; key: string; bytes: number; converted?: boolean; bitrateKbps?: number }
   | { kind: "error"; key: string; message: string; terminal: boolean };
 
 /** What an engine reports on reattach: keys still in flight plus results that
- *  landed while JS was away. */
+ *  landed while JS was away. Completed entries carry the same optional
+ *  `converted`/`bitrateKbps` artifact truth as the complete event. */
 export interface TransferSnapshot {
   active: string[];
-  completed: { key: string; bytes: number }[];
+  completed: { key: string; bytes: number; converted?: boolean; bitrateKbps?: number }[];
   failed: { key: string; message: string }[];
 }
 

@@ -90,12 +90,14 @@ describe("NativeTransferEngine", () => {
     mod.emit("onProgress", { key: "h", bytes: 20, segmentsDone: 2, segmentsTotal: 9 });
     mod.emit("onError", { key: "a", message: "http 503", terminal: false });
     mod.emit("onComplete", { key: "a", bytes: 42 });
+    mod.emit("onComplete", { key: "c", bytes: 9, converted: true, bitrateKbps: 192 });
     mod.emit("onError", { key: "h", message: "hls http 403", terminal: true });
     expect(events).toEqual([
       { kind: "progress", key: "a", bytes: 10, segmentsDone: undefined, segmentsTotal: undefined },
       { kind: "progress", key: "h", bytes: 20, segmentsDone: 2, segmentsTotal: 9 },
       { kind: "error", key: "a", message: "http 503", terminal: false },
-      { kind: "complete", key: "a", bytes: 42 },
+      { kind: "complete", key: "a", bytes: 42, converted: undefined, bitrateKbps: undefined },
+      { kind: "complete", key: "c", bytes: 9, converted: true, bitrateKbps: 192 },
       { kind: "error", key: "h", message: "hls http 403", terminal: true },
     ]);
   });
@@ -111,14 +113,17 @@ describe("NativeTransferEngine", () => {
     expect(events).toHaveLength(1);
   });
 
-  it("reattach parses the native snapshot", async () => {
+  it("reattach parses the native snapshot (converted+bitrate pass through)", async () => {
     const mod = fakeModule(
-      '{"active":["x"],"completed":[{"key":"c","bytes":9}],"failed":[{"key":"f","message":"boom"}]}',
+      '{"active":["x"],"completed":[{"key":"c","bytes":9},{"key":"v","bytes":5,"converted":true,"bitrateKbps":192}],"failed":[{"key":"f","message":"boom"}]}',
     );
     const engine = new NativeTransferEngine(mod as BackgroundDownloadsModuleLike);
     expect(await engine.reattach()).toEqual({
       active: ["x"],
-      completed: [{ key: "c", bytes: 9 }],
+      completed: [
+        { key: "c", bytes: 9 },
+        { key: "v", bytes: 5, converted: true, bitrateKbps: 192 },
+      ],
       failed: [{ key: "f", message: "boom" }],
     });
     expect(mod.reattachCalls).toBe(1);
