@@ -1,7 +1,18 @@
 import type { StorageQuality } from "@musex/core";
 import { formatBytes, isInFlight, TRANSCODE_BITRATES } from "@musex/core";
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { Info } from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  View,
+} from "react-native";
+import { getBackgroundRefreshStatus } from "../../../modules/background-downloads";
 import { CACHE_CAP_OPTIONS } from "../../../src/downloads/cache-config";
 import { useStore } from "../../../src/state/store";
 import { useRecordsProgress } from "../../../src/state/use-download-progress";
@@ -26,6 +37,20 @@ export default function DownloadsSettings() {
   } = useStore();
 
   const [syncBusy, setSyncBusy] = useState(false);
+
+  // iOS Background App Refresh — read once per screen mount; null when the
+  // native module is absent (Expo Go) or the status is unknown.
+  const [bgRefresh, setBgRefresh] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void getBackgroundRefreshStatus().then((s) => {
+      if (alive) setBgRefresh(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const bgRefreshOff = bgRefresh === "denied" || bgRefresh === "restricted";
 
   // Active downloads: in-flight records (up to 20 shown) + a whole-collection
   // bar. Recompute as bytes land (downloadsVersion bumps on progress events).
@@ -186,6 +211,27 @@ export default function DownloadsSettings() {
             <Switch value={syncEnabled} onValueChange={handleSyncToggle} />
           )}
         </View>
+        {syncEnabled && bgRefreshOff ? (
+          <Pressable
+            onPress={() => void Linking.openSettings()}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              paddingHorizontal: theme.space(2),
+              paddingVertical: theme.space(1.5),
+              borderTopWidth: 1,
+              borderTopColor: theme.border,
+              opacity: 0.7,
+            }}
+          >
+            <Info size={16} color={theme.textDim} />
+            <Text style={{ color: theme.textDim, fontSize: 12, flex: 1 }}>
+              Background App Refresh is off — sync only progresses while musex is open or playing
+              music. Enable it in iOS Settings to let downloads trickle in the background.
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <Text

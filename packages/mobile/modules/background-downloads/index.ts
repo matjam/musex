@@ -17,6 +17,8 @@ export declare class BackgroundDownloadsModule extends NativeModule<BackgroundDo
   cancel(keys: string[]): Promise<void>;
   /** JSON-serialized `TransferSnapshot`; clears the native results buffer. */
   reattach(): Promise<string>;
+  /** iOS Background App Refresh: "available" | "denied" | "restricted". */
+  getBackgroundRefreshStatus(): Promise<string>;
 }
 
 // requireNativeModule throws when the native module isn't built into the binary
@@ -27,6 +29,12 @@ try {
   native = requireNativeModule<BackgroundDownloadsModule>("BackgroundDownloads");
 } catch {
   native = null;
+}
+
+/** Background App Refresh status, or null when the native module is absent
+ *  (Expo Go, tests) — same safe-null pattern as the default export. */
+export async function getBackgroundRefreshStatus(): Promise<string | null> {
+  return native ? native.getBackgroundRefreshStatus() : null;
 }
 
 export default native;

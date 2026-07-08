@@ -1,4 +1,5 @@
 import ExpoModulesCore
+import UIKit
 
 // JS-facing surface of the background download engine. Job/snapshot payloads
 // cross the bridge as JSON strings (the JS wrapper stringifies/parses); events
@@ -43,5 +44,19 @@ public class BackgroundDownloadsModule: Module {
         promise.resolve(snapshotJson)
       }
     }
+
+    // Whether iOS lets this app run in the background at all — with
+    // Background App Refresh off, library sync can't trickle while the app
+    // is backgrounded and the Settings UI warns. Main thread required
+    // (UIApplication property; ExpoModulesCore's sync Function has no
+    // runOnQueue, hence an AsyncFunction).
+    AsyncFunction("getBackgroundRefreshStatus") { () -> String in
+      switch UIApplication.shared.backgroundRefreshStatus {
+      case .available: return "available"
+      case .denied: return "denied"
+      case .restricted: return "restricted"
+      @unknown default: return "available"
+      }
+    }.runOnQueue(.main)
   }
 }
