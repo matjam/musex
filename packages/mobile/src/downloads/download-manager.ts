@@ -38,6 +38,18 @@ interface QueueEntry {
   format: DownloadFormat;
 }
 
+/** Plex transcode-session ids must be PLAIN tokens: Plex embeds the session in
+ *  server-side paths and in the variant URI of the master playlist it returns.
+ *  The old `${key}-${Date.now()}` id contained the download key's `␟` and `/`
+ *  characters, and the follow-up media-playlist fetch 404'd on-device for every
+ *  track ("hls media http 404"). Alphanumeric-only, unique per call — the shape
+ *  Plex clients use (desktop uses UUIDs against the same endpoint). */
+let sessionCounter = 0;
+function plexSessionId(): string {
+  sessionCounter += 1;
+  return `musex${Date.now().toString(36)}${sessionCounter.toString(36)}`;
+}
+
 // Minimum interval between mid-flight record upserts per key. The index's own
 // 600ms debounced persist handles disk; this just bounds in-memory churn.
 const PROGRESS_UPSERT_MS = 500;
@@ -155,7 +167,7 @@ export class DownloadManager {
           clientId: this.deps.clientId,
           destPath: this.deps.store.path(j.key),
           // Session id is caller-supplied (core stays Date.now-free).
-          session: `${j.key}-${Date.now()}`,
+          session: plexSessionId(),
         });
       } catch (err) {
         // Endpoint unresolved (server not connected) — surface it, never
@@ -327,7 +339,7 @@ export class DownloadManager {
       clientId: this.deps.clientId,
       destPath: this.deps.store.path(job.key),
       // Session id is caller-supplied (core stays Date.now-free).
-      session: `${job.key}-${Date.now()}`,
+      session: plexSessionId(),
     });
     // Map this job's engine events back onto records; resolve on the terminal one.
     await new Promise<void>((resolve) => {

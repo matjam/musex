@@ -9,7 +9,10 @@ import type { FileStore, StoreWriter } from "./download-store";
 import type { TransferEngine } from "./transfer-engine";
 
 const SEGMENT_RETRY_DELAY_MS = 700;
-const SEGMENT_RETRY_ATTEMPTS = 60;
+// ~2 min: field failures showed deep segments of LONG tracks ("segment
+// unavailable: 00228.ts") not produced within the old 60×700ms (~42s) budget —
+// Plex paces the transcoder, so late segments need a longer wait.
+const SEGMENT_RETRY_ATTEMPTS = 180;
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export interface JsTransferEngineDeps {
