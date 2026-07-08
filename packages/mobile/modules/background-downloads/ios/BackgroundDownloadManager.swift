@@ -437,15 +437,23 @@ final class BackgroundDownloadManager: NSObject {
   }
 
   private func handleHlsFinished(_ key: String, jobIdx: Int, location: URL, status: Int) {
-    if status == 404 || status >= 500 {
-      retryOrFailHlsStep(key, jobIdx: jobIdx, "hls http \(status)")
-      return
-    }
-    if status >= 400 {
-      failTerminal(key, "hls http \(status)")
-      return
-    }
     let phase = state.jobs[jobIdx].hls?.phase ?? "master"
+    if phase == "segment" {
+      // 404 = "Plex hasn't transcoded that segment yet" — bounded retry.
+      if status == 404 || status >= 500 {
+        retryOrFailHlsStep(key, jobIdx: jobIdx, "hls http \(status)")
+        return
+      }
+      if status >= 400 {
+        failTerminal(key, "hls http \(status)")
+        return
+      }
+    } else if status >= 400 {
+      // Playlist (master/media) fetches fail fast on ANY non-ok response —
+      // matches the JS engine; the retry policy above is for SEGMENTS only.
+      failTerminal(key, "hls \(phase) http \(status)")
+      return
+    }
     switch phase {
     case "master":
       guard let text = try? String(contentsOf: location, encoding: .utf8) else {
@@ -509,11 +517,36 @@ final class BackgroundDownloadManager: NSObject {
     enqueueCurrentHlsStep(jobIdx, delayed: false)
   }
 
+  /// Discard the partial and restart the chain from the playlist phase — used
+  /// when the `.part` file can't be trusted (torn/short after power loss) or
+  /// Plex re-transcoded with different segment boundaries. Restarting at
+  /// "master" re-fetches start.m3u8, which (re)creates the transcode session.
+  private func resetHlsJob(_ key: String, jobIdx: Int) {
+    try? FileManager.default.removeItem(atPath: state.jobs[jobIdx].destPath + ".part")
+    state.jobs[jobIdx].hls = HlsJobState(
+      phase: "master", mediaUrl: nil, segmentUrls: [], nextIndex: 0, bytes: 0, attempts: 0)
+    persist()
+    enqueueCurrentHlsStep(jobIdx, delayed: false)
+  }
+
   private func appendSegment(_ key: String, jobIdx: Int, data: Data) {
     let job = state.jobs[jobIdx]
     guard let hls = job.hls else {
       failTerminal(key, "hls state missing")
       return
+    }
+    // Torn-write guard: if the `.part` on disk is SHORTER than the persisted
+    // byte count (power loss between append and fsync), appendToPart's
+    // truncate(atOffset:) would ZERO-EXTEND it — silently zero-corrupted AAC
+    // that finalizes green. Reset and restart the chain instead. (The
+    // too-LONG case — a torn append — is safe: the truncate discards it.)
+    if hls.bytes > 0 {
+      let attrs = try? FileManager.default.attributesOfItem(atPath: job.destPath + ".part")
+      let actual = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+      if actual < hls.bytes {
+        resetHlsJob(key, jobIdx: jobIdx)
+        return
+      }
     }
     do {
       try appendToPart(job.destPath + ".part", data: data, knownBytes: hls.bytes)
@@ -548,6 +581,10 @@ final class BackgroundDownloadManager: NSObject {
     let fm = FileManager.default
     if !fm.fileExists(atPath: job.destPath + ".part") && fm.fileExists(atPath: job.destPath) {
       // Killed between the move and the backlog persist — already committed.
+      // Still fire the (best-effort) transcode-session stop: the kill happened
+      // before it ran, and a lingering server session is the same leak the
+      // normal path prevents.
+      fireStopUrl(job)
       completeJob(key, bytes: bytes)
       return
     }
@@ -601,10 +638,15 @@ final class BackgroundDownloadManager: NSObject {
 
   /// First non-comment, non-blank line after a `#EXT-X-STREAM-INF` tag, or nil
   /// if the text is already a media playlist.
+  ///
+  /// Lines are trimmed with `.whitespacesAndNewlines` (matches the JS
+  /// engine's `String.trim()`): a CRLF playlist is RFC-8216-legal, and
+  /// `.whitespaces` alone would leave a trailing `\r` on every line — tag
+  /// matches like `#EXT-X-ENDLIST` would never hit and URIs would carry `\r`.
   static func parseHlsMaster(_ text: String) -> String? {
     var takeNext = false
     for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
-      let line = raw.trimmingCharacters(in: .whitespaces)
+      let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
       if takeNext {
         if !line.isEmpty && !line.hasPrefix("#") { return line }
         continue
@@ -615,11 +657,12 @@ final class BackgroundDownloadManager: NSObject {
   }
 
   /// Segments = non-comment lines; ended = `#EXT-X-ENDLIST` present.
+  /// See parseHlsMaster for why trimming must include newlines (CRLF playlists).
   static func parseHlsMedia(_ text: String) -> (segments: [String], ended: Bool) {
     var segments: [String] = []
     var ended = false
     for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
-      let line = raw.trimmingCharacters(in: .whitespaces)
+      let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
       if line.isEmpty { continue }
       if line == "#EXT-X-ENDLIST" {
         ended = true
