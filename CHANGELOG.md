@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.0](https://github.com/matjam/musex/compare/v0.20.0...v0.21.0) (2026-07-08)
+
+
+### Features
+
+* **mobile:** background downloads — native URLSession engine ([#105](https://github.com/matjam/musex/issues/105)) ([38efeaa](https://github.com/matjam/musex/commit/38efeaa75fd7e09ac71f372e8023a2a49465cbd9))
+* **mobile:** downloads v2 — integrity, resume bookkeeping, per-container progress ([#103](https://github.com/matjam/musex/issues/103)) ([6426289](https://github.com/matjam/musex/commit/6426289976fa787acf843019c51720144e638bc2))
+
 ## [0.20.0](https://github.com/matjam/musex/compare/v0.19.0...v0.20.0) (2026-06-21)
 
 
