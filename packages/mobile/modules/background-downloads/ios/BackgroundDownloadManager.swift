@@ -13,7 +13,10 @@ import UIKit
 // same persisted state and handed over via reattach().
 //
 // "convert" jobs (AAC storage quality, off-cellular) download the ORIGINAL
-// file exactly like "original" — but into `destPath + ".orig"` — then join a
+// file exactly like "original" — but into `destPath + ".orig.<ext>"` (see
+// origPath: the extension comes from the source URL's filename, because
+// AVURLAsset infers the container from the FILE EXTENSION and a bare `.orig`
+// fails "Cannot Open" before reading a byte) — then join a
 // persisted conversion backlog drained serially by an on-device
 // AVAssetReader→AVAssetWriter AAC pipeline (each conversion wrapped in a
 // beginBackgroundTask so a wake window finishes the in-flight one). Success
@@ -73,8 +76,8 @@ final class BackgroundDownloadManager: NSObject {
     let url: String
     let headers: [String: String]
     /// ABSOLUTE while in memory (submit() hands us current-container absolute
-    /// paths from JS; every `.part`/`.orig`/`.m4a.tmp` derives from it at use
-    /// time). Crosses the persistence boundary container-RELATIVE — see
+    /// paths from JS; every `.part`/`.orig.<ext>`/`.m4a.tmp` derives from it
+    /// at use time). Crosses the persistence boundary container-RELATIVE — see
     /// relativizePath/absolutizePath.
     var destPath: String
     let expectedBytes: Int64?
@@ -283,8 +286,7 @@ final class BackgroundDownloadManager: NSObject {
       for job in dropped {
         try? FileManager.default.removeItem(atPath: job.destPath + ".part")
         if job.mode == "convert" {
-          try? FileManager.default.removeItem(atPath: job.destPath + ".orig")
-          try? FileManager.default.removeItem(atPath: job.destPath + ".m4a.tmp")
+          self.removeConvertTempFiles(job)
         }
       }
       // Cancelled keys leave the conversion backlog too. If one is converting
@@ -377,6 +379,60 @@ final class BackgroundDownloadManager: NSObject {
     return (attrs?[.size] as? NSNumber)?.int64Value
   }
 
+  // MARK: - Convert-job `.orig` temp path
+
+  /// The audio extension of the job's source URL — the Plex original-file URL
+  /// ends with the real filename (`…/file.flac?X-Plex-Token=…` → "flac";
+  /// URL.pathExtension excludes the query). Lowercased; "dat" when the URL
+  /// doesn't parse, has no extension, or the extension isn't a plain
+  /// short alphanumeric token (defensive — it becomes part of a filename).
+  static func origExtension(fromUrl urlString: String) -> String {
+    guard let url = URL(string: urlString) else { return "dat" }
+    let ext = url.pathExtension.lowercased()
+    guard ext.range(of: "^[a-z0-9]{1,8}$", options: .regularExpression) != nil else {
+      return "dat"
+    }
+    return ext
+  }
+
+  /// Where a convert job's downloaded original lands, pending conversion.
+  /// DERIVED (never persisted) from two persisted JobDescriptor fields —
+  /// destPath (container-relative across the persistence boundary, absolute in
+  /// memory) and url — so the container-relative re-rooting needs no changes.
+  /// The name must end in the REAL audio extension: AVURLAsset infers the
+  /// container from the file extension, and the legacy bare `.orig` suffix
+  /// made every on-device conversion fail "Cannot Open".
+  private func origPath(for job: JobDescriptor) -> String {
+    return job.destPath + ".orig." + Self.origExtension(fromUrl: job.url)
+  }
+
+  /// Pre-extension builds downloaded convert originals to a bare
+  /// `destPath + ".orig"`. Rename any surviving one to the suffixed name so
+  /// the backlog converts WITHOUT re-downloading. Called from
+  /// recoverConversions (cold start) and drainConversions (before opening
+  /// the conversion input).
+  private func migrateLegacyOrig(_ job: JobDescriptor) {
+    let fm = FileManager.default
+    let legacy = job.destPath + ".orig"
+    let target = origPath(for: job)
+    guard fm.fileExists(atPath: legacy), !fm.fileExists(atPath: target) else { return }
+    do {
+      try fm.moveItem(atPath: legacy, toPath: target)
+    } catch {
+      NSLog(
+        "[musex downloads] legacy .orig migration failed for %@: %@", job.key,
+        error.localizedDescription)
+    }
+  }
+
+  /// Delete a convert job's temp files — the suffixed `.orig.<ext>` AND the
+  /// legacy bare `.orig` (a pre-migration leftover must not survive cleanup).
+  private func removeConvertTempFiles(_ job: JobDescriptor) {
+    try? FileManager.default.removeItem(atPath: origPath(for: job))
+    try? FileManager.default.removeItem(atPath: job.destPath + ".orig")
+    try? FileManager.default.removeItem(atPath: job.destPath + ".m4a.tmp")
+  }
+
   /// Cold-relaunch short-circuit: a task that finished while the app was dead
   /// can be absent from getAllTasks(), so fill() would restart the job from
   /// zero — and the identity guard then discards the finished file when its
@@ -390,8 +446,13 @@ final class BackgroundDownloadManager: NSObject {
       // A convert job's dest is the CONVERTED m4a (smaller than the catalog
       // original, so no expectedBytes comparison): committed = the .orig is
       // gone (deleted right after the m4a move) and a non-empty dest exists.
-      // A present .orig means the conversion stage owns the job.
-      if FileManager.default.fileExists(atPath: job.destPath + ".orig") { return false }
+      // A present .orig (suffixed, or a not-yet-migrated legacy bare one)
+      // means the conversion stage owns the job.
+      if FileManager.default.fileExists(atPath: origPath(for: job))
+        || FileManager.default.fileExists(atPath: job.destPath + ".orig")
+      {
+        return false
+      }
       guard let size = fileSize(job.destPath), size > 0 else { return false }
       state.pendingConversions.removeAll { $0 == job.key }
       completeJob(job.key, bytes: size, converted: true, bitrateKbps: job.targetBitrateKbps)
@@ -493,8 +554,7 @@ final class BackgroundDownloadManager: NSObject {
       let job = state.jobs[i]
       try? FileManager.default.removeItem(atPath: job.destPath + ".part")
       if job.mode == "convert" {
-        try? FileManager.default.removeItem(atPath: job.destPath + ".orig")
-        try? FileManager.default.removeItem(atPath: job.destPath + ".m4a.tmp")
+        removeConvertTempFiles(job)
       }
     }
     state.jobs.removeAll { $0.key == key }
@@ -559,9 +619,10 @@ final class BackgroundDownloadManager: NSObject {
         "[musex downloads] size differs from Plex catalog (got %lld, want %lld), accepting delivered file: %@",
         size, expected, key)
     }
-    // A convert job's download lands at `.orig`; the conversion queue owns it
-    // from here (the job is NOT complete — the record stays "downloading").
-    let target = job.mode == "convert" ? job.destPath + ".orig" : job.destPath
+    // A convert job's download lands at `.orig.<ext>`; the conversion queue
+    // owns it from here (the job is NOT complete — the record stays
+    // "downloading").
+    let target = job.mode == "convert" ? origPath(for: job) : job.destPath
     do {
       try moveIntoPlace(from: location, toPath: target)
     } catch {
@@ -612,14 +673,18 @@ final class BackgroundDownloadManager: NSObject {
   private func recoverConversions() {
     var changed = false
     for job in state.jobs where job.mode == "convert" {
+      // A bare `.orig` written by a pre-extension build renames to the
+      // suffixed name FIRST — even for keys already pending conversion — so
+      // the whole backlog converts without re-downloading anything.
+      migrateLegacyOrig(job)
       if state.pendingConversions.contains(job.key) { continue }
-      guard let size = fileSize(job.destPath + ".orig") else { continue }
+      guard let size = fileSize(origPath(for: job)) else { continue }
       let complete = job.expectedBytes.map { size >= $0 } ?? (size > 0)
       if complete {
         state.pendingConversions.append(job.key)
         changed = true
       } else {
-        try? FileManager.default.removeItem(atPath: job.destPath + ".orig")
+        try? FileManager.default.removeItem(atPath: origPath(for: job))
       }
     }
     if changed { persist() }
@@ -638,7 +703,10 @@ final class BackgroundDownloadManager: NSObject {
     }
     guard let key = state.pendingConversions.first, let i = jobIndex(key) else { return }
     let job = state.jobs[i]
-    let origPath = job.destPath + ".orig"
+    // A legacy bare `.orig` (pre-extension build) renames to the suffixed
+    // name before the conversion input opens.
+    migrateLegacyOrig(job)
+    let origPath = self.origPath(for: job)
     let tmpPath = job.destPath + ".m4a.tmp"
     let fm = FileManager.default
     if !fm.fileExists(atPath: origPath) {
@@ -722,7 +790,7 @@ final class BackgroundDownloadManager: NSObject {
         do {
           try moveIntoPlace(from: URL(fileURLWithPath: job.destPath + ".m4a.tmp"),
                             toPath: job.destPath)
-          try? fm.removeItem(atPath: job.destPath + ".orig")
+          try? fm.removeItem(atPath: origPath(for: job))
           state.pendingConversions.removeAll { $0 == key }
           completeJob(key, bytes: bytes, converted: true, bitrateKbps: job.targetBitrateKbps)
           drainConversions()
