@@ -472,6 +472,21 @@ describe("DownloadManager — convert mode routing (aac + native convert)", () =
     expect(index.get("a")?.format).toBe("aac");
   });
 
+  it("aac + convert-capable + wifi but AV-unreadable container (ogg) → hls", async () => {
+    // AVFoundation can't open ogg/vorbis — an on-device convert job would
+    // fail "Cannot Open" terminally and sync would re-queue it forever.
+    const { eng, m } = nativeMgr({
+      quality: { mode: "aac", bitrateKbps: 192 },
+      connectionType: "wifi",
+      supportsConvert: true,
+    });
+    m.markReady();
+    const j = job("a");
+    await m.enqueue([{ ...j, meta: { ...j.meta, container: "ogg", audioCodec: "vorbis" } }]);
+    expect(eng.submits).toHaveLength(1);
+    expect(eng.submits[0]?.[0]?.mode).toBe("hls");
+  });
+
   it("aac + convert-capable engine on CELLULAR → hls (server transcode)", async () => {
     const { eng, m } = nativeMgr({
       quality: { mode: "aac", bitrateKbps: 192 },
