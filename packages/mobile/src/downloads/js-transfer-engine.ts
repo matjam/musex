@@ -9,7 +9,10 @@ import type { FileStore, StoreWriter } from "./download-store";
 import type { TransferEngine } from "./transfer-engine";
 
 const SEGMENT_RETRY_DELAY_MS = 700;
-const SEGMENT_RETRY_ATTEMPTS = 60;
+// ~2 min: field failures showed deep segments of LONG tracks ("segment
+// unavailable: 00228.ts") not produced within the old 60×700ms (~42s) budget —
+// Plex paces the transcoder, so late segments need a longer wait.
+const SEGMENT_RETRY_ATTEMPTS = 180;
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export interface JsTransferEngineDeps {
@@ -123,26 +126,18 @@ export class JsTransferEngine implements TransferEngine {
     const { headers } = job;
     let w: StoreWriter | null = null;
     try {
-      // TEMP-DIAG: URL-level logging for the on-device "hls media 404" hunt.
-      console.log(`[hls-diag] start GET ${job.url}`);
       const startRes = await this.deps.fetch(job.url, { headers });
-      console.log(`[hls-diag] start -> ${startRes.status}`);
       if (!startRes.ok) {
         this.fail(job.key, `hls start ${startRes.status}`);
         return;
       }
       const startText = await startRes.text();
       const variant = parseHlsMaster(startText);
-      console.log(
-        `[hls-diag] master body (${startText.length}b) variant=${JSON.stringify(variant)} first120=${JSON.stringify(startText.slice(0, 120))}`,
-      );
       let mediaUrl = job.url;
       let mediaText = startText;
       if (variant) {
         mediaUrl = new URL(variant, job.url).toString();
-        console.log(`[hls-diag] media GET ${mediaUrl}`);
         const mediaRes = await this.deps.fetch(mediaUrl, { headers });
-        console.log(`[hls-diag] media -> ${mediaRes.status}`);
         if (!mediaRes.ok) {
           this.fail(job.key, `hls media ${mediaRes.status}`);
           return;

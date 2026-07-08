@@ -70,6 +70,7 @@ import { DownloadManager } from "../downloads/download-manager";
 import { DownloadStore } from "../downloads/download-store";
 import { JsTransferEngine } from "../downloads/js-transfer-engine";
 import { createNativeTransferEngine } from "../downloads/native-transfer-engine";
+import { RoutingTransferEngine } from "../downloads/routing-transfer-engine";
 import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-config";
 import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
@@ -303,17 +304,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // loop calls it through this ref so it stays out of that effect's deps.
   const cacheOnPlayRef = useRef<((s: PlaybackState) => void) | null>(null);
 
-  // Native background engine when the module is in the binary (dev-client /
-  // production builds — transfers continue while the app is suspended or
-  // killed); JS engine otherwise (Expo Go, simulator without the module).
-  const transferEngine = useMemo(
-    () =>
-      // TEMP-DIAG: native engine bypassed to bisect the on-device
-      // "hls media http 404" — restore the line below before merging.
-      // createNativeTransferEngine(BackgroundDownloadsNative) ??
-      new JsTransferEngine({ store: downloadStore, fetch }),
-    [downloadStore],
-  );
+  // Route by mode when the native module is in the binary (dev-client /
+  // production builds): Original jobs run on the native background engine
+  // (durable backlog, survives suspend/kill); HLS/AAC jobs run on the JS
+  // engine in the foreground — PMS reaps an unconsumed transcode session
+  // ~1-2s after the transcoder finishes and 400s a same-client re-start, so
+  // the native engine's seconds-apart chained tasks always 404'd at the
+  // media playlist (see routing-transfer-engine.ts). Plain JS engine
+  // otherwise (Expo Go, simulator without the module).
+  const transferEngine = useMemo(() => {
+    const js = new JsTransferEngine({ store: downloadStore, fetch });
+    const native = createNativeTransferEngine(BackgroundDownloadsNative);
+    return native ? new RoutingTransferEngine({ hls: js, original: native }) : js;
+  }, [downloadStore]);
 
   const downloadManager = useMemo(
     () =>

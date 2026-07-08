@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DownloadIndex } from "./download-index";
 import { DownloadManager } from "./download-manager";
 import { JsTransferEngine } from "./js-transfer-engine";
+import { RoutingTransferEngine } from "./routing-transfer-engine";
 
 function fakeStore() {
   const files = new Map<string, string>();
@@ -441,5 +442,42 @@ describe("DownloadManager — native engine (ownsQueue)", () => {
     expect(eng.submits).toHaveLength(1);
     expect(eng.submits[0]?.map((t) => t.key)).toEqual(["fresh"]);
     expect(index.get("active")?.state).toBe("downloading"); // untouched
+  });
+});
+
+describe("DownloadManager — routing engine (hls → JS engine, original → native)", () => {
+  it("routes by pinned mode and maps routed events back onto records", async () => {
+    const store = fakeStore();
+    const index = new DownloadIndex();
+    const hls = fakeNativeEngine();
+    const native = fakeNativeEngine();
+    let mode: "original" | "aac" = "aac";
+    const m = new DownloadManager({
+      store: store as never,
+      index,
+      engine: new RoutingTransferEngine({ hls, original: native }),
+      endpoint: async () => ({ baseUrl: "https://pms", token: "t" }),
+      clientId: "cid",
+      getQuality: () => ({ mode, bitrateKbps: 192 }),
+      onProgress: () => {},
+    });
+    m.markReady();
+    await m.enqueue([job("h1"), job("h2")]); // aac → hls engine
+    mode = "original";
+    await m.enqueue([job("o1")]); // original → native engine
+    expect(hls.submits.map((b) => b.map((t) => t.key))).toEqual([["h1", "h2"]]);
+    expect(hls.submits[0]?.every((t) => t.mode === "hls")).toBe(true);
+    expect(native.submits.map((b) => b.map((t) => t.key))).toEqual([["o1"]]);
+    expect(native.submits[0]?.[0]?.mode).toBe("original");
+    // Events from EITHER engine reach the manager's single subscription.
+    hls.emit({ kind: "complete", key: "h1", bytes: 7 });
+    native.emit({ kind: "error", key: "o1", message: "http 403", terminal: true });
+    await tick();
+    expect(index.get("h1")).toMatchObject({ state: "downloaded", bytes: 7, expectedBytes: 7 });
+    expect(index.get("o1")).toMatchObject({ state: "failed", error: "http 403" });
+    // cancelQueued fans the cancel out to both engines.
+    await m.cancelQueued(["h2"]);
+    expect(hls.cancels).toEqual([["h2"]]);
+    expect(native.cancels).toEqual([["h2"]]);
   });
 });
