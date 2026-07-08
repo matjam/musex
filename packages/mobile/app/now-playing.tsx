@@ -103,6 +103,12 @@ export default function NowPlaying() {
   const upNext = useMemo(() => (queue ? queue.tracks.slice(queue.index + 1) : []), [queue]);
   const baseIndex = queue ? queue.index : 0;
 
+  // Seek-drag guard: while the user drags, freeze the slider's controlled
+  // value at the drag-start position so the ~250ms position ticks don't yank
+  // the thumb out from under the finger mid-drag (same pattern as PlayerBar).
+  const [isSliding, setIsSliding] = useState(false);
+  const [sliderValue, setSliderValue] = useState(0);
+
   // Rating state — optimistically updated, synced when track changes.
   const [rating, setRating] = useState<number | null>(current?.userRating ?? null);
   useEffect(() => {
@@ -205,18 +211,27 @@ export default function NowPlaying() {
               <Slider
                 style={{ width: "100%", marginTop: 18 }}
                 minimumValue={0}
-                maximumValue={dur}
-                value={pb.positionSec}
+                maximumValue={Math.max(dur, 1)}
+                value={isSliding ? sliderValue : pb.positionSec}
                 minimumTrackTintColor={theme.accent}
                 maximumTrackTintColor={theme.border}
                 thumbTintColor={theme.text}
-                onSlidingComplete={(v) => session.seek(v)}
+                onSlidingStart={(v) => {
+                  setSliderValue(v);
+                  setIsSliding(true);
+                }}
+                onSlidingComplete={(v) => {
+                  session.seek(v);
+                  setIsSliding(false);
+                }}
               />
               <View
                 style={{ flexDirection: "row", justifyContent: "space-between", width: "100%" }}
               >
                 <Text style={{ color: theme.textDim, fontSize: 12 }}>{fmt(pb.positionSec)}</Text>
-                <Text style={{ color: theme.textDim, fontSize: 12 }}>{fmt(dur)}</Text>
+                <Text style={{ color: theme.textDim, fontSize: 12 }}>
+                  {dur > 0 ? fmt(dur) : "–:––"}
+                </Text>
               </View>
 
               <View

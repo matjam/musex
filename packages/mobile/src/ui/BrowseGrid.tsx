@@ -11,10 +11,11 @@ import {
 } from "@musex/core";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, Pressable, Text, useWindowDimensions } from "react-native";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { artUrl } from "../logic/art-url";
 import { useStore } from "../state/store";
 import { Collage } from "./Collage";
+import { gridColumns } from "./grid-columns";
 import { theme } from "./theme";
 
 type Cell =
@@ -25,11 +26,18 @@ export function BrowseGrid() {
   const { gateway, token, artBaseFor, taste } = useStore();
   const library = useStore().state.library;
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  // Pane width measured on the container (iPad's sidebar shrinks the pane, so
+  // the window width would oversize tiles). null until onLayout delivers a
+  // width: rendering nothing for one frame beats seeding from the WINDOW width
+  // (which includes the sidebar → wrong column count → key-remount flash).
+  const [paneWidth, setPaneWidth] = useState<number | null>(null);
   const [cells, setCells] = useState<Cell[]>([]);
 
-  // 2-column grid. No scrubber, so use the full width minus outer padding (6px each side).
-  const tileSize = (width - 12) / 2;
+  // Pane-width-derived columns. No scrubber, so use the full width minus outer
+  // padding (6px each side). Fallback 0 is never rendered — the list mounts
+  // only once paneWidth is measured.
+  const cols = gridColumns(paneWidth ?? 0);
+  const tileSize = ((paneWidth ?? 0) - 12) / cols;
 
   useEffect(() => {
     if (!library || !token) return;
@@ -88,42 +96,50 @@ export function BrowseGrid() {
     };
   }, [library, token, gateway, taste, artBaseFor]);
 
+  // No scroll restore across the key remount here (unlike library/index.tsx):
+  // the browse list is short, so losing scroll on rotation is not worth the
+  // viewability-tracking machinery.
   return (
-    <FlatList
-      data={cells}
-      numColumns={2}
-      keyExtractor={(c) => `${c.kind}:${c.key}`}
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ paddingHorizontal: 6 }}
-      renderItem={({ item }) => (
-        <Pressable
-          onPress={() =>
-            item.kind === "mood"
-              ? router.push({
-                  pathname: "/(tabs)/search/mix",
-                  params: { mood: item.key },
-                } as never)
-              : router.push({
-                  pathname: "/(tabs)/search/genre",
-                  params: { genre: item.key },
-                } as never)
-          }
-          style={{ width: tileSize, padding: 6 }}
-        >
-          <Collage urls={item.thumbs.slice(0, 4)} size={tileSize - 12} />
-          <Text
-            numberOfLines={2}
-            style={{
-              color: theme.text,
-              fontSize: 13,
-              fontWeight: "600",
-              marginTop: 6,
-            }}
-          >
-            {item.label}
-          </Text>
-        </Pressable>
+    <View style={{ flex: 1 }} onLayout={(e) => setPaneWidth(e.nativeEvent.layout.width)}>
+      {paneWidth === null ? null : (
+        <FlatList
+          key={cols}
+          data={cells}
+          numColumns={cols}
+          keyExtractor={(c) => `${c.kind}:${c.key}`}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingHorizontal: 6 }}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() =>
+                item.kind === "mood"
+                  ? router.push({
+                      pathname: "/(tabs)/search/mix",
+                      params: { mood: item.key },
+                    } as never)
+                  : router.push({
+                      pathname: "/(tabs)/search/genre",
+                      params: { genre: item.key },
+                    } as never)
+              }
+              style={{ width: tileSize, padding: 6 }}
+            >
+              <Collage urls={item.thumbs.slice(0, 4)} size={tileSize - 12} />
+              <Text
+                numberOfLines={2}
+                style={{
+                  color: theme.text,
+                  fontSize: 13,
+                  fontWeight: "600",
+                  marginTop: 6,
+                }}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          )}
+        />
       )}
-    />
+    </View>
   );
 }
