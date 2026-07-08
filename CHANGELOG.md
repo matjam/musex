@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/matjam/musex/compare/v0.22.0...v0.22.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **mobile:** field-report batch — locked-screen drain, playable conversions, unlock hang, sane badges ([#111](https://github.com/matjam/musex/issues/111)) ([b1c4fdd](https://github.com/matjam/musex/commit/b1c4fdd081a422076549d80be6bc85d40d75a03c))
+
 ## [0.22.0](https://github.com/matjam/musex/compare/v0.21.0...v0.22.0) (2026-07-08)
 
 
