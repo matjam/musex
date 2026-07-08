@@ -129,7 +129,11 @@ export function Sidebar({ mode }: { mode: Exclude<LayoutMode, "phone"> }) {
 
       {/* Downloaded — deep-link into the Library tab's Downloaded segment. The
           nonce makes re-taps re-trigger the segment effect even when the param
-          value is unchanged. */}
+          value is unchanged. Unlike the items above this is router.navigate,
+          not a TabTrigger switch-trigger (JUMP_TO) — verified empirically on
+          the iPad sim (2026-07-07): tapping this from the Home tab lands on
+          the Library tab with the Downloaded segment active, so navigate DOES
+          switch between mounted tabs in headless Tabs. */}
       <Pressable
         onPress={() =>
           router.navigate({
