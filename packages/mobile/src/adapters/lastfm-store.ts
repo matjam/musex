@@ -13,6 +13,22 @@ const CONFIG_KEY = "musex.lastfm";
 const SECRET_KEY = "lastfm-secret";
 const SESSION_KEY = "lastfm-session";
 
+// AFTER_FIRST_UNLOCK: keep the items readable while the device is locked (iOS
+// relaunches the app in the background for URLSession events; the default
+// WHEN_UNLOCKED rejects Keychain reads there). Accessibility is an attribute
+// of the stored item, applied at WRITE time — see token-store.ts.
+const KEYCHAIN_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+};
+
+/** Rewrite a just-read item so pre-existing WHEN_UNLOCKED entries upgrade to
+ *  AFTER_FIRST_UNLOCK (accessibility only changes on rewrite). */
+function rewriteForAccessibility(key: string, value: string): void {
+  void SecureStore.setItemAsync(key, value, KEYCHAIN_OPTIONS).catch((err) => {
+    console.warn("[lastfm] keychain accessibility rewrite failed", err);
+  });
+}
+
 export const DEFAULT_LASTFM_CONFIG: LastfmConfig = {
   apiKey: "",
   scrobbling: true,
@@ -41,17 +57,21 @@ export async function saveLastfmConfig(cfg: LastfmConfig): Promise<void> {
 }
 
 export async function loadSecret(): Promise<string | null> {
-  return SecureStore.getItemAsync(SECRET_KEY);
+  const secret = await SecureStore.getItemAsync(SECRET_KEY, KEYCHAIN_OPTIONS);
+  if (secret !== null) rewriteForAccessibility(SECRET_KEY, secret);
+  return secret;
 }
 export async function saveSecret(secret: string): Promise<void> {
-  await SecureStore.setItemAsync(SECRET_KEY, secret);
+  await SecureStore.setItemAsync(SECRET_KEY, secret, KEYCHAIN_OPTIONS);
 }
 export async function loadSessionKey(): Promise<string | null> {
-  return SecureStore.getItemAsync(SESSION_KEY);
+  const sk = await SecureStore.getItemAsync(SESSION_KEY, KEYCHAIN_OPTIONS);
+  if (sk !== null) rewriteForAccessibility(SESSION_KEY, sk);
+  return sk;
 }
 export async function saveSessionKey(sk: string): Promise<void> {
-  await SecureStore.setItemAsync(SESSION_KEY, sk);
+  await SecureStore.setItemAsync(SESSION_KEY, sk, KEYCHAIN_OPTIONS);
 }
 export async function clearSession(): Promise<void> {
-  await SecureStore.deleteItemAsync(SESSION_KEY);
+  await SecureStore.deleteItemAsync(SESSION_KEY, KEYCHAIN_OPTIONS);
 }

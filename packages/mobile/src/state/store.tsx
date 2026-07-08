@@ -599,9 +599,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Bootstrap: init audio session, restore token, discover servers, load last.fm config,
   // load downloads index + reconcile, load storage quality, start connectivity monitor.
-  useEffect(() => {
-    let alive = true;
-    (async () => {
+  //
+  // iOS can relaunch the app in the BACKGROUND (URLSession events) while the
+  // device is locked; the Keychain read in tokenStore.load() rejects there
+  // (errSecInteractionNotAllowed). The body is therefore guarded: on failure
+  // we log, set bootstrapFailedRef, and leave phase "loading" — dispatching
+  // bootstrapped-null would flash the sign-in screen at a signed-in user —
+  // and the AppState listener re-runs the bootstrap on the next foreground.
+  //
+  // The one-time init section (audio session, taste/cache init, download
+  // index load + reattach fold, connectivity monitor) runs at most once per
+  // JS context (bootstrapInitDoneRef): several of its steps are NOT
+  // idempotent — connectivityMonitor.start() would leak a NetInfo
+  // subscription, downloadIndex.load() would clobber in-memory records with
+  // stale disk state (debounced persist), transferEngine.reattach() drains a
+  // one-shot native snapshot, and taste.init() would overwrite in-session
+  // plays with the persisted profile.
+  const bootstrapAliveRef = useRef(true);
+  const bootstrapFailedRef = useRef(false);
+  const bootstrapInFlightRef = useRef(false);
+  const bootstrapInitDoneRef = useRef(false);
+  const runBootstrap = useCallback(async () => {
+    if (bootstrapInFlightRef.current) return;
+    bootstrapInFlightRef.current = true;
+    try {
+      if (!bootstrapInitDoneRef.current) {
+        await bootstrapInit();
+        bootstrapInitDoneRef.current = true;
+      }
+      const token = await tokenStore.load();
+      if (!bootstrapAliveRef.current) return;
+      if (!token) {
+        dispatch({ type: "bootstrapped", token: null });
+        return;
+      }
+      await completeSignIn(token);
+    } catch (err) {
+      console.warn("[bootstrap] failed, will retry on foreground", err);
+      bootstrapFailedRef.current = true;
+    } finally {
+      bootstrapInFlightRef.current = false;
+    }
+    async function bootstrapInit(): Promise<void> {
       await engine.init();
       await taste.init();
       await listCache.init();
@@ -716,20 +755,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       downloadManager.markReady();
       // Start the connectivity monitor (polls netinfo + probe on change).
       connectivityMonitor.start();
-      const token = await tokenStore.load();
-      if (!alive) return;
-      if (!token) {
-        dispatch({ type: "bootstrapped", token: null });
-        return;
-      }
-      if (alive) await completeSignIn(token);
-    })();
-    return () => {
-      alive = false;
-      engine.dispose();
-      downloadManager.dispose();
-      connectivityMonitor.stop();
-    };
+    }
   }, [
     engine,
     tokenStore,
@@ -743,6 +769,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     listCache,
     setSyncEnabledLocal,
   ]);
+
+  useEffect(() => {
+    bootstrapAliveRef.current = true;
+    void runBootstrap();
+    return () => {
+      bootstrapAliveRef.current = false;
+      engine.dispose();
+      downloadManager.dispose();
+      connectivityMonitor.stop();
+    };
+  }, [runBootstrap, engine, downloadManager, connectivityMonitor]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
   // Starting a new collection stops radio.
@@ -976,13 +1013,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") void runSync();
+      if (s === "active") {
+        // A bootstrap that failed (e.g. Keychain unreadable during a locked
+        // background launch) is retried now that the app is foregrounded.
+        if (bootstrapFailedRef.current) {
+          bootstrapFailedRef.current = false;
+          void runBootstrap();
+        }
+        void runSync();
+      }
       // Leaving the foreground: flush any debounced index write so progress isn't
       // lost if iOS suspends/kills the app.
       else void downloadIndex.flush();
     });
     return () => sub.remove();
-  }, [runSync, downloadIndex]);
+  }, [runSync, runBootstrap, downloadIndex]);
 
   /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
    *  with the current server base URL and token so stale baked proxy URLs from
