@@ -1,4 +1,7 @@
+import AVFoundation
+import CoreMedia
 import Foundation
+import UIKit
 
 // The background-download engine. Owns ONE background URLSession (id
 // `net.stupendous.musex.downloads`) plus a JSON-persisted backlog of job
@@ -8,6 +11,16 @@ import Foundation
 // sessionSendsLaunchEvents, the whole backlog drains while the app is
 // suspended or killed; results that land while JS is away are buffered in the
 // same persisted state and handed over via reattach().
+//
+// "convert" jobs (AAC storage quality, off-cellular) download the ORIGINAL
+// file exactly like "original" — but into `destPath + ".orig"` — then join a
+// persisted conversion backlog drained serially by an on-device
+// AVAssetReader→AVAssetWriter AAC pipeline (each conversion wrapped in a
+// beginBackgroundTask so a wake window finishes the in-flight one). Success
+// commits the m4a to destPath, deletes the .orig, and reports the M4A size
+// (delivered-size-authoritative). The record stays "downloading" until the
+// conversion completes; a relaunch resumes conversion from the kept .orig
+// without re-downloading.
 //
 // Integrity policy (matches the JS engine / spec): for Original jobs the
 // catalog expectedBytes is a TRUNCATION GUARD only — a delivery smaller than
@@ -31,12 +44,14 @@ final class BackgroundDownloadManager: NSObject {
   /// A TransferJob as submitted from JS (see core `transfer-job.ts`).
   struct SubmittedJob: Decodable {
     let key: String
-    let mode: String // "original" | "hls"
+    let mode: String // "original" | "hls" | "convert"
     let url: String
     let headers: [String: String]
     let destPath: String
     let expectedBytes: Int64?
     let stopUrl: String?
+    /// convert only — the on-device AAC target bitrate.
+    let targetBitrateKbps: Int?
   }
 
   struct HlsJobState: Codable {
@@ -63,6 +78,12 @@ final class BackgroundDownloadManager: NSObject {
     var retries: Int
     var resumeDataB64: String?
     var hls: HlsJobState?
+    /// convert only — the on-device AAC target bitrate. Optional so state
+    /// files persisted before the field existed still decode.
+    let targetBitrateKbps: Int?
+    /// convert only — failed conversion attempts (retry once, then terminal).
+    /// Optional for the same persisted-state back-compat reason.
+    var conversionAttempts: Int?
 
     init(from j: SubmittedJob) {
       key = j.key
@@ -75,6 +96,8 @@ final class BackgroundDownloadManager: NSObject {
       retries = 0
       resumeDataB64 = nil
       hls = nil
+      targetBitrateKbps = j.targetBitrateKbps
+      conversionAttempts = nil
     }
   }
 
@@ -90,10 +113,25 @@ final class BackgroundDownloadManager: NSObject {
 
   /// Backlog + results-since-last-reattach, rewritten to backlog.json after
   /// every mutation (single small JSON file — cheap at this scale).
+  /// Custom decode: every field is decodeIfPresent so a state file persisted
+  /// by an older build (no `pendingConversions` key) still loads instead of
+  /// silently resetting the whole backlog.
   struct PersistedState: Codable {
     var jobs: [JobDescriptor] = []
     var completed: [CompletedResult] = []
     var failed: [FailedResult] = []
+    /// Keys downloaded to `.orig`, awaiting on-device AAC conversion (FIFO).
+    var pendingConversions: [String] = []
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      jobs = try c.decodeIfPresent([JobDescriptor].self, forKey: .jobs) ?? []
+      completed = try c.decodeIfPresent([CompletedResult].self, forKey: .completed) ?? []
+      failed = try c.decodeIfPresent([FailedResult].self, forKey: .failed) ?? []
+      pendingConversions = try c.decodeIfPresent([String].self, forKey: .pendingConversions) ?? []
+    }
   }
 
   // MARK: - State (all touched only on `queue`)
@@ -120,6 +158,10 @@ final class BackgroundDownloadManager: NSObject {
   /// segment list must be revalidated against a fresh media playlist before
   /// the chain continues. In-memory only (a warm resume never needs it).
   private var revalidateKeys: Set<String> = []
+  /// Key whose AAC conversion is currently running (in-memory — a kill mid-
+  /// conversion leaves the key in the persisted pendingConversions, so the
+  /// next launch re-converts from the kept `.orig`). Serial: one at a time.
+  private var convertingKey: String?
   private var backgroundCompletionHandler: (() -> Void)?
 
   /// Set by the module (JS alive) to forward events; nil while JS is away —
@@ -154,6 +196,9 @@ final class BackgroundDownloadManager: NSObject {
     if started { return }
     started = true
     loadState()
+    // Cold-start conversion recovery: a convert job whose `.orig` fully
+    // landed resumes at the conversion stage — never re-downloads.
+    recoverConversions()
     // Recreating the session re-attaches its live background tasks; the sweep
     // below maps them back onto backlog keys before anything new starts.
     session.getAllTasks { tasks in
@@ -166,6 +211,7 @@ final class BackgroundDownloadManager: NSObject {
       }
       self.tasksLoaded = true
       self.fill()
+      self.drainConversions()
     }
   }
 
@@ -221,7 +267,15 @@ final class BackgroundDownloadManager: NSObject {
       }
       for job in dropped {
         try? FileManager.default.removeItem(atPath: job.destPath + ".part")
+        if job.mode == "convert" {
+          try? FileManager.default.removeItem(atPath: job.destPath + ".orig")
+          try? FileManager.default.removeItem(atPath: job.destPath + ".m4a.tmp")
+        }
       }
+      // Cancelled keys leave the conversion backlog too. If one is converting
+      // RIGHT NOW its completion callback finds the job gone and just moves
+      // on (the files above are already deleted; its writer fails harmlessly).
+      self.state.pendingConversions.removeAll { drop.contains($0) }
       // Invariant JS relies on: every submitted key eventually gets exactly
       // one terminal event — an explicit cancel IS that event. No double
       // emit from the delegate: a cancelled task's didCompleteWithError
@@ -272,13 +326,19 @@ final class BackgroundDownloadManager: NSObject {
     // we briefly run 2 tasks — an accepted tradeoff: suspend-survivable
     // backoff via earliestBeginDate is worth the rare brief overlap.
     guard activeTasks.keys.allSatisfy({ waitingKeys.contains($0) }) else { return }
-    guard let idx = state.jobs.firstIndex(where: { activeTasks[$0.key] == nil }) else {
+    // A job pending conversion is downloaded — its slot is free for the next
+    // download while the conversion queue drains it.
+    guard
+      let idx = state.jobs.firstIndex(where: {
+        activeTasks[$0.key] == nil && !state.pendingConversions.contains($0.key)
+      })
+    else {
       return
     }
-    if state.jobs[idx].mode == "original" {
-      startOriginal(state.jobs[idx])
-    } else {
+    if state.jobs[idx].mode == "hls" {
       startHls(idx)
+    } else {
+      startOriginal(state.jobs[idx])  // "original" and "convert" download alike
     }
   }
 
@@ -297,6 +357,17 @@ final class BackgroundDownloadManager: NSObject {
     // A live `.part` means the transfer is genuinely mid-flight — any dest
     // file would be a stale leftover, not a commit.
     if FileManager.default.fileExists(atPath: job.destPath + ".part") { return false }
+    if job.mode == "convert" {
+      // A convert job's dest is the CONVERTED m4a (smaller than the catalog
+      // original, so no expectedBytes comparison): committed = the .orig is
+      // gone (deleted right after the m4a move) and a non-empty dest exists.
+      // A present .orig means the conversion stage owns the job.
+      if FileManager.default.fileExists(atPath: job.destPath + ".orig") { return false }
+      guard let size = fileSize(job.destPath), size > 0 else { return false }
+      state.pendingConversions.removeAll { $0 == job.key }
+      completeJob(job.key, bytes: size)
+      return true
+    }
     guard let size = fileSize(job.destPath) else { return false }
     let complete = job.expectedBytes.map { size >= $0 } ?? (size > 0)
     guard complete else { return false }
@@ -376,8 +447,13 @@ final class BackgroundDownloadManager: NSObject {
     if let i = jobIndex(key) {
       let job = state.jobs[i]
       try? FileManager.default.removeItem(atPath: job.destPath + ".part")
+      if job.mode == "convert" {
+        try? FileManager.default.removeItem(atPath: job.destPath + ".orig")
+        try? FileManager.default.removeItem(atPath: job.destPath + ".m4a.tmp")
+      }
     }
     state.jobs.removeAll { $0.key == key }
+    state.pendingConversions.removeAll { $0 == key }
     lastProgressEmit.removeValue(forKey: key)
     waitingKeys.remove(key)
     if let emitter = emitter {
@@ -438,11 +514,18 @@ final class BackgroundDownloadManager: NSObject {
         "[musex downloads] size differs from Plex catalog (got %lld, want %lld), accepting delivered file: %@",
         size, expected, key)
     }
+    // A convert job's download lands at `.orig`; the conversion queue owns it
+    // from here (the job is NOT complete — the record stays "downloading").
+    let target = job.mode == "convert" ? job.destPath + ".orig" : job.destPath
     do {
-      try moveIntoPlace(from: location, toPath: job.destPath)
+      try moveIntoPlace(from: location, toPath: target)
     } catch {
       // Disk-level failure — retrying won't produce a different disk.
       failTerminal(key, "move failed: \(error.localizedDescription)")
+      return
+    }
+    if job.mode == "convert" {
+      enqueueConversion(key)
       return
     }
     completeJob(key, bytes: size)
@@ -456,6 +539,316 @@ final class BackgroundDownloadManager: NSObject {
       try fm.removeItem(atPath: destPath)
     }
     try fm.moveItem(at: location, to: URL(fileURLWithPath: destPath))
+  }
+
+  // MARK: - On-device AAC conversion queue
+
+  // A "convert" job's second stage: `.orig` → AAC-LC in `.m4a.tmp` → dest.
+  // The backlog (`state.pendingConversions`) is persisted and drained serially
+  // on `queue`; the actual decode/encode pump runs off-queue and calls back.
+  // Every conversion is wrapped in a beginBackgroundTask so the ~30s wake
+  // window a completed background download produces can finish the in-flight
+  // one; leftovers drain on the next execution (foreground or wake).
+
+  /// Downloaded-`.orig` → conversion backlog. Fills the next download slot
+  /// immediately (downloads and the one conversion run in parallel).
+  private func enqueueConversion(_ key: String) {
+    if !state.pendingConversions.contains(key) {
+      state.pendingConversions.append(key)
+    }
+    persist()
+    fill()
+    drainConversions()
+  }
+
+  /// Cold-start resume: a convert job whose `.orig` fully landed (vs the
+  /// truncation guard) goes straight to the conversion backlog — never
+  /// re-downloaded. A short `.orig` is deleted; fill() restarts its download.
+  private func recoverConversions() {
+    var changed = false
+    for job in state.jobs where job.mode == "convert" {
+      if state.pendingConversions.contains(job.key) { continue }
+      guard let size = fileSize(job.destPath + ".orig") else { continue }
+      let complete = job.expectedBytes.map { size >= $0 } ?? (size > 0)
+      if complete {
+        state.pendingConversions.append(job.key)
+        changed = true
+      } else {
+        try? FileManager.default.removeItem(atPath: job.destPath + ".orig")
+      }
+    }
+    if changed { persist() }
+  }
+
+  /// Serial drain: start the next pending conversion if none is running.
+  /// Runs on `queue`; the pump itself is off-queue and re-enters through
+  /// finishConversion. Safe to call from anywhere state-mutating.
+  private func drainConversions() {
+    guard convertingKey == nil else { return }
+    // Prune entries whose job vanished (cancelled while we weren't looking).
+    let pruned = state.pendingConversions.filter { jobIndex($0) != nil }
+    if pruned.count != state.pendingConversions.count {
+      state.pendingConversions = pruned
+      persist()
+    }
+    guard let key = state.pendingConversions.first, let i = jobIndex(key) else { return }
+    let job = state.jobs[i]
+    let origPath = job.destPath + ".orig"
+    let tmpPath = job.destPath + ".m4a.tmp"
+    let fm = FileManager.default
+    if !fm.fileExists(atPath: origPath) {
+      if let size = fileSize(job.destPath), size > 0 {
+        // Killed between the m4a move (which deletes .orig) and the backlog
+        // persist — the artifact is already committed.
+        state.pendingConversions.removeAll { $0 == key }
+        completeJob(key, bytes: size)
+      } else {
+        // Nothing to convert and nothing committed — hand the job back to
+        // the download stage (fill() restarts it now that it's not pending).
+        state.pendingConversions.removeAll { $0 == key }
+        persist()
+        fill()
+      }
+      drainConversions()
+      return
+    }
+    convertingKey = key
+    // Wake-window insurance: ask for background time for THIS conversion.
+    // Ended exactly once on every exit (finishConversion's defer + the
+    // expiration handler share the once-guarded box).
+    let endWakeTask = Self.beginWakeTask("musex-aac-convert")
+    // 256 fallback is unreachable in practice — JS always sets the bitrate on
+    // convert jobs; guard so a hand-rolled descriptor can't crash the encode.
+    let bitrateKbps = job.targetBitrateKbps ?? 256
+    Task.detached(priority: .utility) { [weak self] in
+      do {
+        let bytes = try await Self.convertToAacM4a(
+          src: URL(fileURLWithPath: origPath),
+          dst: URL(fileURLWithPath: tmpPath),
+          bitrateKbps: bitrateKbps)
+        self?.queue.async {
+          self?.finishConversion(key, bytes: bytes, error: nil, endWakeTask: endWakeTask)
+        }
+      } catch {
+        self?.queue.async {
+          self?.finishConversion(key, bytes: 0, error: error, endWakeTask: endWakeTask)
+        }
+      }
+    }
+  }
+
+  /// Terminal step of one conversion, back on `queue`. Success commits the
+  /// m4a and reports ITS size (delivered-size-authoritative); failure retries
+  /// once, then fails terminally (failTerminal cleans .orig/.m4a.tmp).
+  private func finishConversion(
+    _ key: String, bytes: Int64, error: Error?, endWakeTask: @escaping () -> Void
+  ) {
+    convertingKey = nil
+    defer { endWakeTask() }
+    guard let i = jobIndex(key), state.pendingConversions.contains(key) else {
+      // Cancelled mid-conversion: cancel() already removed the job, the
+      // pending entry and the files — nothing to do but keep draining.
+      drainConversions()
+      return
+    }
+    let job = state.jobs[i]
+    let fm = FileManager.default
+    var failure = error.map { $0.localizedDescription }
+    if failure == nil {
+      if bytes > 0, fileSize(job.destPath + ".m4a.tmp") == bytes {
+        do {
+          try moveIntoPlace(from: URL(fileURLWithPath: job.destPath + ".m4a.tmp"),
+                            toPath: job.destPath)
+          try? fm.removeItem(atPath: job.destPath + ".orig")
+          state.pendingConversions.removeAll { $0 == key }
+          completeJob(key, bytes: bytes)
+          drainConversions()
+          return
+        } catch {
+          // Disk-level failure — retrying won't produce a different disk.
+          failTerminal(key, "conversion move failed: \(error.localizedDescription)")
+          drainConversions()
+          return
+        }
+      }
+      failure = "empty conversion output"
+    }
+    let attempts = (job.conversionAttempts ?? 0) + 1
+    state.jobs[i].conversionAttempts = attempts
+    if attempts > 1 {
+      failTerminal(key, "conversion failed: \(failure ?? "unknown")")
+    } else {
+      try? fm.removeItem(atPath: job.destPath + ".m4a.tmp")
+      NSLog(
+        "[musex downloads] conversion failed (attempt %d), retrying: %@", attempts,
+        failure ?? "unknown")
+      persist()
+    }
+    drainConversions()
+  }
+
+  /// beginBackgroundTask with a once-only end shared by the expiration
+  /// handler and the normal exit — the pair MUST balance exactly. Thread-safe
+  /// (UIKit documents begin/endBackgroundTask as callable from any thread;
+  /// both are NS_SWIFT_NONISOLATED in the SDK).
+  private static func beginWakeTask(_ name: String) -> () -> Void {
+    let box = WakeTaskBox()
+    let id = UIApplication.shared.beginBackgroundTask(withName: name) { box.end() }
+    box.setId(id)
+    return { box.end() }
+  }
+
+  private final class WakeTaskBox {
+    private let lock = NSLock()
+    private var id: UIBackgroundTaskIdentifier = .invalid
+    private var ended = false
+    /// end() arrived before setId (expiration racing the begin call's return).
+    private var endedEarly = false
+
+    func setId(_ newId: UIBackgroundTaskIdentifier) {
+      lock.lock()
+      id = newId
+      let endNow = endedEarly && !ended
+      if endNow { ended = true }
+      lock.unlock()
+      if endNow, newId != .invalid {
+        UIApplication.shared.endBackgroundTask(newId)
+      }
+    }
+
+    func end() {
+      lock.lock()
+      if id == .invalid, !ended {
+        endedEarly = true
+        lock.unlock()
+        return
+      }
+      let endNow = !ended
+      ended = true
+      let taskId = id
+      lock.unlock()
+      if endNow, taskId != .invalid {
+        UIApplication.shared.endBackgroundTask(taskId)
+      }
+    }
+  }
+
+  // MARK: - AAC encode (AVAssetReader → AVAssetWriter)
+
+  private static func conversionError(_ message: String) -> NSError {
+    return NSError(
+      domain: "BackgroundDownloads", code: 2,
+      userInfo: [NSLocalizedDescriptionKey: message])
+  }
+
+  /// Reference box for the pump's mutable done-flag: the
+  /// requestMediaDataWhenReady block is @Sendable (NS_SWIFT_SENDABLE in the
+  /// SDK), which forbids captured `var` mutation; the serial pump queue is
+  /// what actually orders accesses.
+  private final class PumpState {
+    var done = false
+  }
+
+  /// Decode the downloaded original to LPCM and re-encode as AAC-LC in an
+  /// .m4a at the requested bitrate, honoring the user's bitrate setting —
+  /// which is exactly what AVAssetExportSession's AppleM4A preset ignores, so
+  /// this is the AVAssetReader→AVAssetWriter pipeline: a track output
+  /// decoding to LPCM feeds an AAC-encoding writer input (the writer input
+  /// converts sample rate/channel count as needed). Returns the m4a's size.
+  static func convertToAacM4a(src: URL, dst: URL, bitrateKbps: Int) async throws -> Int64 {
+    let asset = AVURLAsset(url: src)
+    guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
+      throw conversionError("no audio track")
+    }
+    // Source rate/channels bound the output settings: the AAC-LC encoder
+    // takes at most 48 kHz / stereo here (hi-res and multichannel originals
+    // are resampled/downmixed by the writer input).
+    let asbd = try await track.load(.formatDescriptions).first
+      .flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee }
+    let srcRate = asbd.map { $0.mSampleRate } ?? 0
+    let srcChannels = asbd.map { Int($0.mChannelsPerFrame) } ?? 2
+
+    let reader = try AVAssetReader(asset: asset)
+    let readerOutput = AVAssetReaderTrackOutput(
+      track: track, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM])
+    guard reader.canAdd(readerOutput) else { throw conversionError("cannot add reader output") }
+    reader.add(readerOutput)
+
+    // A stale .tmp from an aborted earlier attempt would fail AVAssetWriter's init.
+    try? FileManager.default.removeItem(at: dst)
+    let writer = try AVAssetWriter(outputURL: dst, fileType: .m4a)
+    let input = AVAssetWriterInput(
+      mediaType: .audio,
+      outputSettings: [
+        AVFormatIDKey: kAudioFormatMPEG4AAC,
+        AVSampleRateKey: min(srcRate > 0 ? srcRate : 44100, 48000),
+        AVNumberOfChannelsKey: min(max(srcChannels, 1), 2),
+        AVEncoderBitRateKey: bitrateKbps * 1000,
+      ])
+    input.expectsMediaDataInRealTime = false
+    guard writer.canAdd(input) else {
+      throw conversionError("cannot add writer input")
+    }
+    writer.add(input)
+
+    guard reader.startReading() else {
+      throw reader.error ?? conversionError("reader failed to start")
+    }
+    guard writer.startWriting() else {
+      reader.cancelReading()
+      throw writer.error ?? conversionError("writer failed to start")
+    }
+    writer.startSession(atSourceTime: .zero)
+
+    // The async pump: AVFoundation invokes the block on `pumpQueue` whenever
+    // the input can take more; the serial queue plus the done-flag guarantee
+    // the continuation resumes exactly once, with markAsFinished on every
+    // path so the callbacks stop.
+    let pumpQueue = DispatchQueue(label: "net.stupendous.musex.downloads.convert")
+    do {
+      try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+        let pump = PumpState()
+        input.requestMediaDataWhenReady(on: pumpQueue) {
+          if pump.done { return }
+          while input.isReadyForMoreMediaData {
+            if let sample = readerOutput.copyNextSampleBuffer() {
+              if !input.append(sample) {
+                pump.done = true
+                reader.cancelReading()
+                input.markAsFinished()
+                cont.resume(throwing: writer.error ?? conversionError("append failed"))
+                return
+              }
+            } else {
+              pump.done = true
+              input.markAsFinished()
+              if reader.status == .failed {
+                cont.resume(throwing: reader.error ?? conversionError("read failed"))
+              } else {
+                cont.resume(returning: ())
+              }
+              return
+            }
+          }
+        }
+      }
+    } catch {
+      if writer.status == .writing { writer.cancelWriting() }
+      throw error
+    }
+    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+      writer.finishWriting {
+        if writer.status == .completed {
+          cont.resume(returning: ())
+        } else {
+          cont.resume(throwing: writer.error ?? conversionError("finish failed"))
+        }
+      }
+    }
+    let attrs = try? FileManager.default.attributesOfItem(atPath: dst.path)
+    let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+    guard size > 0 else { throw conversionError("empty output") }
+    return size
   }
 
   // MARK: - HLS (AAC) chaining
@@ -878,10 +1271,11 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
       return // superseded — a newer task owns this key
     }
     let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 200
-    if state.jobs[i].mode == "original" {
-      handleOriginalFinished(key, jobIdx: i, location: location, status: status)
-    } else {
+    if state.jobs[i].mode == "hls" {
       handleHlsFinished(key, jobIdx: i, location: location, status: status)
+    } else {
+      // "original" and "convert" share the single-GET download path.
+      handleOriginalFinished(key, jobIdx: i, location: location, status: status)
     }
   }
 
@@ -893,7 +1287,7 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
     // Bytes are flowing — a backoff-parked task that fired is waiting no more
     // (fill() goes back to refusing new starts until it finishes).
     waitingKeys.remove(key)
-    guard state.jobs[i].mode == "original" else { return } // HLS progress = per-segment appends
+    guard state.jobs[i].mode != "hls" else { return } // HLS progress = per-segment appends
     emitProgress(key, ["key": key, "bytes": Int(totalBytesWritten)])
   }
 
@@ -924,17 +1318,23 @@ extension BackgroundDownloadManager: URLSessionDownloadDelegate {
       fill()
       return
     }
-    if state.jobs[i].mode == "original" {
-      let resumeData = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
-      retryOrFailOriginal(key, error.localizedDescription, resumeData: resumeData)
-    } else {
+    if state.jobs[i].mode == "hls" {
       // Transport hiccup mid-chain (e.g. airplane mode) — same bounded
       // retry-the-current-step policy as an HTTP 5xx.
       retryOrFailHlsStep(key, jobIdx: i, error.localizedDescription)
+    } else {
+      // "original" and "convert" share the resumeData/backoff retry path.
+      let resumeData = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+      retryOrFailOriginal(key, error.localizedDescription, resumeData: resumeData)
     }
   }
 
   func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+    // This wake window is conversion time: kick an async drain — it takes its
+    // OWN beginBackgroundTask, so the system completion handler below is
+    // never held hostage on a conversion (at most the in-flight one keeps
+    // running under that task; leftovers wait for the next execution).
+    drainConversions()
     // All queued delegate messages for the background relaunch are delivered —
     // tell the system we're done (on the main queue, per the docs).
     let handler = backgroundCompletionHandler
