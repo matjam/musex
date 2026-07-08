@@ -24,3 +24,31 @@ export function transferModeFor(i: {
   if (i.nativeConvertAvailable && i.connectionType !== "cellular") return "convert";
   return "hls";
 }
+
+/** Containers AVFoundation's AVURLAsset can actually read — the on-device
+ *  conversion pipeline (AVAssetReader→AVAssetWriter) opens the downloaded
+ *  original with it, so a container outside this list (ogg/vorbis, opus,
+ *  wma, …) fails "Cannot Open" every time: retry once → terminal fail →
+ *  sync re-queues → an infinite convert-fail loop. */
+const AV_CONVERTIBLE_CONTAINERS: ReadonlySet<string> = new Set([
+  "flac",
+  "mp3",
+  "m4a",
+  "aac",
+  "alac",
+  "wav",
+  "aiff",
+  "aif",
+  "caf",
+  "mp4",
+]);
+
+/** Whether an on-device (AVFoundation) conversion can read this container —
+ *  the manager gates a would-be "convert" job to server HLS when it can't.
+ *  Empty/unknown container → true: allow convert (mainstream cases carry a
+ *  container, and the engine's terminal-failure path still backstops it). */
+export function isAvConvertible(container: string): boolean {
+  const c = container.trim().toLowerCase();
+  if (c === "") return true;
+  return AV_CONVERTIBLE_CONTAINERS.has(c);
+}

@@ -5,6 +5,7 @@ import {
   type DownloadJob,
   type DownloadMeta,
   type DownloadRecord,
+  isAvConvertible,
   isInFlight,
   type StorageQuality,
   type TransferEvent,
@@ -175,11 +176,15 @@ export class DownloadManager {
       // AAC travels as on-device conversion (native original download + local
       // AAC encode) when the engine supports it and we're off cellular; server
       // HLS otherwise. The pinned format stays "aac" — the artifact is AAC.
+      // AVFoundation can't open every container (ogg/opus/wma) — a convert
+      // job for one fails "Cannot Open" terminally and sync re-queues it
+      // forever, so those route to server HLS instead.
       const mode = transferModeFor({
         qualityMode: quality.mode,
         nativeConvertAvailable: !!this.deps.engine.supportsConvert,
         connectionType: this.deps.getConnectionType(),
       });
+      const convert = mode === "convert" && isAvConvertible(j.meta.container);
       let transfer: TransferJob;
       try {
         const ep = await this.deps.endpoint(j.serverId);
@@ -191,7 +196,7 @@ export class DownloadManager {
           destPath: this.deps.store.path(j.key),
           // Session id is caller-supplied (core stays Date.now-free).
           session: plexSessionId(),
-          convert: mode === "convert",
+          convert,
         });
       } catch (err) {
         // Endpoint unresolved (server not connected) — surface it, never
@@ -369,6 +374,8 @@ export class DownloadManager {
     };
     // Same routing decision as the native path — moot for the plain JS engine
     // (supportsConvert is never set there), kept uniform for correctness.
+    // Same AV-readability gate too: a container AVFoundation can't open
+    // (ogg/opus/wma) must never travel as an on-device conversion.
     const mode = transferModeFor({
       qualityMode: quality.mode,
       nativeConvertAvailable: !!this.deps.engine.supportsConvert,
@@ -383,7 +390,7 @@ export class DownloadManager {
       destPath: this.deps.store.path(job.key),
       // Session id is caller-supplied (core stays Date.now-free).
       session: plexSessionId(),
-      convert: mode === "convert",
+      convert: mode === "convert" && isAvConvertible(job.meta.container),
     });
     // Map this job's engine events back onto records; resolve on the terminal one.
     await new Promise<void>((resolve) => {
