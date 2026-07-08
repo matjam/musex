@@ -318,36 +318,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return native ? new RoutingTransferEngine({ hls: js, original: native }) : js;
   }, [downloadStore]);
 
-  const downloadManager = useMemo(
-    () =>
-      new DownloadManager({
-        store: downloadStore,
-        index: downloadIndex,
-        engine: transferEngine,
-        endpoint: async (serverId: string) => ({
-          baseUrl: gateway.baseUrlFor(serverId),
-          token: tokenRef.current ?? "",
-        }),
-        clientId: CLIENT_ID,
-        getQuality: () => storageQualityRef.current,
-        onProgress: (e) => {
-          bumpDownloadsVersion();
-          // When a cache track finishes, trim the cache to its cap (LRU). Uses
-          // the store/index directly (the manager isn't constructed yet here).
-          if (e.state === "downloaded") {
-            for (const k of planCacheEviction(
-              downloadIndex.all(),
-              cacheConfigRef.current.capBytes,
-            )) {
-              downloadStore.remove(k);
-              void downloadIndex.remove(k);
-            }
-          }
-        },
-      }),
-    [downloadStore, downloadIndex, transferEngine, gateway, bumpDownloadsVersion],
-  );
-
   // Ref so the connectivity probe always sees the current library without
   // causing the monitor to be reconstructed on every library change.
   const libraryRef = useRef<Library | null>(null);
@@ -371,6 +341,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       onChange: (c) => dispatch({ type: "connectivity", connectivity: c }),
     });
   }, [gateway]);
+
+  const downloadManager = useMemo(
+    () =>
+      new DownloadManager({
+        store: downloadStore,
+        index: downloadIndex,
+        engine: transferEngine,
+        endpoint: async (serverId: string) => ({
+          baseUrl: gateway.baseUrlFor(serverId),
+          token: tokenRef.current ?? "",
+        }),
+        clientId: CLIENT_ID,
+        getQuality: () => storageQualityRef.current,
+        // Routing input: AAC converts on-device off-cellular, HLS on cellular.
+        getConnectionType: () => connectivityMonitor.connectionType(),
+        onProgress: (e) => {
+          bumpDownloadsVersion();
+          // When a cache track finishes, trim the cache to its cap (LRU). Uses
+          // the store/index directly (the manager isn't constructed yet here).
+          if (e.state === "downloaded") {
+            for (const k of planCacheEviction(
+              downloadIndex.all(),
+              cacheConfigRef.current.capBytes,
+            )) {
+              downloadStore.remove(k);
+              void downloadIndex.remove(k);
+            }
+          }
+        },
+      }),
+    [
+      downloadStore,
+      downloadIndex,
+      transferEngine,
+      gateway,
+      bumpDownloadsVersion,
+      connectivityMonitor,
+    ],
+  );
 
   const lastfm = useMemo(
     () =>
@@ -629,8 +638,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         // File absent → leave the record; reconcile/resolve below handles it.
         if (presentKeys.has(c.key)) {
+          // An aac record completing off the NATIVE backlog is a convert job
+          // (JS HLS jobs die with the app and never reach the snapshot) — its
+          // artifact is the on-device AAC m4a, so patch the media meta like
+          // the manager does on a live convert complete. Bitrate is the
+          // current quality setting (best available after a relaunch).
+          const meta =
+            transferEngine.supportsConvert && r.format === "aac"
+              ? {
+                  ...r.meta,
+                  container: "m4a",
+                  audioCodec: "aac",
+                  bitrate: storageQualityRef.current.bitrateKbps,
+                }
+              : r.meta;
           await downloadIndex.upsert({
             ...r,
+            meta,
             state: "downloaded",
             bytes: c.bytes,
             expectedBytes: c.bytes,

@@ -25,10 +25,17 @@ import type { TransferEngine } from "./transfer-engine";
  *  records and the next sync pass re-queues them — the intended recovery. */
 export class RoutingTransferEngine implements TransferEngine {
   readonly ownsQueue = true;
+  /** Convert capability is the ORIGINAL engine's — convert jobs are native
+   *  downloads + on-device conversions and route there. */
+  readonly supportsConvert?: boolean;
 
-  constructor(private readonly engines: { hls: TransferEngine; original: TransferEngine }) {}
+  constructor(private readonly engines: { hls: TransferEngine; original: TransferEngine }) {
+    this.supportsConvert = engines.original.supportsConvert;
+  }
 
   async submit(jobs: TransferJob[]): Promise<void> {
+    // "convert" rides the original engine: it IS an original-file download
+    // (plus a native conversion step), so it drains unattended like one.
     const hls = jobs.filter((j) => j.mode === "hls");
     const original = jobs.filter((j) => j.mode !== "hls");
     if (hls.length > 0) await this.engines.hls.submit(hls);

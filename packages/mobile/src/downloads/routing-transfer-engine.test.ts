@@ -56,6 +56,21 @@ describe("RoutingTransferEngine", () => {
     expect(original.submits).toEqual([[job("o1", "original")]]);
   });
 
+  it("convert jobs go to the ORIGINAL engine (native download + on-device conversion)", async () => {
+    const { hls, original, eng } = router();
+    await eng.submit([job("c1", "convert"), job("h1", "hls")]);
+    expect(original.submits).toEqual([[job("c1", "convert")]]);
+    expect(hls.submits).toEqual([[job("h1", "hls")]]);
+  });
+
+  it("forwards the original engine's supportsConvert flag", () => {
+    const hls = fakeEngine(false);
+    const original = fakeEngine(true);
+    expect(new RoutingTransferEngine({ hls, original }).supportsConvert).toBeUndefined();
+    const convertCapable = { ...fakeEngine(true), supportsConvert: true as const };
+    expect(new RoutingTransferEngine({ hls, original: convertCapable }).supportsConvert).toBe(true);
+  });
+
   it("a single-mode batch never touches the other engine", async () => {
     const { hls, original, eng } = router();
     await eng.submit([job("o1", "original"), job("o2", "original")]);

@@ -36,6 +36,9 @@ export class NativeTransferEngine implements TransferEngine {
   /** The native backlog is durable (survives suspend/kill) — the manager
    *  batch-submits everything and never awaits per job. */
   readonly ownsQueue = true;
+  /** The Swift module runs `"convert"` jobs (original download + on-device
+   *  AVFoundation AAC conversion). */
+  readonly supportsConvert = true;
   private readonly listeners = new Set<(e: TransferEvent) => void>();
 
   constructor(private readonly mod: BackgroundDownloadsModuleLike) {
