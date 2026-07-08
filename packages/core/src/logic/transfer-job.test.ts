@@ -100,3 +100,55 @@ describe("buildTransferJob — hls", () => {
     expect(buildTransferJob(opts).expectedBytes).toBeUndefined();
   });
 });
+
+describe("buildTransferJob — convert", () => {
+  const base = {
+    job: job({ expectedBytes: 12345 }),
+    endpoint,
+    clientId: "cid",
+    destPath: "/d/k1",
+    session: "sess-c",
+  };
+
+  it("aac + convert:true → mode convert with the ORIGINAL-file url and the target bitrate", () => {
+    const original = buildTransferJob({
+      ...base,
+      quality: { mode: "original", bitrateKbps: 320 },
+    });
+    const tj = buildTransferJob({
+      ...base,
+      quality: { mode: "aac", bitrateKbps: 256 },
+      convert: true,
+    });
+    expect(tj).toEqual({
+      key: "k1",
+      mode: "convert",
+      url: original.url, // same construction as mode:"original"
+      headers: {},
+      destPath: "/d/k1",
+      expectedBytes: 12345, // truncation guard on the .orig
+      targetBitrateKbps: 256,
+    });
+    expect(tj.stopUrl).toBeUndefined();
+  });
+
+  it("convert:true with original quality behaves exactly as today (mode original)", () => {
+    const tj = buildTransferJob({
+      ...base,
+      quality: { mode: "original", bitrateKbps: 320 },
+      convert: true,
+    });
+    expect(tj.mode).toBe("original");
+    expect(tj.targetBitrateKbps).toBeUndefined();
+  });
+
+  it("convert:false/undefined keeps the hls path for aac", () => {
+    expect(
+      buildTransferJob({ ...base, quality: { mode: "aac", bitrateKbps: 192 }, convert: false })
+        .mode,
+    ).toBe("hls");
+    expect(buildTransferJob({ ...base, quality: { mode: "aac", bitrateKbps: 192 } }).mode).toBe(
+      "hls",
+    );
+  });
+});
