@@ -419,7 +419,7 @@ export default function DownloadsSettings() {
               paddingVertical: theme.space(1.5),
             }}
           >
-            <Text style={{ color: "#8b1a1a", fontSize: 15, fontWeight: "600" }}>
+            <Text style={{ color: "#e5534b", fontSize: 15, fontWeight: "600" }}>
               {failedSummary.count.toLocaleString()} failed
             </Text>
             {failedSummary.topErrors.map(([err, n]) => (
