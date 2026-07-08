@@ -14,6 +14,7 @@ import {
 } from "@musex/core";
 import type { DownloadIndex } from "./download-index";
 import type { FileStore } from "./download-store";
+import { CONVERTED_SUFFIX } from "./store-filename";
 import type { TransferEngine } from "./transfer-engine";
 
 export interface DownloadProgress {
@@ -193,7 +194,13 @@ export class DownloadManager {
           quality,
           endpoint: ep,
           clientId: this.deps.clientId,
-          destPath: this.deps.store.path(j.key),
+          // Convert jobs commit an AAC m4a — its artifact name carries the
+          // reserved `.conv.m4a` suffix (AVPlayer infers the format from the
+          // file EXTENSION; the bare flat name ends with the SOURCE extension,
+          // e.g. `.flac`, and refuses to play). Swift derives every temp name
+          // (`.part`/`.orig.<ext>`/`.m4a.tmp`) from destPath, so the suffix
+          // rides through with zero native naming knowledge.
+          destPath: this.deps.store.path(j.key) + (convert ? CONVERTED_SUFFIX : ""),
           // Session id is caller-supplied (core stays Date.now-free).
           session: plexSessionId(),
           convert,
@@ -381,16 +388,18 @@ export class DownloadManager {
       nativeConvertAvailable: !!this.deps.engine.supportsConvert,
       connectionType: this.deps.getConnectionType(),
     });
+    const convert = mode === "convert" && isAvConvertible(job.meta.container);
     const ep = await this.deps.endpoint(job.serverId);
     const transfer = buildTransferJob({
       job,
       quality,
       endpoint: ep,
       clientId: this.deps.clientId,
-      destPath: this.deps.store.path(job.key),
+      // Same artifact-name rule as the native path (see enqueueNative).
+      destPath: this.deps.store.path(job.key) + (convert ? CONVERTED_SUFFIX : ""),
       // Session id is caller-supplied (core stays Date.now-free).
       session: plexSessionId(),
-      convert: mode === "convert" && isAvConvertible(job.meta.container),
+      convert,
     });
     // Map this job's engine events back onto records; resolve on the terminal one.
     await new Promise<void>((resolve) => {

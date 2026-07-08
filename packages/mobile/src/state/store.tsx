@@ -623,6 +623,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // applies to records committed under v2+; pre-v2 records have no
       // expectedBytes, so presence remains their only check).
       await downloadIndex.load();
+      // One-shot migration: converted (on-device AAC) artifacts used to be
+      // committed to the BARE flat name, whose extension is the SOURCE file's
+      // (e.g. `….flac`) — AVPlayer infers local-file format from the extension
+      // and refused to play them. Rename each committed-m4a record's file to
+      // the reserved `.conv.m4a` artifact name before the disk passes below
+      // read the listing. (Both names map to the same download key, so the
+      // reconcile/fold bookkeeping is unaffected either way.)
+      const renamedConverted = downloadStore.migrateConvertedNames(downloadIndex.all());
+      if (renamedConverted > 0) {
+        console.log(`[downloads] renamed ${renamedConverted} converted artifact(s) to .conv.m4a`);
+      }
       // Fold the engine's while-JS-was-away results into the index BEFORE the
       // disk passes (native engine only — the JS engine's snapshot is always
       // empty): completed transfers become downloaded records carrying the
