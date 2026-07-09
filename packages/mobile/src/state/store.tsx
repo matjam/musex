@@ -25,6 +25,7 @@ import {
   type StorageQuality,
   type SyncPorts,
   shouldTopUp,
+  thumbPath,
 } from "@musex/core";
 import { Paths } from "expo-file-system";
 import * as WebBrowser from "expo-web-browser";
@@ -849,7 +850,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         artistName: track.artistName,
         albumTitle: track.albumTitle,
         durationMs: track.durationMs,
-        thumb: track.thumb,
+        // Raw server-relative path only — a queue track's thumb can be a full
+        // baked URL (with a capture-time token); records never persist those.
+        thumb: thumbPath(track.thumb),
         trackNumber: track.trackNumber,
         albumId: track.albumId ?? "",
         artistId: track.artistId ?? "",
@@ -1039,32 +1042,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, [runSync, runBootstrap, downloadIndex]);
 
-  /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
-   *  with the current server base URL and token so stale baked proxy URLs from
-   *  previous launches are refreshed. */
+  /** Reconstruct playable Tracks from downloaded records. Thumbs are RAW
+   *  server-relative paths (the one thumb convention: raw paths in data, bake
+   *  at render) — legacy records stored full baked URLs with capture-time
+   *  tokens, so normalize those back to their path; consumers bake with
+   *  artUrl()/artSourceFor() when rendering. */
   const downloadedTracks = useCallback((): Track[] => {
-    const tok = tokenRef.current;
     return recordsToTracks(downloadIndex.all()).map((track) => {
-      if (!tok) return track;
-      const base = safeBaseUrl(gateway, track.serverId);
-      if (!base || !track.thumb) return track;
-      // Re-bake: strip any existing URL (baked or raw plex path) and rebuild.
-      // The thumb stored in the record may already be a full baked URL
-      // (previous-launch format) or a raw plex path (/library/metadata/.../thumb).
-      // artUrl() works for both: a raw path → base+path+token; a full URL passed
-      // as-is would produce a double URL, so we always strip to the raw path first.
-      let rawThumb = track.thumb;
-      if (rawThumb.startsWith("http")) {
-        // Extract the plex path from the full URL by finding the path portion.
-        try {
-          rawThumb = new URL(rawThumb).pathname;
-        } catch {
-          // leave as-is
-        }
-      }
-      return { ...track, thumb: artUrl(base, rawThumb, tok) ?? track.thumb };
+      if (!track.thumb || !track.thumb.startsWith("http")) return track;
+      return { ...track, thumb: thumbPath(track.thumb) };
     });
-  }, [downloadIndex, gateway]);
+  }, [downloadIndex]);
 
   // Stable identity: the provider value is rebuilt per render, so an inline
   // closure here would defeat every useMemo keyed on it (recompute per render

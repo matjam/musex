@@ -14,4 +14,10 @@ describe("artUrl", () => {
   it("encodes the token", () => {
     expect(artUrl("https://b", "/t", "a b")).toBe("https://b/t?X-Plex-Token=a%20b");
   });
+  it("returns an already-absolute thumb as-is (never double-bakes)", () => {
+    const full = "http://pms.example:32400/library/metadata/10/thumb/123?X-Plex-Token=OLD";
+    expect(artUrl("https://pms.example:32400", full, "TOK")).toBe(full);
+    const https = "https://pms.example:32400/library/metadata/10/thumb/123?X-Plex-Token=OLD";
+    expect(artUrl("https://other:32400", https, "TOK")).toBe(https);
+  });
 });
