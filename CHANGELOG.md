@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/matjam/musex/compare/v0.22.1...v0.22.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **mobile:** sync throughput + Downloaded art — window 100, charger keep-awake, recovered art fixes, tile collision ([#114](https://github.com/matjam/musex/issues/114)) ([a7e631e](https://github.com/matjam/musex/commit/a7e631e875acc19b61926bd23ad625de7b7a51a8))
+
 ## [0.22.1](https://github.com/matjam/musex/compare/v0.22.0...v0.22.1) (2026-07-08)
 
 
