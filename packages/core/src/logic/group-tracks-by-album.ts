@@ -2,6 +2,10 @@ import type { Track } from "../models/index.js";
 
 /** One album's worth of playable downloaded tracks, for the "On this device" grid. */
 export interface TrackAlbumGroup {
+  /** The tracks' `albumId`, or — when the tracks carry NO albumId (legacy
+   *  download records predate the field) — a per-track fallback key
+   *  `track:<trackId>`. The prefix can't collide with a real Plex ratingKey;
+   *  consumers must not treat a fallback key as a navigable album id. */
   albumId: string;
   /** First track's album title; "Unknown Album" when none carry one. */
   albumTitle: string;
@@ -22,13 +26,18 @@ export interface TrackAlbumGroup {
 export function groupTracksByAlbum(tracks: Track[]): TrackAlbumGroup[] {
   const byAlbum = new Map<string, TrackAlbumGroup>();
   for (const t of tracks) {
-    const existing = byAlbum.get(t.albumId);
+    // Falsy albumId (""/undefined — legacy records predate the field): NEVER
+    // merge such tracks into one shared bucket (one tile would wear another
+    // album's art/title and swallow unrelated tracks) — give each its own
+    // group keyed per track.
+    const key = t.albumId || `track:${t.id}`;
+    const existing = byAlbum.get(key);
     if (existing) {
       existing.tracks.push(t);
       if (!existing.thumb && t.thumb) existing.thumb = t.thumb;
     } else {
-      byAlbum.set(t.albumId, {
-        albumId: t.albumId,
+      byAlbum.set(key, {
+        albumId: key,
         albumTitle: t.albumTitle ?? "Unknown Album",
         artistName: t.artistName,
         thumb: t.thumb,

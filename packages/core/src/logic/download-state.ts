@@ -67,6 +67,11 @@ export function reconcileRecords(
 
 /** One album's worth of downloaded tracks, for the "On this device" grid. */
 export interface DownloadAlbumGroup {
+  /** The records' `meta.albumId`, or — when that is falsy (legacy records
+   *  predate the field; buildJob wrote `track.albumId ?? ""`) — a per-track
+   *  fallback key `track:<trackId>`. Matches groupTracksByAlbum's fallback
+   *  (recordToTrack sets Track.id = trackId), so the two groupings still join
+   *  by albumId. Not a navigable Plex album id. */
   albumId: string;
   albumTitle: string;
   artistName: string;
@@ -89,15 +94,18 @@ export function groupDownloadsByAlbum(records: DownloadRecord[]): DownloadAlbumG
   const byAlbum = new Map<string, DownloadAlbumGroup>();
   for (const r of records) {
     if (r.state !== "downloaded") continue;
-    const existing = byAlbum.get(r.meta.albumId);
+    // Falsy albumId → per-track fallback key; never merge unrelated legacy
+    // records into one shared bucket (see groupTracksByAlbum).
+    const key = r.meta.albumId || `track:${r.trackId}`;
+    const existing = byAlbum.get(key);
     if (existing) {
       existing.keys.push(r.key);
       existing.trackCount += 1;
       existing.bytes += r.bytes;
       if (!existing.thumb && r.meta.thumb) existing.thumb = r.meta.thumb;
     } else {
-      byAlbum.set(r.meta.albumId, {
-        albumId: r.meta.albumId,
+      byAlbum.set(key, {
+        albumId: key,
         albumTitle: r.meta.albumTitle ?? "Unknown Album",
         artistName: r.meta.artistName,
         thumb: r.meta.thumb,
