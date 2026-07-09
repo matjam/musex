@@ -26,7 +26,9 @@ import {
   type SyncPorts,
   shouldTopUp,
 } from "@musex/core";
+import * as Battery from "expo-battery";
 import { Paths } from "expo-file-system";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
@@ -78,6 +80,7 @@ import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-con
 import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
+import { SYNC_KEEP_AWAKE_TAG, shouldKeepAwake } from "../logic/keep-awake";
 import { TasteService } from "../taste/taste-service";
 
 // Cache a track once it has played this long — a real listen, not a skip.
@@ -1021,8 +1024,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (state.connectivity === "online") void runSync();
   }, [state.connectivity, state.library?.id, runSync]);
 
+  // Foreground flag for the keep-awake lock below (fed by the same AppState
+  // listener that drives foreground re-sync).
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
+      setForeground(s === "active");
       if (s === "active") {
         // A bootstrap that failed (e.g. Keychain unreadable during a locked
         // background launch) is retried now that the app is foregrounded.
@@ -1038,6 +1046,56 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
     return () => sub.remove();
   }, [runSync, runBootstrap, downloadIndex]);
+
+  // --- keep the screen awake while actively syncing on power ---
+  // The initial sync of a large library (~9k tracks) needs hours of continuous
+  // transfer, and iOS only guarantees foreground-created URLSession tasks —
+  // background refills are forced discretionary and defer arbitrarily even on
+  // power (see BackgroundDownloadManager.taskWindow). Keeping the screen awake
+  // while musex is open on the charger keeps the app foreground, so the whole
+  // backlog drains without re-foregrounding every ~window tracks:
+  // charger-with-app-open is fully automatic.
+
+  // On power = charging or full. Initial read + listener; on the iOS
+  // Simulator the battery API is unavailable (state UNKNOWN), so the lock
+  // simply never engages there.
+  const [charging, setCharging] = useState(false);
+  useEffect(() => {
+    const onPower = (s: Battery.BatteryState) =>
+      s === Battery.BatteryState.CHARGING || s === Battery.BatteryState.FULL;
+    let alive = true;
+    void Battery.getBatteryStateAsync().then((s) => {
+      if (alive) setCharging(onPower(s));
+    });
+    const sub = Battery.addBatteryStateListener(({ batteryState }) => {
+      setCharging(onPower(batteryState));
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+
+  // Downloads in flight, derived off downloadsVersion (already throttled at
+  // the bump site; enqueue bumps it too via the manager's queued-record emit).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is the (throttled) change signal for the download index, not referenced in the body.
+  const downloadsInFlight = useMemo(
+    () => downloadIndex.all().some(isInFlight),
+    [downloadIndex, downloadsVersion],
+  );
+
+  useEffect(() => {
+    // Sign-out drops the lock too, even if in-flight records linger.
+    const keep =
+      state.phase === "signed-in" &&
+      shouldKeepAwake({ foreground, inFlight: downloadsInFlight, charging });
+    if (!keep) return;
+    void activateKeepAwakeAsync(SYNC_KEEP_AWAKE_TAG);
+    // Cleanup releases the lock when any condition drops AND on unmount.
+    return () => {
+      void deactivateKeepAwake(SYNC_KEEP_AWAKE_TAG);
+    };
+  }, [state.phase, foreground, downloadsInFlight, charging]);
 
   /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
    *  with the current server base URL and token so stale baked proxy URLs from

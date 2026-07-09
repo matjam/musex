@@ -238,6 +238,21 @@ export default function DownloadsSettings() {
             </Text>
           </Pressable>
         ) : null}
+        {syncEnabled ? (
+          <Text
+            style={{
+              color: theme.textDim,
+              fontSize: 12,
+              paddingHorizontal: theme.space(2),
+              paddingVertical: theme.space(1.5),
+              borderTopWidth: 1,
+              borderTopColor: theme.border,
+            }}
+          >
+            While charging with musex open, the screen stays awake so your library can finish
+            syncing.
+          </Text>
+        ) : null}
       </View>
 
       <Text
