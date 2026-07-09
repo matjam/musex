@@ -1,13 +1,12 @@
 import { useRouter } from "expo-router";
 import { Pause, Play, SkipForward } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
-import { artUrl } from "../logic/art-url";
 import { useStore } from "../state/store";
 import { AlbumArt } from "./AlbumArt";
 import { theme } from "./theme";
 
 export function MiniPlayer() {
-  const { state, session, artBaseFor, token } = useStore();
+  const { state, session, artSourceFor } = useStore();
   const router = useRouter();
   const pb = state.playback;
   // PlaybackState has no `current`: derive it from the queue.
@@ -15,8 +14,7 @@ export function MiniPlayer() {
   if (!pb || !current) return null;
 
   const playing = pb.status === "playing";
-  const base = artBaseFor(current.serverId);
-  const url = base && token ? artUrl(base, current.thumb, token) : null;
+  const url = artSourceFor(current.serverId, current.thumb, current.albumId);
 
   return (
     <Pressable

@@ -82,6 +82,7 @@ export default function LibraryBrowse() {
     gateway,
     session,
     artBaseFor,
+    artSourceFor,
     token,
     playTracks,
     downloadedTracks,
@@ -302,10 +303,12 @@ export default function LibraryBrowse() {
             ) : null
           }
           renderItem={({ item: group }) => {
-            // Bake at render, same as the online tiles — group.thumb is a raw path.
+            // Bake at render (group.thumb is a raw path); the offline art
+            // cache serves first so downloaded albums render with no network.
             const groupServerId = group.tracks[0]?.serverId;
-            const groupBase = groupServerId ? artBaseFor(groupServerId) : null;
-            const art = groupBase && token ? artUrl(groupBase, group.thumb, token) : null;
+            const art = groupServerId
+              ? artSourceFor(groupServerId, group.thumb, group.albumId)
+              : null;
             return (
               <View style={{ width: tileSize, padding: 6 }}>
                 <Pressable
