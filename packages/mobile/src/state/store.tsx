@@ -25,8 +25,11 @@ import {
   type StorageQuality,
   type SyncPorts,
   shouldTopUp,
+  thumbPath,
 } from "@musex/core";
+import * as Battery from "expo-battery";
 import { Paths } from "expo-file-system";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
@@ -65,6 +68,8 @@ import { MobileListCache } from "../cache/mobile-list-cache";
 import { ExpoListCacheFs } from "../cache/mobile-list-cache-fs";
 import { sha256hex } from "../cache/sha256";
 import { CLIENT_ID } from "../config-client-id";
+import { ArtCache } from "../downloads/art-cache";
+import { ExpoArtFs } from "../downloads/art-cache-fs";
 import { DEFAULT_CACHE_CONFIG, loadCacheConfig, saveCacheConfig } from "../downloads/cache-config";
 import type { Connectivity } from "../downloads/connectivity-monitor";
 import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
@@ -78,6 +83,7 @@ import { loadStorageQuality, saveStorageQuality } from "../downloads/storage-con
 import { loadSyncEnabled, saveSyncEnabled } from "../downloads/sync-config";
 import { LastfmService } from "../lastfm/lastfm-service";
 import { artUrl } from "../logic/art-url";
+import { SYNC_KEEP_AWAKE_TAG, shouldKeepAwake } from "../logic/keep-awake";
 import { TasteService } from "../taste/taste-service";
 
 // Cache a track once it has played this long — a real listen, not a skip.
@@ -176,6 +182,10 @@ interface Store {
   playTracks: (tracks: Track[], index: number) => Promise<void>;
   session: PlaybackSession;
   artBaseFor: (serverId: string) => string | null;
+  /** Art source for a track/album: the offline art-cache file when present,
+   *  else the baked network URL; null when offline and uncached (nothing
+   *  loadable — the AlbumArt placeholder renders). */
+  artSourceFor: (serverId: string, thumb: string | undefined, albumId?: string) => string | null;
   token: string | null;
   taste: TasteService;
   /** Finish sign-in for a fresh token: discover + auto-select the owned library. */
@@ -220,6 +230,8 @@ interface Store {
   connectivity: Connectivity;
   /** Clear the persisted list cache (called on sign-out). */
   clearListCache: () => Promise<void>;
+  /** Clear the offline album-art cache (called by "Remove all downloads"). */
+  clearArtCache: () => void;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -274,6 +286,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // --- download infrastructure ---
   const downloadStore = useMemo(() => new DownloadStore(), []);
   const downloadIndex = useMemo(() => new DownloadIndex(), []);
+  // Offline album art for downloaded content (one jpg per albumId), filled as
+  // downloads complete + by a signed-in catch-up pass below.
+  const artCache = useMemo(() => new ArtCache(new ExpoArtFs(), fetch), []);
   const storageQualityRef = useRef<StorageQuality>({ mode: "aac", bitrateKbps: 256 });
 
   // Library-sync toggle. syncEnabledRef is read by the coordinator (sync, no
@@ -376,6 +391,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               downloadStore.remove(k);
               void downloadIndex.remove(k);
             }
+            // Cache the album's art alongside the audio so downloaded albums
+            // render tiles/players offline. Best-effort, fire-and-forget.
+            const rec = downloadIndex.get(e.key);
+            const albumId = rec?.meta.albumId;
+            const thumb = rec?.meta.thumb;
+            if (
+              rec &&
+              albumId &&
+              thumb &&
+              !artCache.has(albumId) &&
+              connectivityRef.current === "online"
+            ) {
+              const tok = tokenRef.current;
+              const base = tok ? safeBaseUrl(gateway, rec.serverId) : null;
+              const url = base && tok ? artUrl(base, thumb, tok) : null;
+              if (url) void artCache.fetchIfMissing(albumId, url);
+            }
           }
         },
       }),
@@ -386,6 +418,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       gateway,
       bumpDownloadsVersion,
       connectivityMonitor,
+      artCache,
     ],
   );
 
@@ -573,11 +606,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const tok = tokenRef.current;
           const base = tok ? safeBaseUrl(gateway, cur.serverId) : null;
+          // Prefer the offline art-cache file (renders on the lock screen with
+          // no network); fall back to the baked network URL.
+          const cachedArt = cur.albumId ? artCache.uri(cur.albumId) : null;
+          const netArt = base && tok ? artUrl(base, cur.thumb, tok) : null;
           engine.setNowPlaying({
             title: cur.title,
             artist: cur.artistName,
             album: cur.albumTitle,
-            artwork: base && tok ? (artUrl(base, cur.thumb, tok) ?? undefined) : undefined,
+            artwork: cachedArt ?? netArt ?? undefined,
           });
           void lastfm.updateNowPlaying({
             artistName: cur.artistName,
@@ -594,7 +631,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
       }),
-    [session, engine, gateway, taste, monitor, lastfm, doTopUp, downloadIndex],
+    [session, engine, gateway, taste, monitor, lastfm, doTopUp, downloadIndex, artCache],
   );
 
   // Lock-screen / Control-Center next & previous -> queue navigation.
@@ -791,6 +828,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [runBootstrap, engine, downloadManager, connectivityMonitor]);
 
+  // Offline-art catch-up: albums downloaded before the art cache existed (or
+  // whose art fetch failed) get their art fetched once per JS context, after
+  // sign-in (base URLs are only primed then) and while online. Serialized +
+  // fire-and-forget so it never blocks boot or competes with live streaming.
+  const artCatchUpDoneRef = useRef(false);
+  useEffect(() => {
+    if (artCatchUpDoneRef.current) return;
+    if (state.phase !== "signed-in" || state.connectivity !== "online") return;
+    artCatchUpDoneRef.current = true;
+    void (async () => {
+      const seen = new Set<string>();
+      for (const r of downloadIndex.all()) {
+        if (r.state !== "downloaded") continue;
+        const { albumId, thumb } = r.meta;
+        if (!albumId || !thumb || seen.has(albumId)) continue;
+        seen.add(albumId);
+        if (artCache.has(albumId)) continue;
+        const tok = tokenRef.current;
+        const base = tok ? safeBaseUrl(gateway, r.serverId) : null;
+        const url = base && tok ? artUrl(base, thumb, tok) : null;
+        if (url) await artCache.fetchIfMissing(albumId, url);
+      }
+    })();
+  }, [state.phase, state.connectivity, downloadIndex, gateway, artCache]);
+
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
   // Starting a new collection stops radio.
   const playTracks = useCallback(
@@ -849,7 +911,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         artistName: track.artistName,
         albumTitle: track.albumTitle,
         durationMs: track.durationMs,
-        thumb: track.thumb,
+        // Raw server-relative path only — a queue track's thumb can be a full
+        // baked URL (with a capture-time token); records never persist those.
+        thumb: thumbPath(track.thumb),
         trackNumber: track.trackNumber,
         albumId: track.albumId ?? "",
         artistId: track.artistId ?? "",
@@ -1021,8 +1085,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (state.connectivity === "online") void runSync();
   }, [state.connectivity, state.library?.id, runSync]);
 
+  // Foreground flag for the keep-awake lock below (fed by the same AppState
+  // listener that drives foreground re-sync).
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
+      setForeground(s === "active");
       if (s === "active") {
         // A bootstrap that failed (e.g. Keychain unreadable during a locked
         // background launch) is retried now that the app is foregrounded.
@@ -1039,32 +1108,67 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, [runSync, runBootstrap, downloadIndex]);
 
-  /** Reconstruct playable Tracks from downloaded records, re-baking art URLs
-   *  with the current server base URL and token so stale baked proxy URLs from
-   *  previous launches are refreshed. */
-  const downloadedTracks = useCallback((): Track[] => {
-    const tok = tokenRef.current;
-    return recordsToTracks(downloadIndex.all()).map((track) => {
-      if (!tok) return track;
-      const base = safeBaseUrl(gateway, track.serverId);
-      if (!base || !track.thumb) return track;
-      // Re-bake: strip any existing URL (baked or raw plex path) and rebuild.
-      // The thumb stored in the record may already be a full baked URL
-      // (previous-launch format) or a raw plex path (/library/metadata/.../thumb).
-      // artUrl() works for both: a raw path → base+path+token; a full URL passed
-      // as-is would produce a double URL, so we always strip to the raw path first.
-      let rawThumb = track.thumb;
-      if (rawThumb.startsWith("http")) {
-        // Extract the plex path from the full URL by finding the path portion.
-        try {
-          rawThumb = new URL(rawThumb).pathname;
-        } catch {
-          // leave as-is
-        }
-      }
-      return { ...track, thumb: artUrl(base, rawThumb, tok) ?? track.thumb };
+  // --- keep the screen awake while actively syncing on power ---
+  // The initial sync of a large library (~9k tracks) needs hours of continuous
+  // transfer, and iOS only guarantees foreground-created URLSession tasks —
+  // background refills are forced discretionary and defer arbitrarily even on
+  // power (see BackgroundDownloadManager.taskWindow). Keeping the screen awake
+  // while musex is open on the charger keeps the app foreground, so the whole
+  // backlog drains without re-foregrounding every ~window tracks:
+  // charger-with-app-open is fully automatic.
+
+  // On power = charging or full. Initial read + listener; on the iOS
+  // Simulator the battery API is unavailable (state UNKNOWN), so the lock
+  // simply never engages there.
+  const [charging, setCharging] = useState(false);
+  useEffect(() => {
+    const onPower = (s: Battery.BatteryState) =>
+      s === Battery.BatteryState.CHARGING || s === Battery.BatteryState.FULL;
+    let alive = true;
+    void Battery.getBatteryStateAsync().then((s) => {
+      if (alive) setCharging(onPower(s));
     });
-  }, [downloadIndex, gateway]);
+    const sub = Battery.addBatteryStateListener(({ batteryState }) => {
+      setCharging(onPower(batteryState));
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+
+  // Downloads in flight, derived off downloadsVersion (already throttled at
+  // the bump site; enqueue bumps it too via the manager's queued-record emit).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: downloadsVersion is the (throttled) change signal for the download index, not referenced in the body.
+  const downloadsInFlight = useMemo(
+    () => downloadIndex.all().some(isInFlight),
+    [downloadIndex, downloadsVersion],
+  );
+
+  useEffect(() => {
+    // Sign-out drops the lock too, even if in-flight records linger.
+    const keep =
+      state.phase === "signed-in" &&
+      shouldKeepAwake({ foreground, inFlight: downloadsInFlight, charging });
+    if (!keep) return;
+    void activateKeepAwakeAsync(SYNC_KEEP_AWAKE_TAG);
+    // Cleanup releases the lock when any condition drops AND on unmount.
+    return () => {
+      void deactivateKeepAwake(SYNC_KEEP_AWAKE_TAG);
+    };
+  }, [state.phase, foreground, downloadsInFlight, charging]);
+
+  /** Reconstruct playable Tracks from downloaded records. Thumbs are RAW
+   *  server-relative paths (the one thumb convention: raw paths in data, bake
+   *  at render) — legacy records stored full baked URLs with capture-time
+   *  tokens, so normalize those back to their path; consumers bake with
+   *  artUrl()/artSourceFor() when rendering. */
+  const downloadedTracks = useCallback((): Track[] => {
+    return recordsToTracks(downloadIndex.all()).map((track) => {
+      if (!track.thumb || !track.thumb.startsWith("http")) return track;
+      return { ...track, thumb: thumbPath(track.thumb) };
+    });
+  }, [downloadIndex]);
 
   // Stable identity: the provider value is rebuilt per render, so an inline
   // closure here would defeat every useMemo keyed on it (recompute per render
@@ -1111,6 +1215,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const totalDownloadBytes = useCallback(() => downloadStore.totalBytes(), [downloadStore]);
 
+  // Cached-art-first render source (see the Store interface doc). Offline with
+  // no cached art returns null — a baked URL couldn't load anyway.
+  const artSourceFor = useCallback(
+    (serverId: string, thumb: string | undefined, albumId?: string): string | null => {
+      if (albumId) {
+        const cached = artCache.uri(albumId);
+        if (cached) return cached;
+      }
+      if (connectivityRef.current !== "online") return null;
+      const tok = tokenRef.current;
+      const base = tok ? safeBaseUrl(gateway, serverId) : null;
+      return base && tok ? artUrl(base, thumb, tok) : null;
+    },
+    [artCache, gateway],
+  );
+
   const value: Store = {
     state,
     gateway,
@@ -1119,6 +1239,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     playTracks,
     session,
     artBaseFor: (sid) => safeBaseUrl(gateway, sid),
+    artSourceFor,
     token: state.token,
     taste,
     completeSignIn,
@@ -1153,6 +1274,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCacheConfig,
     connectivity: state.connectivity,
     clearListCache: () => listCache.clear(),
+    clearArtCache: () => artCache.clear(),
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

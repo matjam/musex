@@ -82,6 +82,7 @@ export default function LibraryBrowse() {
     gateway,
     session,
     artBaseFor,
+    artSourceFor,
     token,
     playTracks,
     downloadedTracks,
@@ -188,7 +189,7 @@ export default function LibraryBrowse() {
 
   // Refresh the Downloaded segment tiles. Stable via useCallback so the effect dep is safe.
   const refreshDownloads = useCallback(() => {
-    // Group re-baked tracks (from downloadedTracks) for correct tile art.
+    // downloadedTracks() carries RAW thumb paths; the tile renderer bakes them.
     setDlTrackGroups(groupTracksByAlbum(downloadedTracks()));
   }, [downloadedTracks]);
 
@@ -302,7 +303,12 @@ export default function LibraryBrowse() {
             ) : null
           }
           renderItem={({ item: group }) => {
-            const art = group.thumb ?? null;
+            // Bake at render (group.thumb is a raw path); the offline art
+            // cache serves first so downloaded albums render with no network.
+            const groupServerId = group.tracks[0]?.serverId;
+            const art = groupServerId
+              ? artSourceFor(groupServerId, group.thumb, group.albumId)
+              : null;
             return (
               <View style={{ width: tileSize, padding: 6 }}>
                 <Pressable

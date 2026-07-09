@@ -101,6 +101,25 @@ describe("groupDownloadsByAlbum", () => {
     expect(a1?.artistName).toBe("Artist");
   });
 
+  it("never merges falsy-albumId records — each keyed per track as track:<trackId>", () => {
+    const groups = groupDownloadsByAlbum([
+      downloaded("t1", { albumId: "", albumTitle: "One", thumb: "art1" }, 5),
+      downloaded("t2", { albumId: "", albumTitle: "Two" }, 7),
+      downloaded("t3", { albumId: "a1", albumTitle: "Real" }),
+    ]);
+    expect(groups).toHaveLength(3);
+    const g1 = groups.find((g) => g.albumId === "track:t1");
+    expect(g1?.keys).toEqual(["t1"]);
+    expect(g1?.trackCount).toBe(1);
+    expect(g1?.bytes).toBe(5);
+    expect(g1?.albumTitle).toBe("One");
+    expect(g1?.thumb).toBe("art1");
+    const g2 = groups.find((g) => g.albumId === "track:t2");
+    expect(g2?.keys).toEqual(["t2"]);
+    expect(g2?.albumTitle).toBe("Two");
+    expect(groups.find((g) => g.albumId === "a1")?.keys).toEqual(["t3"]);
+  });
+
   it("ignores non-downloaded records", () => {
     const groups = groupDownloadsByAlbum([
       rec("q", "queued"),

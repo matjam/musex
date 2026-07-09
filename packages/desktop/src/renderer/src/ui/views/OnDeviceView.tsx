@@ -141,10 +141,13 @@ export function OnDeviceView() {
           {albums.map((group) => {
             // Build an owned album ref from the group's first track so the tile
             // opens the unified AlbumView exactly like an album tile elsewhere.
+            // A group keyed by the falsy-albumId fallback (`track:<id>` — the
+            // track carries no real album id) gets no ref: it stays playable
+            // and removable but doesn't navigate to a fabricated album page.
             const first = group.tracks[0];
-            const albumRef = first
+            const albumRef = first?.albumId
               ? entityRefForAlbum({
-                  id: group.albumId,
+                  id: first.albumId,
                   serverId: first.serverId,
                   artistId: first.artistId,
                   title: group.albumTitle,

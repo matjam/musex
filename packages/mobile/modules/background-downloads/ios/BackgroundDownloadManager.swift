@@ -9,10 +9,11 @@ import UIKit
 // enqueued at once, refilling from the backlog inside the delegate. The window
 // is the locked-screen drain budget: tasks created while the app is FOREGROUND
 // are non-discretionary and run to completion even after the screen locks, but
-// tasks created by delegate refills while the app is BACKGROUNDED are treated
-// as discretionary by iOS policy (deferred until charger + Wi-Fi) — so a batch
-// of ready tasks handed to the system up front is what keeps progress flowing
-// on a locked, battery-powered phone. Wire-level politeness (alongside live
+// tasks created by delegate refills while the app is BACKGROUNDED are forced
+// discretionary by iOS policy (no setting overrides it) and defer arbitrarily
+// — even on power — so the batch of ready tasks handed to the system while
+// foreground is the ONLY progress guaranteed to flow on a locked phone.
+// Wire-level politeness (alongside live
 // streaming) moves to the session config's httpMaximumConnectionsPerHost = 1:
 // one transfer on the wire at a time, the rest queued system-side. Because the
 // session is a background session with sessionSendsLaunchEvents, the whole
@@ -365,19 +366,28 @@ final class BackgroundDownloadManager: NSObject {
 
   // MARK: - Backlog fill (task window)
 
-  /// How many URLSession tasks stay enqueued at once. This is the
-  /// locked-screen drain budget (see the header comment): tasks created while
-  /// the app is foreground run to completion even locked-on-battery, whereas
-  /// delegate-refill tasks created while backgrounded are discretionary by iOS
-  /// policy (deferred to charger + Wi-Fi) — the window is what keeps
-  /// battery-locked progress flowing. Wire-level politeness is the session's
-  /// httpMaximumConnectionsPerHost = 1, not this number.
+  /// How many URLSession tasks stay enqueued at once. Foreground-created
+  /// tasks are the ONLY guaranteed locked-screen budget: iOS forces every
+  /// background-created task (the delegate refills) to be discretionary — no
+  /// configuration overrides it — and discretionary tasks defer arbitrarily
+  /// even when the device is on power. So the tasks banked while the app is
+  /// foreground are all the locked-screen progress we can count on; 100 banks
+  /// ~100 tracks per foregrounding (observed on-device: with 20, a
+  /// locked-on-power sync barely moved between foregroundings). Wire-level
+  /// politeness is the session's httpMaximumConnectionsPerHost = 1, not this
+  /// number — the extra tasks queue system-side, one transfer at a time.
   ///
   /// Original/convert jobs are the beneficiaries (each is one task, so up to
   /// `taskWindow` of them pre-enqueue). An HLS job keeps its one-step-at-a-time
   /// internal chaining — one task at a time within the job — so it occupies a
   /// single window slot until it reaches a terminal state.
-  private static let taskWindow = 20
+  ///
+  /// Disk-cost note: while locked, convert jobs' downloads can outpace the
+  /// serial AAC conversion (which only progresses in wake windows), so up to
+  /// ~window `.orig.<ext>` temps can sit on disk until conversions drain —
+  /// transient, bounded by the window, and each is deleted when its
+  /// conversion commits.
+  private static let taskWindow = 100
 
   private func fill() {
     guard tasksLoaded else { return }

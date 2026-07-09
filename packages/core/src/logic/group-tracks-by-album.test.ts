@@ -34,6 +34,27 @@ describe("groupTracksByAlbum", () => {
     expect(a2?.artistName).toBe("Other");
   });
 
+  it("never merges falsy-albumId tracks — each gets its own per-track group", () => {
+    // Legacy download records predate the albumId field (buildJob wrote
+    // `track.albumId ?? ""`); merging them all would put one tile over
+    // unrelated tracks wearing another album's art/title.
+    const groups = groupTracksByAlbum([
+      track({ id: "t1", albumId: "", albumTitle: "One", thumb: "art1" }),
+      track({ id: "t2", albumId: "", albumTitle: "Two", thumb: "art2" }),
+      track({ id: "t3", albumId: "a1", albumTitle: "Real" }),
+    ]);
+    expect(groups).toHaveLength(3);
+    const g1 = groups.find((g) => g.albumId === "track:t1");
+    expect(g1?.tracks.map((t) => t.id)).toEqual(["t1"]);
+    expect(g1?.albumTitle).toBe("One");
+    expect(g1?.thumb).toBe("art1");
+    const g2 = groups.find((g) => g.albumId === "track:t2");
+    expect(g2?.tracks.map((t) => t.id)).toEqual(["t2"]);
+    expect(g2?.albumTitle).toBe("Two");
+    expect(g2?.thumb).toBe("art2");
+    expect(groups.find((g) => g.albumId === "a1")?.tracks.map((t) => t.id)).toEqual(["t3"]);
+  });
+
   it("takes the thumb from the first track that has one", () => {
     const groups = groupTracksByAlbum([
       track({ id: "t1", albumId: "a1", thumb: undefined }),
