@@ -5,7 +5,6 @@ import { Pause, Play, SkipBack, SkipForward } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { artUrl } from "../logic/art-url";
 import { useStore } from "../state/store";
 import { AlbumArt } from "./AlbumArt";
 import { theme } from "./theme";
@@ -14,7 +13,7 @@ import { theme } from "./theme";
 // branch of the tabs layout; the phone keeps MiniPlayer. Store/session access
 // mirrors MiniPlayer exactly (playback state via the store; no new state).
 export function PlayerBar() {
-  const { state, session, artBaseFor, token } = useStore();
+  const { state, session, artSourceFor } = useStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // Seek-drag guard: while the user drags, freeze the slider's controlled
@@ -28,8 +27,7 @@ export function PlayerBar() {
   if (!pb || !current) return null;
 
   const playing = pb.status === "playing";
-  const base = artBaseFor(current.serverId);
-  const url = base && token ? artUrl(base, current.thumb, token) : null;
+  const url = artSourceFor(current.serverId, current.thumb, current.albumId);
   const durationSec = pb.durationSec || current.durationMs / 1000;
 
   return (

@@ -68,6 +68,8 @@ import { MobileListCache } from "../cache/mobile-list-cache";
 import { ExpoListCacheFs } from "../cache/mobile-list-cache-fs";
 import { sha256hex } from "../cache/sha256";
 import { CLIENT_ID } from "../config-client-id";
+import { ArtCache } from "../downloads/art-cache";
+import { ExpoArtFs } from "../downloads/art-cache-fs";
 import { DEFAULT_CACHE_CONFIG, loadCacheConfig, saveCacheConfig } from "../downloads/cache-config";
 import type { Connectivity } from "../downloads/connectivity-monitor";
 import { ConnectivityMonitor } from "../downloads/connectivity-monitor";
@@ -180,6 +182,10 @@ interface Store {
   playTracks: (tracks: Track[], index: number) => Promise<void>;
   session: PlaybackSession;
   artBaseFor: (serverId: string) => string | null;
+  /** Art source for a track/album: the offline art-cache file when present,
+   *  else the baked network URL; null when offline and uncached (nothing
+   *  loadable — the AlbumArt placeholder renders). */
+  artSourceFor: (serverId: string, thumb: string | undefined, albumId?: string) => string | null;
   token: string | null;
   taste: TasteService;
   /** Finish sign-in for a fresh token: discover + auto-select the owned library. */
@@ -224,6 +230,8 @@ interface Store {
   connectivity: Connectivity;
   /** Clear the persisted list cache (called on sign-out). */
   clearListCache: () => Promise<void>;
+  /** Clear the offline album-art cache (called by "Remove all downloads"). */
+  clearArtCache: () => void;
 }
 
 const StoreCtx = createContext<Store | null>(null);
@@ -278,6 +286,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // --- download infrastructure ---
   const downloadStore = useMemo(() => new DownloadStore(), []);
   const downloadIndex = useMemo(() => new DownloadIndex(), []);
+  // Offline album art for downloaded content (one jpg per albumId), filled as
+  // downloads complete + by a signed-in catch-up pass below.
+  const artCache = useMemo(() => new ArtCache(new ExpoArtFs(), fetch), []);
   const storageQualityRef = useRef<StorageQuality>({ mode: "aac", bitrateKbps: 256 });
 
   // Library-sync toggle. syncEnabledRef is read by the coordinator (sync, no
@@ -380,6 +391,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               downloadStore.remove(k);
               void downloadIndex.remove(k);
             }
+            // Cache the album's art alongside the audio so downloaded albums
+            // render tiles/players offline. Best-effort, fire-and-forget.
+            const rec = downloadIndex.get(e.key);
+            const albumId = rec?.meta.albumId;
+            const thumb = rec?.meta.thumb;
+            if (
+              rec &&
+              albumId &&
+              thumb &&
+              !artCache.has(albumId) &&
+              connectivityRef.current === "online"
+            ) {
+              const tok = tokenRef.current;
+              const base = tok ? safeBaseUrl(gateway, rec.serverId) : null;
+              const url = base && tok ? artUrl(base, thumb, tok) : null;
+              if (url) void artCache.fetchIfMissing(albumId, url);
+            }
           }
         },
       }),
@@ -390,6 +418,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       gateway,
       bumpDownloadsVersion,
       connectivityMonitor,
+      artCache,
     ],
   );
 
@@ -577,11 +606,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const tok = tokenRef.current;
           const base = tok ? safeBaseUrl(gateway, cur.serverId) : null;
+          // Prefer the offline art-cache file (renders on the lock screen with
+          // no network); fall back to the baked network URL.
+          const cachedArt = cur.albumId ? artCache.uri(cur.albumId) : null;
+          const netArt = base && tok ? artUrl(base, cur.thumb, tok) : null;
           engine.setNowPlaying({
             title: cur.title,
             artist: cur.artistName,
             album: cur.albumTitle,
-            artwork: base && tok ? (artUrl(base, cur.thumb, tok) ?? undefined) : undefined,
+            artwork: cachedArt ?? netArt ?? undefined,
           });
           void lastfm.updateNowPlaying({
             artistName: cur.artistName,
@@ -598,7 +631,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
       }),
-    [session, engine, gateway, taste, monitor, lastfm, doTopUp, downloadIndex],
+    [session, engine, gateway, taste, monitor, lastfm, doTopUp, downloadIndex, artCache],
   );
 
   // Lock-screen / Control-Center next & previous -> queue navigation.
@@ -794,6 +827,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       connectivityMonitor.stop();
     };
   }, [runBootstrap, engine, downloadManager, connectivityMonitor]);
+
+  // Offline-art catch-up: albums downloaded before the art cache existed (or
+  // whose art fetch failed) get their art fetched once per JS context, after
+  // sign-in (base URLs are only primed then) and while online. Serialized +
+  // fire-and-forget so it never blocks boot or competes with live streaming.
+  const artCatchUpDoneRef = useRef(false);
+  useEffect(() => {
+    if (artCatchUpDoneRef.current) return;
+    if (state.phase !== "signed-in" || state.connectivity !== "online") return;
+    artCatchUpDoneRef.current = true;
+    void (async () => {
+      const seen = new Set<string>();
+      for (const r of downloadIndex.all()) {
+        if (r.state !== "downloaded") continue;
+        const { albumId, thumb } = r.meta;
+        if (!albumId || !thumb || seen.has(albumId)) continue;
+        seen.add(albumId);
+        if (artCache.has(albumId)) continue;
+        const tok = tokenRef.current;
+        const base = tok ? safeBaseUrl(gateway, r.serverId) : null;
+        const url = base && tok ? artUrl(base, thumb, tok) : null;
+        if (url) await artCache.fetchIfMissing(albumId, url);
+      }
+    })();
+  }, [state.phase, state.connectivity, downloadIndex, gateway, artCache]);
 
   // loadQueue() loads AND auto-plays the start index (it calls engine.play()).
   // Starting a new collection stops radio.
@@ -1157,6 +1215,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const totalDownloadBytes = useCallback(() => downloadStore.totalBytes(), [downloadStore]);
 
+  // Cached-art-first render source (see the Store interface doc). Offline with
+  // no cached art returns null — a baked URL couldn't load anyway.
+  const artSourceFor = useCallback(
+    (serverId: string, thumb: string | undefined, albumId?: string): string | null => {
+      if (albumId) {
+        const cached = artCache.uri(albumId);
+        if (cached) return cached;
+      }
+      if (connectivityRef.current !== "online") return null;
+      const tok = tokenRef.current;
+      const base = tok ? safeBaseUrl(gateway, serverId) : null;
+      return base && tok ? artUrl(base, thumb, tok) : null;
+    },
+    [artCache, gateway],
+  );
+
   const value: Store = {
     state,
     gateway,
@@ -1165,6 +1239,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     playTracks,
     session,
     artBaseFor: (sid) => safeBaseUrl(gateway, sid),
+    artSourceFor,
     token: state.token,
     taste,
     completeSignIn,
@@ -1199,6 +1274,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCacheConfig,
     connectivity: state.connectivity,
     clearListCache: () => listCache.clear(),
+    clearArtCache: () => artCache.clear(),
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

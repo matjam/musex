@@ -34,6 +34,7 @@ export default function DownloadsSettings() {
     setCacheConfig,
     connectivity,
     downloadsVersion,
+    clearArtCache,
   } = useStore();
 
   const [syncBusy, setSyncBusy] = useState(false);
@@ -164,6 +165,8 @@ export default function DownloadsSettings() {
           onPress: async () => {
             const keys = downloadsList().map((r) => r.key);
             await Promise.allSettled(keys.map((k) => removeDownload(k)));
+            // The offline album-art cache goes with the downloads it served.
+            clearArtCache();
           },
         },
       ],

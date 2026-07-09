@@ -18,7 +18,6 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import DraggableFlatList, { type RenderItemParams } from "react-native-draggable-flatlist";
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
-import { artUrl } from "../src/logic/art-url";
 import { useStore } from "../src/state/store";
 import { AlbumArt } from "../src/ui/AlbumArt";
 import { StarRating } from "../src/ui/StarRating";
@@ -86,7 +85,7 @@ export default function NowPlaying() {
     session,
     gateway,
     taste,
-    artBaseFor,
+    artSourceFor,
     token,
     lastfm,
     getLastfmConfig,
@@ -152,8 +151,7 @@ export default function NowPlaying() {
   }
 
   const playing = pb.status === "playing";
-  const base = artBaseFor(current.serverId);
-  const artUri = base && token ? artUrl(base, current.thumb, token) : null;
+  const artUri = artSourceFor(current.serverId, current.thumb, current.albumId);
   const dur = pb.durationSec || current.durationMs / 1000;
 
   return (
@@ -282,8 +280,7 @@ export default function NowPlaying() {
           renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<Track>) => {
             const pos = getIndex() ?? 0;
             const abs = baseIndex + 1 + pos;
-            const b = artBaseFor(item.serverId);
-            const u = b && token ? artUrl(b, item.thumb, token) : null;
+            const u = artSourceFor(item.serverId, item.thumb, item.albumId);
             return (
               <Swipeable
                 renderRightActions={() => (
